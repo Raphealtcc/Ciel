@@ -6,9 +6,9 @@ const source = await readFile("reconstructed/patched-worker.js", "utf8");
 
 function extractBetween(start, end) {
   const from = source.indexOf(start);
-  assert.notEqual(from, -1, \`Missing source marker: \${start}\`);
+  assert.notEqual(from, -1, "Missing source marker: " + start);
   const to = source.indexOf(end, from);
-  assert.notEqual(to, -1, \`Missing end marker: \${end}\`);
+  assert.notEqual(to, -1, "Missing end marker: " + end);
   return source.slice(from, to).trim();
 }
 
@@ -17,7 +17,7 @@ assert.ok(mapMatch, "Could not extract the market leverage map from the patched 
 
 const sentMessages = [];
 const context = vm.createContext({
-  LEVERUP_MARKET_MAX_LEVERAGE: vm.runInNewContext(\`(\${mapMatch[1]})\`),
+  LEVERUP_MARKET_MAX_LEVERAGE: vm.runInNewContext("(" + mapMatch[1] + ")"),
   PAPER_STARTING_BALANCE_MON: 60,
   PAPER_ACCOUNT_KEY: "ciel:paper:account:v1",
   PAPER_LEVERAGE: 50,
@@ -184,8 +184,8 @@ assert.ok(Math.abs(summary.equityMon - (summary.availableBalanceMon + summary.op
 
 // Prevent misleading 50x-only copy after the paper engine becomes leverage-tiered.
 assert.ok(source.includes("CIEL PAPER TRADING — AUTOMATIC / LEVERAGE-TIERED"));
-assert.ok(source.includes("/profits \\u2014 automatic leverage-tiered paper-trading balance and P&L"));
-assert.ok(!source.includes("/profits \\u2014 automatic 50x paper-trading balance and P&L"));
+assert.ok(source.includes("/profits \\\\u2014 automatic leverage-tiered paper-trading balance and P&L"));
+assert.ok(!source.includes("/profits \\\\u2014 automatic 50x paper-trading balance and P&L"));
 assert.ok(source.includes('String(p.leverage) + "x notional estimate at 100% collateral ratio ≈ "'));
 assert.ok(source.includes("free balance is below the eligible market's minimum margin"));
 assert.ok(source.includes("const collateral = minimumMarginForMarketLeverage(marketMaxLeverage);"));
