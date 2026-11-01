@@ -26,10 +26,11 @@ const definitions = [
   extractBetween("function freshPaperState", "function minimumMarginForMarketLeverage"),
   extractBetween("function minimumMarginForMarketLeverage", "async function openPaperTrade"),
   extractBetween("async function openPaperTrade", "function paperTradePnl"),
+  extractBetween("function paperTradePnl", "function updateProfitProtectionState"),
 ].join("\n");
 
-vm.runInContext(definitions + "\nglobalThis.paperTests = { minimumMarginForMarketLeverage, openPaperTrade };", context);
-const { minimumMarginForMarketLeverage, openPaperTrade } = context.paperTests;
+vm.runInContext(definitions + "\nglobalThis.paperTests = { minimumMarginForMarketLeverage, openPaperTrade, paperTradePnl };", context);
+const { minimumMarginForMarketLeverage, openPaperTrade, paperTradePnl } = context.paperTests;
 
 function makeStorage(initialBalance = 60, trades = []) {
   const data = new Map([["ciel:paper:account:v1", {
@@ -61,6 +62,13 @@ assert.equal(minimumMarginForMarketLeverage(100), 11);
 assert.equal(minimumMarginForMarketLeverage(1001), 11);
 assert.equal(minimumMarginForMarketLeverage(25), null);
 assert.equal(minimumMarginForMarketLeverage(5), null);
+
+const stopLossMath = paperTradePnl({ side: "LONG", entryPrice: 100, entryMonUsd: 0.2, marginMon: 22, leverage: 50 }, 99.6, 0.2);
+assert.ok(Math.abs(stopLossMath.mon - (-4.4)) < 1e-9);
+assert.ok(Math.abs(stopLossMath.roiPct - (-20)) < 1e-9);
+const hundredXStopMath = paperTradePnl({ side: "LONG", entryPrice: 100, entryMonUsd: 0.2, marginMon: 11, leverage: 100 }, 99.6, 0.2);
+assert.ok(Math.abs(hundredXStopMath.mon - (-4.4)) < 1e-9);
+assert.ok(Math.abs(hundredXStopMath.roiPct - (-40)) < 1e-9);
 
 const fifty = makeStorage();
 const opened50 = await openPaperTrade(fifty, params("BNB", "test-50"));
@@ -105,4 +113,4 @@ const duplicateMarket = await openPaperTrade(duplicateMarketStorage, params("BNB
 assert.equal(duplicateMarket.opened, false);
 assert.match(duplicateMarket.reason, /already open/i);
 
-console.log("PASS: 50x and 100x+ leverage tiers, tier margins, unsupported tiers, insufficient balance, duplicate signal, and one-open-trade-per-symbol.");
+console.log("PASS: 50x and 100x+ tiers, tier margins, unsupported tiers, 50x/100x P&L math, insufficient balance, duplicate signal, and one-open-trade-per-symbol.");
