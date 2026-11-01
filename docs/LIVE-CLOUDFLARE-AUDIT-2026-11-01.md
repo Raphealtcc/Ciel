@@ -50,29 +50,41 @@ The recovered code identifies the service as read-only advisory. The retired `Tr
 
 The paper engine is a separate automatic simulation:
 - Fresh paper ledger defaults to 60 MON.
-- Current constants are 22 MON paper margin and 50x paper leverage.
+- Original constants are 22 MON paper margin and 50x paper leverage.
 - A qualifying proposal attempts an automatic paper entry.
 - Paper ledger is held in Durable Object storage under `ciel:paper:account:v1`, not in the D1 trading tables.
 - `/profits` reads the paper ledger and reports balance, open/closed trades, realised/unrealised P&L, wins/losses, and strategy stats.
 - Paper exits are estimated from Hyperliquid mid prices at stop, target, or max-hold time.
 - Paper P&L excludes fees, funding, slippage, liquidation mechanics and LeverUp-specific mark/oracle/fill differences. It is not a faithful execution simulator and should not yet be used as evidence of LeverUp profitability.
 
-Important configuration distinction: live advisory display variables say 10 MON / 100x, while the paper engine hardcodes 22 MON / 50x. These are separate paths. Do not assume the paper P&L corresponds to the displayed 10 MON / 100x scenario.
+Important configuration distinction: live advisory display variables say 10 MON / 100x, while the original paper engine hardcodes 22 MON / 50x. These are separate paths. Do not assume the original paper P&L corresponds to the displayed 10 MON / 100x scenario.
 
-## Confirmed paper trading bug
+## Confirmed paper trading bug and isolated fix
 
-The code contains `minimumMarginForMarketLeverage()`:
+The original code contains `minimumMarginForMarketLeverage()`:
 - max leverage 50 → 22 MON
 - max leverage >=100 → 11 MON
 - otherwise → unsupported
 
-But two additional gates contradict that helper:
-1. `openPaperTrade()` rejects any market unless its max leverage is exactly 50.
-2. `runAdvisorCycle()` scans only markets whose max leverage is exactly 50.
+But two additional gates contradicted that helper:
+1. `openPaperTrade()` rejected any market unless its max leverage was exactly 50.
+2. `runAdvisorCycle()` scanned only markets whose max leverage was exactly 50.
 
-Therefore the 11 MON / >=100x branch is unreachable. BTC, ETH, XRP and SOL (as currently represented in the static map) are excluded from automatic paper scanning even though the helper advertises a 100x+ margin tier.
+Therefore the 11 MON / >=100x branch was unreachable. BTC, ETH, XRP and SOL (as currently represented in the static map) were excluded from automatic paper scanning even though the helper advertised a 100x+ margin tier.
 
-The map is hardcoded in `recovered-src/symbols.js.part-001`. It must not be treated as verified live LeverUp market metadata. The user's reported margin thresholds still need authoritative market metadata verification before matching the paper simulator to LeverUp.
+An isolated patch was added on branch `audit/paper-trading-fix`:
+- Allows paper entries for supported 50x and >=100x tiers.
+- Uses 22 MON for 50x and 11 MON for >=100x.
+- Uses a conservative 100x simulation baseline for markets whose maximum leverage is >=100x (it does not automatically simulate at each market's maximum).
+- Makes the scanner's cash gate tier-aware.
+- Makes the entry notification show the actual margin and leverage.
+- Labels the `/profits` summary as leverage-tiered.
+
+The byte-exact `recovered-src/` files remain unchanged. `scripts/apply-paper-tier-fix.mjs` applies the patch only to `reconstructed/patched-worker.js`, preserving `reconstructed/worker.js` as the exact deployed bundle.
+
+GitLab pipeline `3014296834` verified the exact recovery hash and syntax-checked both the recovered Worker and patched staging candidate. The paper patch is syntax-validated, not yet behaviorally unit-tested or deployed.
+
+The market leverage map remains hardcoded in `recovered-src/symbols.js.part-001`; it must not be treated as verified live LeverUp market metadata. The user's reported minimums still need authoritative market metadata verification before matching the simulator to LeverUp.
 
 ## Endpoint verification status
 
@@ -91,16 +103,13 @@ Cloudflare's secret list confirms that seven Gemini key slots and three Telegram
 ## Required fixes before any deployment
 
 1. Keep the byte-exact recovered fragments immutable as forensic evidence.
-2. Create a separate rebuilt source output and fix paper eligibility so supported >=100x markets can enter with the correct 11 MON paper margin tier; retain 50x / 22 MON.
-3. Choose and document a conservative paper leverage for the >=100x tier (100x baseline) rather than silently simulating each market at its maximum leverage.
-4. Make scanner balance gating tier-aware (11 MON minimum) and ensure each candidate is filtered against its own margin tier.
-5. Make paper Telegram messages display the actual per-trade margin and leverage, not hardcoded 22 MON / 50x.
-6. Add deterministic tests for 50x, >=100x, unsupported <50x, insufficient balance, duplicate signal, one-open-trade-per-symbol, and P&L calculations.
-7. Verify market max leverage and minimum collateral against authoritative LeverUp market metadata before using the static map for real integration.
-8. Run the rebuilt bundle syntax check and tests; then stage on a different Worker name/route.
-9. Smoke-test every GET route, Telegram webhook and callbacks, paper open/close lifecycle, DO persistence across restarts, feed reconnects, and D1 write volume.
-10. Keep production Worker version 505 untouched until staging passes.
+2. Add deterministic behavior tests for 50x, >=100x, unsupported <50x, insufficient balance, duplicate signal, one-open-trade-per-symbol, and P&L calculations.
+3. Verify market max leverage and minimum collateral against authoritative LeverUp market metadata before using the static map for real integration.
+4. Freshly smoke-test every GET route, Telegram webhook and callbacks. The current tool environment cannot reach the public Worker hostname directly.
+5. Test paper open/close lifecycle, DO persistence across restarts, feed reconnects, and D1 write volume on a separate staging Worker.
+6. Compare paper P&L with realistic fees, funding, slippage, mark/oracle and liquidation assumptions before interpreting strategy profitability.
+7. Only then consider production cutover. Do not disable or overwrite the existing source Worker during reconstruction.
 
 ## Decision
 
-**Audit is not yet passed for deployment.** The recovered source has a confirmed paper-trading tier bug, endpoint live smoke tests are blocked by the available network policy, and LeverUp margin/leverage data remains unverified. The production Worker was not modified.
+**Production audit is not yet passed for deployment.** The recovered source matches the live version inventory and the paper-tier code fix has a syntax-checked staging candidate. However, behavioral tests, fresh live endpoint smoke tests, and authoritative LeverUp market metadata checks remain outstanding. The production Worker was not modified.
