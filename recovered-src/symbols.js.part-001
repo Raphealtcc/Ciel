@@ -1,0 +1,63 @@
+// src/symbols.ts
+var DEFAULT_WATCH_SYMBOLS = [
+  "BTC",
+  "ETH",
+  "MON",
+  "BNB",
+  "XRP",
+  "HYPE",
+  "ONDO",
+  "KPEPE",
+  "QNT",
+  "ZEC",
+  "TRX",
+  "AAVE",
+  "ADA",
+  "CASHCAT",
+  "DOGE",
+  "LINK",
+  "LIT",
+  "PONS",
+  "PUMP",
+  "SEI",
+  "SOL",
+  "SUI",
+  "UNI",
+  "VIRTUAL",
+  "XMR"
+];
+var SYMBOL_PATTERN = /^[A-Z0-9:_-]{1,40}$/;
+function configuredWatchSymbols(raw) {
+  const parsed = (raw || DEFAULT_WATCH_SYMBOLS.join(",")).split(",").map((value) => value.trim().toUpperCase()).filter((value) => SYMBOL_PATTERN.test(value));
+  return [...new Set(parsed)].slice(0, 100);
+}
+__name(configuredWatchSymbols, "configuredWatchSymbols");
+
+var LEVERUP_MARKET_MAX_LEVERAGE = Object.freeze({
+  BTC: 1001, ETH: 1001, MON: 25, BNB: 50, XRP: 100,
+  HYPE: 50, ONDO: 50, KPEPE: 50, QNT: 5, ZEC: 25,
+  TRX: 50, AAVE: 50, ADA: 50, CASHCAT: 3, DOGE: 50,
+  LINK: 50, LIT: 5, PONS: 3, PUMP: 50, SEI: 50,
+  SOL: 100, SUI: 50, UNI: 50, VIRTUAL: 50, XMR: 25
+});
+var PAPER_ACCOUNT_KEY = "ciel:paper:account:v1";
+var PAPER_STARTING_BALANCE_MON = 60;
+var PAPER_MARGIN_MON = 22;
+var PAPER_LEVERAGE = 50;
+function formatPrice(value) {
+  if (!Number.isFinite(value) || value <= 0) return "n/a";
+  if (value >= 1e3) {
+    return value.toLocaleString("en-US", { maximumFractionDigits: 2 });
+  }
+  if (value >= 1) return value.toFixed(4);
+  return Number(value.toPrecision(6)).toString();
+}
+__name(formatPrice, "formatPrice");
+function percentageChange(current, previous) {
+  if (!Number.isFinite(current) || !Number.isFinite(previous) || previous <= 0) {
+    return 0;
+  }
+  return (current - previous) / previous * 100;
+}
+__name(percentageChange, "percentageChange");
+

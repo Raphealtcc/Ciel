@@ -1,0 +1,131 @@
+// src/telegram.ts
+function feedStub(env) {
+  return env.HYPERLIQUID_FEED.get(env.HYPERLIQUID_FEED.idFromName("primary"));
+}
+__name(feedStub, "feedStub");
+async function readFeedStatus(env) {
+  const response = await feedStub(env).fetch("https://feed/status");
+  if (!response.ok) throw new Error("Market feed status request failed");
+  return await response.json();
+}
+__name(readFeedStatus, "readFeedStatus");
+function ageLabel(timestamp) {
+  if (!timestamp || !Number.isFinite(timestamp)) return "not received yet";
+  const seconds = Math.max(0, Math.round((Date.now() - timestamp) / 1e3));
+  if (seconds < 60) return seconds + "s ago";
+  return Math.round(seconds / 60) + "m ago";
+}
+__name(ageLabel, "ageLabel");
+async function sendTelegram(env, text) {
+  const token = (env.TELEGRAM_BOT_TOKEN || "").trim();
+  const chatId = (env.TELEGRAM_CHAT_ID || "").trim();
+  if (!token || !chatId) {
+    throw new Error("TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID is not configured");
+  }
+  if (!text.trim()) throw new Error("Telegram text is empty");
+  const response = await fetch("https://api.telegram.org/bot" + token + "/sendMessage", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      chat_id: chatId,
+      text: text.slice(0, 4e3),
+      disable_web_page_preview: true
+    })
+  });
+  const raw = await response.text();
+  let payload = {};
+  try {
+    payload = JSON.parse(raw);
+  } catch {
+  }
+  if (!response.ok || payload.ok !== true) {
+    throw new Error("Telegram sendMessage failed: HTTP " + response.status + "; " + (payload.description || raw.slice(0, 250)));
+  }
+}
+__name(sendTelegram, "sendTelegram");
+async function sendStatus(env) {
+  const status = await readFeedStatus(env);
+  const lastTickAt = Number(status.lastTickAt || 0);
+  const isFresh = lastTickAt > 0 && Date.now() - lastTickAt < 12e4;
+  const connected = status.connected === true;
+  const lines = [
+    "\u{1F6F0} CIEL MARKET WATCH",
+    "Mode: read-only",
+    "WebSocket: " + (connected ? "connected" : "disconnected"),
+    "Latest feed update: " + ageLabel(status.lastTickAt),
+    "Last sample: " + ageLabel(status.lastSampleAt),
+    "Markets available: " + String(status.availableCount || 0) + "/" + String(status.watchlist?.length || 0),
+    "Move notice: " + String(status.alertThresholdPct ?? 2) + "% over " + String(status.alertWindowMinutes ?? 5) + " minutes",
+    "Fresh: " + (isFresh ? "yes" : "no"),
+    status.lastError ? "Last error: " + status.lastError : "",
+    "No orders are submitted."
+  ].filter(Boolean);
+  await sendTelegram(env, lines.join("\n"));
+}
+__name(sendStatus, "sendStatus");
+async function sendMarkets(env) {
+  const status = await readFeedStatus(env);
+  const markets = status.markets || [];
+  const available = markets.filter((market) => market.available && market.price !== null);
+  const missing = markets.filter((market) => !market.available);
+  const lines = ["\u{1F4CB} CIEL WATCHLIST", "Live symbols (" + available.length + "/" + markets.length + "):"];
+  for (const market of available) {
+    lines.push("\u2022 " + market.symbol + " \u2014 $" + formatPrice(Number(market.price)));
+  }
+  if (missing.length) {
+    lines.push("", "Not present in the current Hyperliquid allMids feed:");
+    lines.push(missing.map((market) => market.symbol).join(", "));
+  }
+  lines.push("", "Symbols are matched exactly; no market aliases are guessed.");
+  await sendTelegram(env, lines.join("\n"));
+}
+__name(sendMarkets, "sendMarkets");
+async function sendRecentMoves(env) {
+  const result = await env.DB.prepare(
+    "SELECT symbol, created_at_ms, mid_price, window_minutes, change_pct, return_5m_pct, return_15m_pct, return_60m_pct FROM market_alerts ORDER BY created_at_ms DESC LIMIT 10"
+  ).all();
+  const rows = result.results || [];
+  if (!rows.length) {
+    await sendTelegram(env, "No market-move notices have been recorded yet.");
+    return;
+  }
+  const lines = ["\u{1F9FE} RECENT MARKET-MOVE NOTICES"];
+  for (const row of rows) {
+    const change = Number(row.change_pct);
+    const sign = change >= 0 ? "+" : "";
+    const ts = new Date(Number(row.created_at_ms)).toISOString().replace("T", " ").replace(".000Z", " UTC");
+    const outcomes = [
+      "5m " + outcomeText(row.return_5m_pct),
+      "15m " + outcomeText(row.return_15m_pct),
+      "60m " + outcomeText(row.return_60m_pct)
+    ].join(" / ");
+    lines.push(
+      String(row.symbol) + " " + sign + change.toFixed(2) + "% over " + String(row.window_minutes) + "m at $" + formatPrice(Number(row.mid_price)) + " | later market change: " + outcomes + " | " + ts
+    );
+  }
+  lines.push("", "These are observed price changes after notices, not simulated trade profit.");
+  await sendTelegram(env, lines.join("\n"));
+}
+__name(sendRecentMoves, "sendRecentMoves");
+function outcomeText(raw) {
+  if (raw === null || raw === void 0 || !Number.isFinite(Number(raw))) return "pending";
+  const value = Number(raw);
+  return (value >= 0 ? "+" : "") + value.toFixed(2) + "%";
+}
+__name(outcomeText, "outcomeText");
+async function handleCommand(env, text) {
+  if (await handleAdvisorCommand(env, text)) return;
+  const command = (text.trim().split(/\s+/, 1)[0] || "").split("@")[0].toLowerCase();
+  if (command === "/start" || command === "/help") {
+    await sendTelegram(env, [
+      "\u{1F916} Ciel market advisor is online.",
+      "/status \u2014 feed connection and freshness",
+      "/markets \u2014 live prices and watched markets",
+      "/moves \u2014 recent price-move observations",
+      "/signals \u2014 active trade recommendations",
+      "/positions \u2014 manually tracked real positions",
+      "/profits \u2014 automatic 50x paper-trading balance and P&L",
+      "/entered ID ACTUAL_PRICE \u2014 register your LeverUp fill",
+      "/cancel ID \u2014 cancel an unstarted recommendation",
+      "Trade recommendations include Start Tracking and Skip buttons.",
+      "Tracking starts only after you click Start Tracking. After a close alert, press I'VE CLOSED IT; tra

@@ -1,0 +1,113 @@
+cking ends and the latest observed mark is saved automatically.",
+      "/test \u2014 verify Telegram delivery",
+      "/help \u2014 show these commands",
+      "",
+      "Advisory only. Ciel never places or closes orders."
+    ].join("\n"));
+    return;
+  }
+  if (command === "/status") {
+    await sendStatus(env);
+    return;
+  }
+  if (command === "/markets" || command === "/watchlist") {
+    await sendMarkets(env);
+    return;
+  }
+  if (command === "/moves") {
+    await sendRecentMoves(env);
+    return;
+  }
+  if (command === "/test") {
+    await sendTelegram(env, "\u2705 Ciel Telegram test passed. Bot token, chat access, and message delivery are working.");
+    return;
+  }
+  await sendTelegram(env, "Unknown command. Send /help for the available Ciel commands.");
+}
+__name(handleCommand, "handleCommand");
+async function answerCallback(env, callbackId, message) {
+  const token = (env.TELEGRAM_BOT_TOKEN || "").trim();
+  if (!token) return;
+  const response = await fetch("https://api.telegram.org/bot" + token + "/answerCallbackQuery", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ callback_query_id: callbackId, text: message.slice(0, 190), show_alert: false }),
+    signal: AbortSignal.timeout(8e3)
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || payload.ok !== true) throw new Error("Telegram answerCallbackQuery failed: " + String(payload.description || response.status));
+}
+__name(answerCallback, "answerCallback");
+async function removeInlineButtons(env, chatId, messageId) {
+  const token = (env.TELEGRAM_BOT_TOKEN || "").trim();
+  if (!token) return;
+  await fetch("https://api.telegram.org/bot" + token + "/editMessageReplyMarkup", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [] } })
+  });
+}
+__name(removeInlineButtons, "removeInlineButtons");
+async function handleTelegramWebhook(request, env) {
+  if (request.method !== "POST") return new Response("Method not allowed", { status: 405 });
+  const secret = (env.TELEGRAM_WEBHOOK_SECRET || "").trim();
+  const suppliedSecret = request.headers.get("X-Telegram-Bot-Api-Secret-Token") || "";
+  if (!secret || suppliedSecret !== secret) return new Response("Forbidden", { status: 403 });
+  const update = await request.json().catch(() => null);
+  if (!update) return new Response("Bad request", { status: 400 });
+  const callback = update.callback_query && typeof update.callback_query === "object" ? update.callback_query : null;
+  if (callback) {
+    const callbackMessage = callback.message && typeof callback.message === "object" ? callback.message : null;
+    const callbackChat = callbackMessage?.chat && typeof callbackMessage.chat === "object" ? callbackMessage.chat : null;
+    const callbackId = String(callback.id || "");
+    const rawChatId = callbackChat?.id;
+    const chatId = typeof rawChatId === "number" || typeof rawChatId === "string" ? rawChatId : null;
+    const messageId = Number(callbackMessage?.message_id || 0);
+    const data = typeof callback.data === "string" ? callback.data : "";
+    if (!callbackId || chatId === null || String(chatId) !== (env.TELEGRAM_CHAT_ID || "").trim()) {
+      if (callbackId) await answerCallback(env, callbackId, "Not authorized.");
+      return new Response("Ignored", { status: 200 });
+    }
+    await answerCallback(env, callbackId, "Ciel is processing that action.").catch((error) => {
+      console.error("Telegram callback acknowledgement failed: " + String(error).slice(0, 250));
+    });
+    try {
+      const status = await readFeedStatus(env);
+      const prices = {};
+      for (const market of status.markets || []) {
+        const value = Number(market.price);
+        if (market.symbol && market.available && Number.isFinite(value) && value > 0) prices[market.symbol.toUpperCase()] = value;
+      }
+      const result = await handleAdvisorCallback(env, data, prices, Number(status.lastTickAt || 0), Date.now());
+      if (!result.handled) {
+        if (messageId > 0) await removeInlineButtons(env, chatId, messageId);
+        await sendTelegram(env, "This button action is unknown or has expired. Send /signals to check the current state.");
+        return new Response("Ignored", { status: 200 });
+      }
+      if (result.removeButtons && messageId > 0) await removeInlineButtons(env, chatId, messageId);
+      if (result.reply) await sendTelegram(env, result.reply);
+    } catch (error) {
+      console.error("Telegram callback failed: " + String(error).slice(0, 500));
+      await sendTelegram(env, "\u26A0\uFE0F Ciel could not complete that action. Send /signals to check whether the recommendation is still pending; no order was placed.").catch((sendError) => console.error("Telegram callback error notice failed: " + String(sendError).slice(0, 250)));
+    }
+    return new Response("ok", { status: 200 });
+  }
+  const message = update.message && typeof update.message === "object" ? update.message : null;
+  const chat = message?.chat && typeof message.chat === "object" ? message.chat : null;
+  if (!message || !chat || chat.id === void 0 || chat.id === null) return new Response("Ignored", { status: 200 });
+  if (String(chat.id) !== (env.TELEGRAM_CHAT_ID || "").trim()) return new Response("Ignored", { status: 200 });
+  const text = typeof message.text === "string" ? message.text.trim() : "";
+  if (!text.startsWith("/")) return new Response("Ignored", { status: 200 });
+  try {
+    await handleCommand(env, text);
+  } catch (error) {
+    console.error("Telegram command failed: " + String(error).slice(0, 500));
+    try {
+      await sendTelegram(env, "\u26A0\uFE0F Ciel could not complete that command. Check Worker logs and the D1 migration.");
+    } catch {
+    }
+  }
+  return new Response("ok", { status: 200 });
+}
+__name(handleTelegramWebhook, "handleTelegramWebhook");
+
