@@ -1,0 +1,71 @@
+it feedStatus(env);
+        const result = feed.payload?.orderBooks?.[symbol] || null;
+        return json2({ symbol, snapshot: result, stale: !result || Date.now() - Number(result.ts_ms || 0) > 18e4, source: "Live Durable Object order book; no duplicate D1 writes" });
+      } catch (error) {
+        return json2({ error: "Order-book history is not ready", detail: String(error).slice(0, 250) }, 503);
+      }
+    }
+    if (url.pathname === "/api/positions" || url.pathname === "/api/signals") {
+      try {
+        const result = await feedStatus(env);
+        const lastTickAt = Number(result.payload.lastTickAt || 0);
+        if (!result.response.ok || !lastTickAt || Date.now() - lastTickAt > 12e4) return json2({ error: "Market feed is stale; refusing to present current P&L.", lastTickAt: lastTickAt || null }, 503);
+        const prices = {};
+        const markets = Array.isArray(result.payload.markets) ? result.payload.markets : [];
+        for (const market of markets) {
+          const symbol = String(market.symbol || "");
+          const value = Number(market.price);
+          if (symbol && Number.isFinite(value) && value > 0) prices[symbol] = value;
+        }
+        const positions = await getAdvisorPositions(env, prices);
+        const filtered = url.pathname === "/api/signals" ? positions.filter((p) => p.status === "PROPOSED" || p.status === "OPEN" || p.status === "EXIT_ALERTED") : positions;
+        return json2({ count: filtered.length, monUsd: prices.MON || null, positions: filtered, mode: "advisory-only" });
+      } catch (error) {
+        return json2({ error: "Position tracking is not ready", detail: String(error).slice(0, 300) }, 503);
+      }
+    }
+    if (url.pathname === "/api/research") {
+      try {
+        const audits = await env.DB.prepare("SELECT created_at_ms,symbol,side,model,verdict,reason,risk_flags,grounding_sources,forecast_json,market_context_json FROM advisor_ai_audit ORDER BY created_at_ms DESC LIMIT 25").all();
+        let geminiCooldown = null;
+        try { const rawCooldown = await env.CIEL_STATE.get("ciel:gemini:cooldown"); if (rawCooldown) { const state = JSON.parse(rawCooldown); geminiCooldown = { active: Number(state.untilMs) > Date.now(), httpStatus: state.httpStatus || null, errorCode: state.errorCode || null, message: state.message || null, failures: Number(state.failures) || 0, retryAt: Number(state.untilMs) || null }; } } catch {}
+        let eventIntelligence = { enabled: true, provider: "GDELT DOC 2.0", trigger: "existing five-minute advisor cycle; BTC/ETH shock plus broad watchlist downside", searchPolicy: "triggered-only; normally at least 45 minutes between queries; one active alert suppresses further searches for two hours; earlier only after a further 2% BTC decline", d1Writes: 0, additionalCronJobs: 0 };
+        try { const [scanRaw, activeRaw, pendingRaw, resultRaw] = await Promise.all([env.CIEL_STATE.get("ciel:eventintel:scan-state:v1"), env.CIEL_STATE.get("ciel:eventintel:active:v1"), env.CIEL_STATE.get("ciel:eventintel:pending:v1"), env.CIEL_STATE.get("ciel:eventintel:last-result:v1")]); eventIntelligence.lastScan = scanRaw ? JSON.parse(scanRaw) : null; eventIntelligence.activeEvent = activeRaw ? JSON.parse(activeRaw) : null; eventIntelligence.pendingReview = pendingRaw ? JSON.parse(pendingRaw) : null; eventIntelligence.lastResult = resultRaw ? JSON.parse(resultRaw) : null; } catch {}
+        return json2({
+          model: "CIEL Statistical Ensemble v1",
+          forecastEngine: {
+            runtime: "Existing Cloudflare Worker CPU invocation",
+            horizonMinutes: 5,
+            input: "Existing in-memory market price history",
+            usesWorkersAI: false,
+            additionalD1Writes: 0,
+            additionalKVWrites: 0,
+            additionalScheduledJobs: 0,
+            note: "Transparent momentum/trend statistical forecast; not a neural model, and its volatility envelope is not a calibrated probability interval."
+          },
+          geminiAnalysis: { model: env.GEMINI_MODEL || "gemini-3.8-flash", mode: "provided-market-data plus event-headline review when a market shock triggers", googleSearchGrounding: false, externalNewsResearch: true, cooldown: geminiCooldown },
+          eventIntelligence,
+          recentResearch: audits.results || [],
+          requirements: {
+            forecasting: "In-process Cloudflare statistical engine; no external inference request or paid inference service.",
+            research: "GDELT news search runs only after an in-memory broad market shock, is KV-cached/deduplicated, and never writes to D1. Gemini reviews headline titles and source domains only; no article scraping, paid grounding or separate cron."
+          },
+          mode: "advisory-only"
+        });
+      } catch (error) {
+        return json2({ error: "Research history is not ready", detail: String(error).slice(0, 250) }, 503);
+      }
+    }
+    if (url.pathname === "/api/intraday") {
+      const symbol=(url.searchParams.get("symbol")||"BTC").trim().toUpperCase();
+      if(!SYMBOL_PATTERN.test(symbol))return json2({error:"Invalid symbol"},400);
+      try{
+        const feed=await feedStatus(env);
+        if(!feed.response.ok)return json2({error:"Live price feed unavailable",detail:String(feed.payload?.lastError||"No feed response").slice(0,180)},503);
+        const tickAt=Number(feed.payload.lastTickAt||0),age=Date.now()-tickAt;
+        if(!(tickAt>0&&age>=0&&age<=MAX_AGE))return json2({error:"Live price feed is stale",lastTickAt:tickAt||null,ageMs:Number.isFinite(age)?age:null},503);
+        const market=(Array.isArray(feed.payload.markets)?feed.payload.markets:[]).find(x=>String(x.symbol||"").toUpperCase()===symbol);
+        const price=Number(market?.price);
+        if(!(price>0))return json2({error:"No live price for this symbol"},503);
+        const analysis=await getIntradayPattern(env,symbol,Date.now(),price);
+        return json2({symbol,price,priceSource:"Live Hyperliquid feed",sampledAt:tickAt,analysis}

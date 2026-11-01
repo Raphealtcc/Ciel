@@ -1,0 +1,73 @@
+ep price-move observations in D1 for diagnostics; Telegram is reserved for actionable trade setups and position management.
+  }
+  async writeHistory(rows, alerts, now) {
+    try {
+      const persist = new Set(this.persistedSymbols(now));
+      // Keep 1-minute analysis in Durable Object storage. D1 stores 1-minute
+      // benchmark history for recovery and a 6-minute sample for the wider watchlist.
+      // This preserves the live signal cadence without writing every watched price to D1.
+      const persistAllSamples = Math.floor(now / (6 * 60 * 1e3)) !== Math.floor((now - SAMPLE_INTERVAL_MS) / (6 * 60 * 1e3));
+      const statements = rows.filter((row) => persist.has(row.symbol) && (BENCHMARK_PRICE_SYMBOLS.has(row.symbol) || persistAllSamples)).map(
+        (row) => this.env.DB.prepare(
+          "INSERT OR REPLACE INTO market_samples (ts_ms, symbol, mid_price) VALUES (?, ?, ?)"
+        ).bind(row.t, row.symbol, row.price)
+      );
+      for (const alert of alerts) {
+        statements.push(this.env.DB.prepare(
+          "INSERT INTO market_alerts (created_at_ms, symbol, mid_price, window_minutes, change_pct) VALUES (?, ?, ?, ?, ?)"
+        ).bind(alert.createdAt, alert.symbol, alert.price, alert.windowMinutes, alert.changePct));
+      }
+      if (statements.length) await this.env.DB.batch(statements);
+      await this.updateAlertOutcomes(now);
+      if (now - this.lastCleanupAt > 6 * 60 * 60 * 1e3) {
+        this.lastCleanupAt = now;
+        await this.state.storage.put("lastCleanupAt", now);
+        const retention = [
+          this.env.DB.prepare("DELETE FROM market_alerts WHERE created_at_ms < ?").bind(now - 30 * 24 * 60 * 60 * 1e3)
+        ];
+        const symbols = this.watchlist();
+        const symbolParams = symbols.map(() => "?").join(",");
+        const cutoff = now - 7 * 24 * 60 * 60 * 1e3;
+        retention.push(
+          this.env.DB.prepare("DELETE FROM market_samples WHERE symbol IN (" + symbolParams + ") AND ts_ms<?").bind(...symbols, cutoff),
+          this.env.DB.prepare("DELETE FROM market_candles WHERE symbol IN (" + symbolParams + ") AND interval='1m' AND open_ts_ms<?").bind(...symbols, cutoff),
+          this.env.DB.prepare("DELETE FROM market_candles WHERE symbol IN (" + symbolParams + ") AND interval='5m' AND open_ts_ms<?").bind(...symbols, cutoff),
+          // market_book_snapshots is no longer persisted; no high-volume cleanup DELETE is needed.
+          this.env.DB.prepare("DELETE FROM market_context_snapshots WHERE symbol IN (" + symbolParams + ") AND ts_ms<?").bind(...symbols, cutoff),
+          this.env.DB.prepare("DELETE FROM market_candle_hourly_stats WHERE symbol IN (" + symbolParams + ") AND bucket_ms<?").bind(...symbols, cutoff)
+        );
+        await this.env.DB.batch(retention);
+      }
+    } catch (error) {
+      console.error("D1 market history write failed. Apply migration 0004_market_monitor.sql: " + String(error).slice(0, 500));
+    }
+  }
+  async updateAlertOutcomes(now) {
+    const result = await this.env.DB.prepare(
+      "SELECT id, symbol, created_at_ms, mid_price, return_5m_pct, return_15m_pct, return_60m_pct FROM market_alerts WHERE created_at_ms>=? AND ((return_5m_pct IS NULL AND created_at_ms<=?) OR (return_15m_pct IS NULL AND created_at_ms<=?) OR (return_60m_pct IS NULL AND created_at_ms<=?)) ORDER BY created_at_ms ASC LIMIT 200"
+    ).bind(now - 60 * 60 * 1e3, now - 5 * 6e4, now - 15 * 6e4, now - 60 * 6e4).all();
+    const rows = result.results || [];
+    const windows = [
+      { minutes: 5, column: "return_5m_pct" },
+      { minutes: 15, column: "return_15m_pct" },
+      { minutes: 60, column: "return_60m_pct" }
+    ];
+    const statements = [];
+    for (const row of rows) {
+      const ageMs = now - Number(row.created_at_ms);
+      const basePrice = Number(row.mid_price);
+      const currentPrice = this.latest[String(row.symbol)];
+      if (!Number.isFinite(basePrice) || basePrice <= 0 || !Number.isFinite(currentPrice) || currentPrice <= 0) continue;
+      for (const window of windows) {
+        if (row[window.column] !== null && row[window.column] !== void 0) continue;
+        if (ageMs < window.minutes * 6e4) continue;
+        const observedReturn = percentageChange(currentPrice, basePrice);
+        statements.push(this.env.DB.prepare(
+          "UPDATE market_alerts SET " + window.column + " = ? WHERE id = ? AND " + window.column + " IS NULL"
+        ).bind(observedReturn, row.id));
+      }
+    }
+    if (statements.length) await this.env.DB.batch(statements);
+  }
+};
+

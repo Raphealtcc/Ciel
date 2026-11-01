@@ -1,0 +1,128 @@
+h || now - this.lastHistoryHydrationAt < 10 * 60 * 1e3) return;
+    this.lastHistoryHydrationAt = now;
+    await this.state.storage.put("lastHistoryHydrationAt", now);
+    try {
+      for (let offset = 0; offset < symbols.length; offset += 5) {
+        const batchSymbols = symbols.slice(offset, offset + 5);
+        const results = await Promise.all(batchSymbols.map(
+          (symbol) => this.env.DB.prepare(
+            "SELECT ts_ms,mid_price FROM market_samples WHERE symbol=? AND ts_ms>=? ORDER BY ts_ms DESC LIMIT 200"
+          ).bind(symbol, now - 8 * 60 * 60 * 1e3).all()
+        ));
+        for (let index = 0; index < batchSymbols.length; index++) {
+          const symbol = batchSymbols[index];
+          const merged = /* @__PURE__ */ new Map();
+          for (const row of results[index].results || []) {
+            const ts = Number(row.ts_ms), price = Number(row.mid_price);
+            if (Number.isFinite(ts) && ts > 0 && Number.isFinite(price) && price > 0) merged.set(ts, price);
+          }
+          for (const point of this.history[symbol] || []) merged.set(point.t, point.p);
+          this.history[symbol] = [...merged.entries()].map(([t, p]) => ({ t, p })).sort((a, b) => a.t - b.t).slice(-MAX_HISTORY_POINTS);
+        }
+      }
+      await this.state.storage.put("history", this.history);
+    } catch (error) {
+      console.error("D1 history warm-up deferred: " + String(error).slice(0, 220));
+    }
+  }
+  liveMarketInputs(now) {
+    const output = {};
+    for (const symbol of this.watchlist()) {
+      const points = this.contextHistory[symbol] || [];
+      const context = points[points.length - 1], book = this.latestBooks[symbol];
+      if (!context || !book || now - context.ts_ms > 18e4 || now - book.ts_ms > 18e4) continue;
+      if ([context.funding_rate, context.open_interest, context.day_ntl_volume, context.mark_px, context.oracle_px].some((v) => v === null || v === void 0)) continue;
+      const mark = Number(context.mark_px), oracle = Number(context.oracle_px), oi = Number(context.open_interest);
+      const prior = points.find((p) => p.ts_ms >= now - 20 * 6e4) || points[0];
+      const oiChangePct = prior && Number(prior.open_interest) > 0 ? (oi / Number(prior.open_interest) - 1) * 100 : 0;
+      output[symbol] = {
+        contextAt: context.ts_ms,
+        bookAt: book.ts_ms,
+        funding: Number(context.funding_rate),
+        openInterest: oi,
+        volume: Number(context.day_ntl_volume),
+        mark,
+        oracle,
+        premiumBps: mark > 0 && oracle > 0 ? (mark / oracle - 1) * 1e4 : Infinity,
+        spreadBps: Number(book.spread_bps),
+        topDepthUsd: Number(book.best_bid) * Number(book.bid_size) + Number(book.best_ask) * Number(book.ask_size),
+        oiChangePct
+      };
+    }
+    return output;
+  }
+  async samplePrices(now) {
+    const windowMinutes = numericSetting(this.env.ALERT_WINDOW_MINUTES, 5, 1, 30);
+    const thresholdPct = numericSetting(this.env.MOVE_ALERT_PCT, 2, 0.1, 50);
+    const cooldownMs = numericSetting(this.env.ALERT_COOLDOWN_MINUTES, 15, 1, 1440) * 6e4;
+    const targetTime = now - windowMinutes * 6e4;
+    const rows = [];
+    const alerts = [];
+    for (const symbol of this.watchlist()) {
+      const price = this.latest[symbol];
+      if (!Number.isFinite(price) || price <= 0) continue;
+      const points = this.history[symbol] || [];
+      const previousPoint = points[points.length - 1];
+      if (!previousPoint || previousPoint.t < now) {
+        points.push({ t: now, p: price });
+      } else {
+        points[points.length - 1] = { t: now, p: price };
+      }
+      while (points.length > MAX_HISTORY_POINTS) points.shift();
+      this.history[symbol] = points;
+      rows.push({ symbol, price, t: now });
+      let baseline = null;
+      for (let index = points.length - 2; index >= 0; index--) {
+        if (points[index].t <= targetTime) {
+          baseline = points[index];
+          break;
+        }
+      }
+      if (!baseline) continue;
+      if (now - baseline.t > windowMinutes * 6e4 + SAMPLE_INTERVAL_MS * 2) continue;
+      const changePct = percentageChange(price, baseline.p);
+      const lastAlertAt = this.lastAlertAt[symbol] || 0;
+      if (Math.abs(changePct) < thresholdPct || now - lastAlertAt < cooldownMs) continue;
+      this.lastAlertAt[symbol] = now;
+      alerts.push({
+        symbol,
+        price,
+        previousPrice: baseline.p,
+        changePct,
+        windowMinutes,
+        createdAt: now
+      });
+    }
+    await this.hydrateHistoryFromD1(now);
+    await Promise.all([
+      this.state.storage.put("latest", this.latest),
+      this.state.storage.put("history", this.history),
+      this.state.storage.put("lastAlertAt", this.lastAlertAt),
+      this.state.storage.put("lastTickAt", this.lastTickAt),
+      this.state.storage.put("lastSampleAt", this.lastSampleAt),
+      this.state.storage.put("lastError", this.lastError || ""),
+      this.state.storage.put("latestBooks", this.latestBooks),
+      this.state.storage.put("lastBookPersistAt", this.lastBookPersistAt)
+    ]);
+    await this.writeHistory(rows, alerts, now);
+    const refreshCandles = now - this.lastCandleSnapshotAt >= 5 * 60 * 1e3;
+    const refreshContext = now - this.lastContextWriteAt >= 2 * 60 * 1e3;
+    const background = [];
+    if (refreshContext) {
+      this.lastContextWriteAt = now;
+      background.push(this.state.storage.put("lastContextWriteAt", now));
+      background.push(this.writeMarketContexts(now));
+    }
+    if (refreshCandles) {
+      this.lastCandleSnapshotAt = now;
+      background.push(this.state.storage.put("lastCandleSnapshotAt", now));
+      background.push(this.writeCandleSnapshots(now));
+    }
+    await Promise.all(background);
+    try {
+      await runAdvisorCycle(this.env, this.latest, now, this.lastTickAt, this.history, this.liveMarketInputs(now), this.state.storage);
+    } catch (error) {
+      console.error("Ciel advisor cycle failed: " + String(error).slice(0, 400));
+    }
+    await this.scheduleNextAlarm();
+    // Ke

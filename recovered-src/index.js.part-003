@@ -1,0 +1,102 @@
+nst limit = Math.max(1, Math.min(500, Math.floor(Number(url.searchParams.get("limit") || 100))));
+      if (!/^[A-Z0-9:_-]{1,40}$/.test(symbol) || !["1m", "5m", "15m", "1h"].includes(interval)) return json2({ error: "Invalid symbol or interval" }, 400);
+      try {
+        let candles = [];
+        if (interval === "1m") {
+          const stepMs = D1_NATIVE_CANDLE_SYMBOLS.has(symbol) ? 6e4 : 6e5;
+          const result = await env.DB.prepare(
+            "SELECT symbol,'1m' AS interval,ts_ms AS open_ts_ms,ts_ms+? AS close_ts_ms,mid_price AS open_price,mid_price AS high_price,mid_price AS low_price,mid_price AS close_price,0 AS volume,0 AS trade_count FROM market_samples WHERE symbol=? ORDER BY ts_ms DESC LIMIT ?"
+          ).bind(stepMs, symbol, limit).all();
+          candles = (result.results || []).reverse();
+        } else if (interval === "5m") {
+          if (D1_NATIVE_CANDLE_SYMBOLS.has(symbol)) {
+            const result = await env.DB.prepare(
+              "SELECT symbol,interval,open_ts_ms,close_ts_ms,open_price,high_price,low_price,close_price,volume,trade_count FROM market_candles WHERE symbol=? AND interval='5m' ORDER BY open_ts_ms DESC LIMIT ?"
+            ).bind(symbol, limit).all();
+            candles = (result.results || []).reverse();
+          } else {
+            const result = await env.DB.prepare(
+              "SELECT symbol,'5m' AS interval,ts_ms AS open_ts_ms,ts_ms+600000 AS close_ts_ms,mid_price AS open_price,mid_price AS high_price,mid_price AS low_price,mid_price AS close_price,0 AS volume,0 AS trade_count FROM market_samples WHERE symbol=? ORDER BY ts_ms DESC LIMIT ?"
+            ).bind(symbol, limit).all();
+            candles = (result.results || []).reverse();
+          }
+        } else {
+          const bucketMs = interval === "15m" ? 15 * 6e4 : 60 * 6e4;
+          const now = Date.now();
+          const sinceMs = Math.max(
+            now - 7 * 864e5,
+            Math.floor((now - (limit + 2) * bucketMs) / 3e5) * 3e5 - 3e5
+          );
+          if (!D1_NATIVE_CANDLE_SYMBOLS.has(symbol)) {
+            const result = await env.DB.prepare(`
+              WITH grouped AS (
+                SELECT
+                  symbol,
+                  CAST(ts_ms / ? AS INTEGER) * ? AS bucket_ms,
+                  MIN(ts_ms) AS first_open_ms,
+                  MAX(ts_ms) AS last_open_ms,
+                  MAX(ts_ms + 600000) AS close_ts_ms,
+                  MIN(mid_price) AS low_price,
+                  MAX(mid_price) AS high_price,
+                  COUNT(*) AS trade_count
+                FROM market_samples
+                WHERE symbol=? AND ts_ms>=?
+                GROUP BY CAST(ts_ms / ? AS INTEGER) * ?
+              )
+              SELECT
+                symbol, ? AS interval, bucket_ms AS open_ts_ms, close_ts_ms,
+                (SELECT mid_price FROM market_samples p WHERE p.symbol=grouped.symbol AND p.ts_ms=grouped.first_open_ms) AS open_price,
+                high_price, low_price,
+                (SELECT mid_price FROM market_samples p WHERE p.symbol=grouped.symbol AND p.ts_ms=grouped.last_open_ms) AS close_price,
+                0 AS volume, trade_count
+              FROM grouped
+              ORDER BY bucket_ms DESC
+              LIMIT ?
+            `).bind(bucketMs, bucketMs, symbol, sinceMs, bucketMs, bucketMs, interval, limit).all();
+            candles = (result.results || []).reverse();
+          } else {
+            const result = await env.DB.prepare(`
+              WITH grouped AS (
+                SELECT
+                  symbol,
+                  CAST(open_ts_ms / ? AS INTEGER) * ? AS bucket_ms,
+                  MIN(open_ts_ms) AS first_open_ms,
+                  MAX(open_ts_ms) AS last_open_ms,
+                  MAX(close_ts_ms) AS close_ts_ms,
+                  MIN(low_price) AS low_price,
+                  MAX(high_price) AS high_price,
+                  SUM(volume) AS volume,
+                  SUM(trade_count) AS trade_count
+                FROM market_candles
+                WHERE symbol=? AND interval='5m' AND open_ts_ms>=?
+                GROUP BY CAST(open_ts_ms / ? AS INTEGER) * ?
+              )
+              SELECT
+                symbol,
+                ? AS interval,
+                bucket_ms AS open_ts_ms,
+                close_ts_ms,
+                (SELECT open_price FROM market_candles c WHERE c.symbol=grouped.symbol AND c.interval='5m' AND c.open_ts_ms=grouped.first_open_ms) AS open_price,
+                high_price,
+                low_price,
+                (SELECT close_price FROM market_candles c WHERE c.symbol=grouped.symbol AND c.interval='5m' AND c.open_ts_ms=grouped.last_open_ms) AS close_price,
+                volume,
+                trade_count
+              FROM grouped
+              ORDER BY bucket_ms DESC
+              LIMIT ?
+            `).bind(bucketMs, bucketMs, symbol, sinceMs, bucketMs, bucketMs, interval, limit).all();
+            candles = (result.results || []).reverse();
+          }
+        }
+        const source = interval === "1m" ? "Sampled Hyperliquid mid prices (BTC/ETH/MON every minute; other watched symbols every ten minutes; not exchange OHLC candles)" : D1_NATIVE_CANDLE_SYMBOLS.has(symbol) ? interval === "5m" ? "Hyperliquid native 5m candle snapshots" : "Aggregated from saved native 5m Hyperliquid candles" : interval === "5m" ? "Sparse ten-minute-spaced mid-price samples (synthetic OHLC; not exchange OHLC candles)" : "Aggregated from sparse ten-minute-spaced mid-price samples; approximate highs/lows, not full OHLC";
+        return json2({ symbol, interval, count: candles.length, candles, source });
+      } catch (error) {
+        return json2({ error: "Candle history is not ready", detail: String(error).slice(0, 250) }, 503);
+      }
+    }
+    if (url.pathname === "/api/orderbook") {
+      const symbol = (url.searchParams.get("symbol") || "BTC").trim().toUpperCase();
+      if (!/^[A-Z0-9:_-]{1,40}$/.test(symbol)) return json2({ error: "Invalid symbol" }, 400);
+      try {
+        const feed = awa

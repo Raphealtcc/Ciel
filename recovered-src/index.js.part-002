@@ -1,0 +1,113 @@
+handleTelegramWebhook(request, env);
+    }
+    if (request.method !== "GET") {
+      return json2({ error: "Method not allowed" }, 405);
+    }
+    if (url.pathname === "/") {
+      return json2({
+        name: "Ciel Hyperliquid Market Advisor",
+        mode: "read-only-advisory",
+        websocketFeed: "Hyperliquid allMids + candles + order book", localTrendCheck: "CIEL in-worker momentum/trend check",
+        endpoints: ["/health", "/api/markets", "/api/alerts", "/api/candles", "/api/orderbook", "/api/positions", "/api/intraday", "/telegram/webhook"]
+      });
+    }
+    if (url.pathname === "/health") {
+      try {
+        const result = await feedStatus(env);
+        const lastTickAt = Number(result.payload.lastTickAt || 0);
+        const fresh = lastTickAt > 0 && Date.now() - lastTickAt < 12e4;
+        const connected = result.payload.connected === true;
+        const healthy = result.response.ok && fresh && connected;
+        return json2({
+          ok: healthy,
+          mode: "read-only",
+          connected,
+          websocketConnected: connected,
+          connectionState: result.payload.connectionState || (connected ? "open" : "disconnected"),
+          degraded: !connected || !fresh,
+          fresh,
+          lastTickAt: lastTickAt || null,
+          lastMessageAt: result.payload.lastMessageAt || null,
+          lastPongAt: result.payload.lastPongAt || null,
+          lastConnectAttemptAt: result.payload.lastConnectAttemptAt || null,
+          lastOpenAt: result.payload.lastOpenAt || null,
+          lastCloseAt: result.payload.lastCloseAt || null,
+          lastCloseCode: result.payload.lastCloseCode ?? null,
+          lastCloseReason: result.payload.lastCloseReason || null,
+          reconnectAttempts: Number(result.payload.reconnectAttempts || 0),
+          lastError: result.payload.lastError || null
+        }, healthy ? 200 : 503);
+      } catch (error) {
+        return json2({
+          ok: false,
+          error: "Feed status unavailable",
+          detail: String(error).slice(0, 300)
+        }, 503);
+      }
+    }
+    if (url.pathname === "/api/markets") {
+      try {
+        const result = await feedStatus(env);
+        if (!result.response.ok) return json2(result.payload, 503);
+        const now = Date.now();
+        const summaryKey = "ciel:market-summary-hourly:v1";
+        let summary = await env.CIEL_STATE.get(summaryKey, "json").catch(() => null);
+        if (!summary || now - Number(summary.cachedAt || 0) >= 15 * 60 * 1e3) {
+          try {
+            const [daily, weekly] = await Promise.all([
+              env.DB.prepare("SELECT symbol,SUM(candle_count) AS candles,MIN(low_price) AS low,MAX(high_price) AS high,MIN(first_ts) AS first_ts,MAX(last_ts) AS last_ts FROM market_candle_hourly_stats WHERE bucket_ms>=? GROUP BY symbol").bind(now - 864e5).all(),
+              env.DB.prepare("SELECT symbol,SUM(candle_count) AS candles,MIN(low_price) AS low,MAX(high_price) AS high,MIN(first_ts) AS first_ts,MAX(last_ts) AS last_ts FROM market_candle_hourly_stats WHERE bucket_ms>=? GROUP BY symbol").bind(now - 7 * 864e5).all()
+            ]);
+            summary = { cachedAt: now, daily: daily.results || [], weekly: weekly.results || [] };
+          } catch (error) {
+            console.error("Hourly market summaries unavailable; skipping full-history fallback: " + String(error).slice(0, 180));
+            summary = summary ? { ...summary, cachedAt: now } : { cachedAt: now, daily: [], weekly: [] };
+          }
+          await env.CIEL_STATE.put(summaryKey, JSON.stringify(summary), { expirationTtl: 1800 }).catch(() => void 0);
+        }
+        const day = new Map((summary.daily || []).map((row) => [String(row.symbol), row]));
+        const week = new Map((summary.weekly || []).map((row) => [String(row.symbol), row]));
+        const markets = (Array.isArray(result.payload.markets) ? result.payload.markets : []).map((market) => {
+          const symbol = String(market.symbol || "");
+          const d = day.get(symbol), w = week.get(symbol);
+          const first = Number(d?.first_ts || 0), last = Number(d?.last_ts || 0);
+          return {
+            ...market,
+            symbol,
+            price: market.price ?? null,
+            daily: {
+              low: d ? Number(d.low) : null,
+              high: d ? Number(d.high) : null,
+              candles: Number(d?.candles || 0),
+              coverageMinutes: first && last ? Math.round((last - first) / 6e4) : 0,
+              complete: first > 0 && first <= now - 23 * 36e5 && last >= now - 20 * 6e4
+            },
+            weekly: {
+              low: w ? Number(w.low) : null,
+              high: w ? Number(w.high) : null,
+              candles: Number(w?.candles || 0),
+              complete: Number(w?.first_ts || 0) > 0 && Number(w?.first_ts) <= now - 6.9 * 864e5 && Number(w?.last_ts || 0) >= now - 20 * 6e4
+            }
+          };
+        });
+        const monMarket = markets.find((market) => market.symbol === "MON");
+        return json2({
+          ...result.payload,
+          markets,
+          monCollateral: {
+            symbol: "MON/USD",
+            priceUsd: monMarket?.price ?? null,
+            source: "Hyperliquid allMids mid-price proxy",
+            lastTickAt: result.payload.lastTickAt || null,
+            warning: "LeverUp uses its own mark/oracle price. This conversion is an estimate, not the LeverUp collateral oracle."
+          },
+          historySource: "Saved native 5m Hyperliquid candles summarized by hour; highs/lows are observed candle extremes, not a forecast."
+        });
+      } catch (error) {
+        return json2({ error: "Market history unavailable", detail: String(error).slice(0, 300), hint: "Apply migrations/0005_advisor.sql to enable candle and order-book history." }, 503);
+      }
+    }
+    if (url.pathname === "/api/candles") {
+      const symbol = (url.searchParams.get("symbol") || "BTC").trim().toUpperCase();
+      const interval = url.searchParams.get("interval") || "15m";
+      co

@@ -1,0 +1,55 @@
+);
+      }catch(error){return json2({error:"Intraday history not ready",detail:String(error).slice(0,200)},503);}
+    }
+    if (url.pathname === "/api/alerts") {
+      const requested = Number(url.searchParams.get("limit") || "50");
+      const limit = Math.max(1, Math.min(100, Number.isFinite(requested) ? Math.floor(requested) : 50));
+      try {
+        const result = await env.DB.prepare(
+          "SELECT id, symbol, created_at_ms, mid_price, window_minutes, change_pct, return_5m_pct, return_15m_pct, return_60m_pct FROM market_alerts ORDER BY created_at_ms DESC LIMIT ?"
+        ).bind(limit).all();
+        return json2({ count: result.results?.length || 0, alerts: result.results || [] });
+      } catch (error) {
+        return json2({
+          error: "Market alert history is not ready",
+          detail: String(error).slice(0, 250),
+          hint: "Apply migrations/0004_market_monitor.sql to the configured Ciel D1 database."
+        }, 503);
+      }
+    }
+    return json2({ error: "Not found" }, 404);
+  },
+  async scheduled(_event, env, ctx) {
+    ctx.waitUntil(ensureTelegramWebhook(env));
+    ctx.waitUntil((async () => {
+      try {
+        const response = await feedStub2(env).fetch("https://feed/ensure", { method: "POST" });
+        if (!response.ok) {
+          const body = await response.text();
+          console.error("Hyperliquid feed ensure returned HTTP " + response.status + ": " + body.slice(0, 500));
+        }
+      } catch (error) {
+        console.error("Hyperliquid feed ensure failed: " + String(error).slice(0, 500));
+      }
+    })());
+  }
+};
+var TradingEngine = class {
+  static {
+    __name(this, "TradingEngine");
+  }
+  constructor(_state, _env) {
+  }
+  async fetch() {
+    return new Response("Legacy trading runtime retired. Ciel is read-only on this version.", {
+      status: 410,
+      headers: { "content-type": "text/plain; charset=utf-8" }
+    });
+  }
+};
+export {
+  HyperliquidFeed,
+  TradingEngine,
+  index_default as default
+};
+//# sourceMappingURL=index.js.map
