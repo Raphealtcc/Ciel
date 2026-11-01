@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const input = process.argv[2] || path.resolve(here, "../rea-analysis.json");
-const output = path.resolve(here, "../rea-summary.json");
+const output = process.argv[3] || path.resolve(here, "../rea-summary.json");
 const evidence = JSON.parse(await readFile(input, "utf8"));
 const result = evidence.normalized_result || {};
 const graph = result.graph || {};

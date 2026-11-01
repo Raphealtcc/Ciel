@@ -6,6 +6,7 @@ verify-ciel-recovery:
   script:
     - node --check scripts/reassemble-recovered-worker.mjs
     - node --check scripts/apply-paper-tier-fix.mjs
+    - node --check scripts/test-paper-tier-fix.mjs
     - node --check scripts/summarize-rea.mjs
     - npm run check
     - npm run check:paper
@@ -18,14 +19,16 @@ analyze-ciel-with-rea:
   needs: [verify-ciel-recovery]
   script:
     - apk add --no-cache procps
-    - npm run reassemble
-    - npx -y rea-agents@latest analyze-javascript-application "$CI_PROJECT_DIR/reconstructed" --json > "$CI_PROJECT_DIR/rea-analysis.json" 2> "$CI_PROJECT_DIR/rea-analysis.stderr.log" || true
-    - node scripts/summarize-rea.mjs "$CI_PROJECT_DIR/rea-analysis.json"
+    - npm run check:paper
+    - mkdir -p "$CI_PROJECT_DIR/rea-patched"
+    - cp reconstructed/patched-worker.js "$CI_PROJECT_DIR/rea-patched/worker.js"
+    - npx -y rea-agents@latest analyze-javascript-application "$CI_PROJECT_DIR/rea-patched" --json > "$CI_PROJECT_DIR/rea-patched-analysis.json" 2> "$CI_PROJECT_DIR/rea-patched-analysis.stderr.log"
+    - node scripts/summarize-rea.mjs "$CI_PROJECT_DIR/rea-patched-analysis.json" "$CI_PROJECT_DIR/rea-patched-summary.json"
   artifacts:
     when: always
-    paths: [rea-analysis.json, rea-summary.json, rea-analysis.stderr.log]
+    paths: [rea-patched-analysis.json, rea-patched-summary.json, rea-patched-analysis.stderr.log]
     expire_in: 30 days
-  allow_failure: true
+  allow_failure: false
   rules:
     - changes:
         - recovered-src/**/*
