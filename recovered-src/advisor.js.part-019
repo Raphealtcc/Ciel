@@ -1,0 +1,63 @@
+urn { handled: true, removeButtons: true, reply: "The proposal changed before tracking could start. It was not started twice." };
+    const message = ["\u25B6\uFE0F TRACKING STARTED \u2014 " + proposal.side + " " + proposal.symbol, "Reference entry: $" + fmt(entry), "Stop alert: $" + fmt(stop), "Target alert: $" + fmt(target), "Maximum hold: " + hold + " minutes from your click (" + (isRangeScalp ? "range scalp" : "trend hold") + ").", "Ciel will monitor continuously until you press the close button. If your actual LeverUp fill differs, send /entered " + id + " ACTUAL_AVERAGE_FILL_PRICE.", "Place LeverUp native TP/SL protection. Ciel cannot execute orders."].join("\n");
+    return { handled: true, removeButtons: true, reply: message };
+  }
+  const waiting = await env.DB.prepare("SELECT * FROM advisor_positions WHERE id=? AND status IN ('OPEN','EXIT_ALERTED')").bind(id).first();
+  if (!waiting) return { handled: true, removeButtons: true, reply: "This close alert is no longer waiting for confirmation." };
+  const freshMarket = lastTickAt > 0 && now - lastTickAt <= MAX_AGE;
+  const observed = freshMarket && Number(prices[waiting.symbol]) > 0 ? Number(prices[waiting.symbol]) : Number(waiting.exit_price) || 0;
+  const monObserved = freshMarket && Number(prices.MON) > 0 ? Number(prices.MON) : Number(waiting.exit_mon_usd) || 0;
+  const value = observed > 0 && monObserved > 0 ? pnlFor(waiting, observed, monObserved) : null;
+  const updated = await env.DB.prepare("UPDATE advisor_positions SET status='CLOSED',exit_price=COALESCE(?,exit_price),exit_mon_usd=COALESCE(?,exit_mon_usd),closed_at_ms=?,exit_reason='User confirmed closed; exit estimated from latest observed mark',updated_at_ms=? WHERE id=? AND status IN ('OPEN','EXIT_ALERTED')").bind(observed > 0 ? observed : null, monObserved > 0 ? monObserved : null, now, now, id).run();
+  if ((updated.meta?.changes || 0) === 0) return { handled: true, removeButtons: true, reply: "The tracking state already changed; no further action is needed." };
+  const exitLine = observed > 0 ? "Estimated exit mark: $" + fmt(observed) + "." : "Tracking stopped; no fresh mark was available, so the previous alert mark was retained if available."; 
+  const pnlLine = value ? "Estimated gross P&L: " + money(value.usd) + " (" + mon(value.mon) + ") | " + value.roiPct.toFixed(1) + "% of estimated margin." : "P&L estimate unavailable because a valid mark or MON/USD proxy was unavailable."; 
+  return { handled: true, removeButtons: true, reply: ["✅ TRADE CLOSED — " + waiting.side + " " + waiting.symbol, exitLine, pnlLine, "Tracking has stopped. No exit-price command is required.", "This is a mark-based estimate, not a confirmed LeverUp execution price."].join("\n") };
+}
+__name(handleAdvisorCallback, "handleAdvisorCallback");
+async function handleAdvisorCommand(env, text) {
+  const a = text.trim().split(/\s+/), cmd = (a[0] || "").split("@")[0].toLowerCase();
+  if (!["/signals", "/positions", "/entered", "/cancel", "/profits"].includes(cmd)) return false;
+  const id = (a[1] || "").toUpperCase();
+  if (cmd === "/profits") {
+    let response, data = null, bodyText = "";
+    try {
+      response = await feedStub(env).fetch("https://feed/paper/profits");
+      bodyText = await response.text();
+      try { data = bodyText ? JSON.parse(bodyText) : null; } catch { data = null; }
+    } catch (error) {
+      const detail = String(error).slice(0, 260);
+      await notify(env, "Paper profits could not reach the feed Durable Object. Error: " + detail);
+      return true;
+    }
+    if (!response.ok || !data || data.ok === false) {
+      const detail = String(data?.detail || data?.error || bodyText || "Empty response").slice(0, 350);
+      await notify(env, "Paper profits request failed. HTTP " + response.status + ". " + detail + ". The ledger was not reset.");
+      return true;
+    }
+    const signedMon = (value) => (Number(value) >= 0 ? "+" : "") + Number(value).toFixed(3) + " MON";
+    const lines = [
+      "🧪 CIEL PAPER TRADING — AUTOMATIC / 50x ONLY",
+      "Starter balance: " + Number(data.starterBalanceMon).toFixed(2) + " MON",
+      "Available balance: " + Number(data.availableBalanceMon).toFixed(3) + " MON",
+      "Margin reserved in open trades: " + Number(data.openMarginMon).toFixed(3) + " MON",
+      "Realised P&L: " + signedMon(data.realizedPnlMon),
+      "Unrealised P&L: " + (data.unrealizedPnlMon === null ? "unavailable — waiting for a fresh mark on every open trade" : signedMon(data.unrealizedPnlMon)),
+      "Total P&L: " + (data.totalPnlMon === null ? "unavailable — waiting for fresh market data" : signedMon(data.totalPnlMon) + " (" + Number(data.returnPct).toFixed(2) + "%)"),
+      "Paper equity: " + (data.equityMon === null ? "unavailable" : Number(data.equityMon).toFixed(3) + " MON"),
+      "Trades: " + data.openCount + " open | " + data.closedCount + " closed | " + data.wins + " wins | " + data.losses + " losses | " + data.breakeven + " breakeven"
+    ];
+    if (data.strategyStats) {
+      const describeMode = (stats) => {
+        const pnl = signedMon(stats.realizedPnlMon || 0);
+        const winRate = stats.winRatePct === null ? "n/a" : Number(stats.winRatePct).toFixed(1) + "%";
+        return Number(stats.closed || 0) + " closed | " + Number(stats.wins || 0) + "W/" + Number(stats.losses || 0) + "L | win rate " + winRate + " | realised " + pnl;
+      };
+      lines.push("", "STRATEGY PERFORMANCE (CLOSED PAPER TRADES)", "Range scalps: " + describeMode(data.strategyStats.rangeScalp), "Trend holds: " + describeMode(data.strategyStats.trendHold));
+      if (Number(data.strategyStats.legacy?.closed || 0) > 0) lines.push("Legacy / unclassified: " + describeMode(data.strategyStats.legacy));
+    }
+    if (!data.fresh) lines.push("⚠️ Hyperliquid price feed is stale. Open-trade P&L is not being guessed.");
+    if (data.openTrades.length) {
+      lines.push("", "OPEN PAPER TRADES");
+      for (const trade of data.openTrades) {
+        const pnl = trade.pnlMon === null ? "P&L un

@@ -1,0 +1,70 @@
+nAlertedAtMs = now;
+        guardState.profitProtectionAlertPeakPct = protection.bestMovePct;
+        guardStates[id] = guardState;
+        guardsChanged = true;
+        const protectionReason = "PROFIT PROTECTION RECOMMENDATION — peak favourable move +" + protection.bestMovePct.toFixed(3) +
+          "%; current move " + (move >= 0 ? "+" : "") + move.toFixed(3) +
+          "%; at least 45% of peak profit was given back and the reversal persisted for " +
+          Math.round(protection.breachDurationMs/1000) + " seconds. Consider closing manually to protect the remaining gain.";
+        const value = pnlFor(p, current, prices.MON);
+        await notify(env, closeMessage(p, value, protectionReason, current), [[{ text: "✅ I'VE CLOSED IT — STOP TRACKING", callback_data: "close:" + p.id }]]).catch((error) => console.error("Profit-protection alert failed: " + String(error).slice(0, 250)));
+      }
+    }
+    if (!reason) continue;
+    const value = pnlFor(p, current, prices.MON);
+    const updated = await env.DB.prepare("UPDATE advisor_positions SET status='EXIT_ALERTED',exit_price=?,closed_at_ms=?,exit_mon_usd=?,exit_reason=?,updated_at_ms=? WHERE id=? AND status='OPEN'").bind(current, now, prices.MON, reason, now, p.id).run();
+    if ((updated.meta?.changes || 0) > 0) {
+      delete guardStates[String(p.id)];
+      guardsChanged = true;
+      await notify(env, closeMessage(p, value, reason, current), [[{ text: "✅ I'VE CLOSED IT — STOP TRACKING", callback_data: "close:" + p.id }]]).catch((error) => console.error("Close alert failed: " + String(error).slice(0, 250)));
+    }
+  }
+  for (const id of Object.keys(guardStates)) {
+    if (!activeIds.has(id)) {
+      delete guardStates[id];
+      guardsChanged = true;
+    }
+  }
+  if (storage && guardsChanged) await storage.put("ciel:position-profit-guard:v1", guardStates);
+}
+__name(manageOpenPositions, "manageOpenPositions");
+async function getAdvisorPositions(env, prices) {
+  const rows = await env.DB.prepare("SELECT * FROM advisor_positions ORDER BY created_at_ms DESC LIMIT 50").all();
+  return (rows.results || []).map((p) => {
+    const current = prices[p.symbol], openPnl = (p.status === "OPEN" || p.status === "EXIT_ALERTED") && current > 0 && prices.MON > 0 ? pnlFor(p, current, prices.MON) : null, realizedPnl = p.status === "CLOSED" && Number(p.exit_price) > 0 && Number(p.exit_mon_usd) > 0 ? pnlFor(p, Number(p.exit_price), Number(p.exit_mon_usd)) : null, v = openPnl || realizedPnl;
+    return { ...p, current_price: current || null, pnl_usd: v?.usd ?? null, pnl_mon: v?.mon ?? null, return_on_margin_pct: v?.roiPct ?? null, mon_usd: p.status === "CLOSED" ? p.exit_mon_usd || null : prices.MON || null, pnl_kind: realizedPnl ? "estimated-realized" : openPnl ? "estimated-unrealized" : "not-tracking", pnl_note: "Gross estimate using Hyperliquid mids and a 100% LeverUp MON collateral-ratio assumption; actual result depends on LeverUp CR, mark/oracle, fills, fees, funding and slippage.", entry_mode: p.manual_entry_at_ms ? "manual" : p.tracking_started_at_ms ? "tracked-reference" : "proposal-reference" };
+  });
+}
+__name(getAdvisorPositions, "getAdvisorPositions");
+async function liveMon(env) {
+  const x = await env.DB.prepare("SELECT mid_price,ts_ms FROM market_samples WHERE symbol='MON' ORDER BY ts_ms DESC LIMIT 1").first();
+  return x && Date.now() - x.ts_ms <= MAX_AGE ? Number(x.mid_price) || 0 : 0;
+}
+__name(liveMon, "liveMon");
+async function getOpen(env, id) {
+  return env.DB.prepare("SELECT * FROM advisor_positions WHERE id=? AND status='OPEN'").bind(id).first();
+}
+__name(getOpen, "getOpen");
+async function getTrackable(env, id) {
+  return env.DB.prepare("SELECT * FROM advisor_positions WHERE id=? AND status IN ('OPEN','EXIT_ALERTED','CLOSING')").bind(id).first();
+}
+__name(getTrackable, "getTrackable");
+async function handleAdvisorCallback(env, data, prices, lastTickAt, now = Date.now()) {
+  const parts = data.split(":"), action = parts[0], id = (parts[1] || "").toUpperCase();
+  if (!id || !["start", "skip", "close"].includes(action)) return { handled: false, removeButtons: false, reply: "" };
+  if (action === "skip") {
+    const result = await env.DB.prepare("UPDATE advisor_positions SET status='CANCELLED',updated_at_ms=? WHERE id=? AND status='PROPOSED'").bind(now, id).run();
+    return { handled: true, removeButtons: true, reply: (result.meta?.changes || 0) > 0 ? "Setup skipped. Ciel did not track it." : "This setup is no longer pending." };
+  }
+  if (action === "start") {
+    if (!lastTickAt || now - lastTickAt > MAX_AGE || !(prices.MON > 0)) return { handled: true, removeButtons: false, reply: "Market data is stale. Tracking was not started; try again when the feed is fresh." };
+    const proposal = await env.DB.prepare("SELECT * FROM advisor_positions WHERE id=? AND status='PROPOSED' AND expires_at_ms>?").bind(id, now).first();
+    if (!proposal) return { handled: true, removeButtons: true, reply: "This proposal has expired or is no longer pending." };
+    const entry = prices[proposal.symbol];
+    if (!(entry > 0)) return { handled: true, removeButtons: false, reply: "No fresh price is available for " + proposal.symbol + ". Tracking was not started." };
+    const direction = proposal.side === "LONG" ? 1 : -1;
+    const isRangeScalp = String(proposal.strategy || "").includes("RANGE_REVERSION");
+    const hold = isRangeScalp ? setting(env.ADVISORY_SCALP_HOLD_MINUTES, 12, 5, 30) : setting(env.ADVISORY_TREND_HOLD_MINUTES, 180, 30, 1440);
+    const stop = entry * (1 - direction * proposal.stop_pct / 100), target = entry * (1 + direction * proposal.target_pct / 100);
+    const result = await env.DB.prepare("UPDATE advisor_positions SET status='OPEN',tracking_started_at_ms=?,tracking_entry_price=?,entry_mon_usd=?,stop_price=?,target_price=?,expires_at_ms=?,updated_at_ms=? WHERE id=? AND status='PROPOSED' AND expires_at_ms>?").bind(now, entry, prices.MON, stop, target, now + hold * 6e4, now, id, now).run();
+    if ((result.meta?.changes || 0) === 0) ret

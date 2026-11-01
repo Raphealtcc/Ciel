@@ -1,0 +1,88 @@
+:"STRING"}
+              },
+              required:["action","severity","eventType","marketImpact","evidenceStatus","confidence","summary","reason"]
+            }
+          }
+        }),
+        signal:AbortSignal.timeout(18000)
+      });
+      if(response.status===429){
+        const text=await response.text().catch(()=>"");
+        const untilMs=Date.now()+900000;
+        await env.CIEL_STATE.put(cooldownKey,JSON.stringify({failures:(Number(cooldown.failures)||0)+1,httpStatus:429,errorCode:"RESOURCE_EXHAUSTED",message:String(text).slice(0,150),lastFailureAt:Date.now(),untilMs}),{expirationTtl:86400});
+        await env.CIEL_STATE.put("ciel:gemini:key-cursor",String((ix+1)%keys.length),{expirationTtl:86400});
+        return {ok:false,reason:"Gemini rate limit during event review.",retryAt:untilMs};
+      }
+      if(response.status===401){await env.CIEL_STATE.put("ciel:gemini:key-cursor",String((ix+1)%keys.length),{expirationTtl:86400});continue;}
+      if(response.status===403){
+        const text=await response.text().catch(()=>"");
+        const untilMs=Date.now()+21600000;
+        await env.CIEL_STATE.put(cooldownKey,JSON.stringify({failures:1,httpStatus:403,errorCode:"PERMISSION_DENIED",message:String(text).slice(0,150),lastFailureAt:Date.now(),untilMs}),{expirationTtl:86400});
+        return {ok:false,reason:"Gemini permission denied for event review.",retryAt:untilMs};
+      }
+      if(response.status>=500||response.status===408){
+        const text=await response.text().catch(()=>"");
+        await env.CIEL_STATE.put("ciel:gemini:key-cursor",String((ix+1)%keys.length),{expirationTtl:86400});
+        if(transient++===0)continue;
+        const untilMs=Date.now()+120000;
+        await env.CIEL_STATE.put(cooldownKey,JSON.stringify({failures:(Number(cooldown.failures)||0)+1,httpStatus:response.status,errorCode:"EVENT_REVIEW_UNAVAILABLE",message:String(text).slice(0,150),lastFailureAt:Date.now(),untilMs}),{expirationTtl:3600});
+        return {ok:false,reason:"Gemini event review failed after alternate-key retry.",retryAt:untilMs};
+      }
+      if(!response.ok)return {ok:false,reason:"Gemini event review HTTP "+response.status};
+      const data=await response.json();
+      const rawText=data.candidates?.[0]?.content?.parts?.map(x=>x.text||"").join("")||"";
+      const value=JSON.parse(rawText);
+      const result={
+        ok:true,
+        action:["ALERT","WAIT","IGNORE"].includes(value.action)?value.action:"WAIT",
+        severity:["HIGH","MEDIUM","LOW"].includes(value.severity)?value.severity:"LOW",
+        eventType:["EXCHANGE_SECURITY","PROTOCOL_EXPLOIT","STABLECOIN_DEPEG","EXCHANGE_OUTAGE","LIQUIDATION_EVENT","MACRO_EVENT","OTHER"].includes(value.eventType)?value.eventType:"OTHER",
+        marketImpact:["BROAD_RISK_OFF","ASSET_SPECIFIC","UNCLEAR"].includes(value.marketImpact)?value.marketImpact:"UNCLEAR",
+        evidenceStatus:["CONFIRMED","CORROBORATED","UNCONFIRMED"].includes(value.evidenceStatus)?value.evidenceStatus:"UNCONFIRMED",
+        confidence:Math.max(0,Math.min(100,Number(value.confidence)||0)),
+        summary:typeof value.summary==="string"?value.summary.slice(0,300):"Market event assessment unavailable.",
+        reason:typeof value.reason==="string"?value.reason.slice(0,240):"No event-review reason returned.",
+        model,
+        reviewedAt:Date.now()
+      };
+      await env.CIEL_STATE.delete(cooldownKey);
+      await env.CIEL_STATE.put("ciel:gemini:key-cursor",String((ix+1)%keys.length),{expirationTtl:86400});
+      return result;
+    }catch(error){
+      await env.CIEL_STATE.put("ciel:gemini:key-cursor",String((ix+1)%keys.length),{expirationTtl:86400});
+      if(transient++===0)continue;
+      const untilMs=Date.now()+120000;
+      await env.CIEL_STATE.put(cooldownKey,JSON.stringify({failures:(Number(cooldown.failures)||0)+1,httpStatus:503,errorCode:"EVENT_REVIEW_TIMEOUT",message:String(error).slice(0,150),lastFailureAt:Date.now(),untilMs}),{expirationTtl:3600});
+      return {ok:false,reason:"Gemini event review timed out after alternate-key retry.",retryAt:untilMs};
+    }
+  }
+  return {ok:false,reason:"Gemini credentials were rejected for event review."};
+}
+async function runMarketEventIntelligence(env, hist, symbols, now) {
+  const activeKey="ciel:eventintel:active:v1";
+  const pendingKey="ciel:eventintel:pending:v1";
+  const scanKey="ciel:eventintel:scan-state:v1";
+  const seenKey="ciel:eventintel:seen:v1";
+  const statusKey="ciel:eventintel:last-result:v1";
+  let active=null,pending=null,scan={},seen=[];
+  try{active=JSON.parse(await env.CIEL_STATE.get(activeKey)||"null");}catch{}
+  if(active&&Number(active.expiresAt)<=now)active=null;
+  try{pending=JSON.parse(await env.CIEL_STATE.get(pendingKey)||"null");}catch{}
+  const pulse=buildMarketEventPulse(hist,symbols,now);
+  if(active&&!pending&&Number(active.expiresAt)>now)return active;
+  if(!pending&&!pulse.triggered)return active;
+  try{scan=JSON.parse(await env.CIEL_STATE.get(scanKey)||"{}");}catch{}
+  try{seen=JSON.parse(await env.CIEL_STATE.get(seenKey)||"[]");}catch{}
+  if(!Array.isArray(seen))seen=[];
+  if(!pending&&pulse.triggered){
+    const elapsed=now-(Number(scan.lastSearchAt)||0);
+    const materiallyLower=Number(scan.lastBtcPrice)>0&&Number(pulse.btcPrice)>0&&Number(pulse.btcPrice)<=Number(scan.lastBtcPrice)*0.98;
+    const due=!(Number(scan.lastSearchAt)>0)||elapsed>=45*60000||(elapsed>=15*60000&&materiallyLower);
+    if(!due)return active;
+    let geminiCooldown={};
+    try{geminiCooldown=JSON.parse(await env.CIEL_STATE.get("ciel:gemini:cooldown")||"{}");}catch{}
+    if(Number(geminiCooldown.untilMs)>now)return active;
+    await env.CIEL_STATE.put(scanKey,JSON.stringify({lastSearchAt:now,lastBtcPrice:pulse.btcPrice,triggerReason:pulse.triggerReason}),{expirationTtl:86400});
+    try{
+      const url=new URL("https://api.gdeltproject.org/api/v2/doc/doc");
+      url.searchParams.set("query",'(Binance OR cryptocurrency OR crypto OR Bitcoin OR Ethereum OR stablecoin OR exchange OR "digital ass

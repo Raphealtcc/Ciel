@@ -1,0 +1,82 @@
+G SOURCES (headlines only)"
+  ];
+  for(const article of event.articles.slice(0,4))lines.push("- "+article.domain+": "+article.title+" "+article.url);
+  lines.push("","This is a risk warning, not a short entry. CIEL still requires technical, forecast and liquidity confirmation. Read-only advisory; no orders are executed.");
+  try{
+    await sendTelegram(env,lines.join("\n"));
+    event.notifiedAt=Date.now();
+    await env.CIEL_STATE.put(activeKey,JSON.stringify(event),{expirationTtl:7200});
+  }catch(error){console.error("CIEL event alert Telegram delivery failed: "+String(error).slice(0,180));}
+  return event;
+}
+
+async function runAdvisorCycle(env, prices, now, lastTickAt, priceHistory, liveEvidence, paperStorage) {
+  if (now - lastTickAt > MAX_AGE || !(prices.MON > 0)) return;
+  const slot = Math.floor(now / CYCLE), key = "ciel:advisor:last-slot";
+  const previous = await env.CIEL_STATE.get(key);
+  let previousSlot = Number(previous);
+  if (previous) {
+    try {
+      const parsed = JSON.parse(previous);
+      if (Number.isFinite(parsed.slot)) previousSlot = Number(parsed.slot);
+    } catch {
+    }
+  }
+  if (previousSlot === slot) return;
+  await env.CIEL_STATE.put(key, String(slot), { expirationTtl: 86400 });
+  await env.DB.prepare("UPDATE advisor_positions SET status='EXPIRED',updated_at_ms=? WHERE status='PROPOSED' AND expires_at_ms<=?").bind(now, now).run();
+  const symbols = configuredWatchSymbols(env.WATCH_SYMBOLS);
+  const hist = /* @__PURE__ */ new Map();
+  if (priceHistory) {
+    for (const symbol of symbols) {
+      const points = priceHistory[symbol] || [];
+      if (points.length) hist.set(symbol, points.map((point) => ({ symbol, mid_price: Number(point.p), ts_ms: Number(point.t) })));
+    }
+  } else {
+    for (let offset = 0; offset < symbols.length; offset += 5) {
+      const chunk = await Promise.all(symbols.slice(offset, offset + 5).map((sym) => env.DB.prepare(
+        "SELECT symbol,mid_price,ts_ms FROM market_samples WHERE symbol=? AND ts_ms>=? ORDER BY ts_ms DESC LIMIT 200"
+      ).bind(sym, now - 8 * 60 * 60 * 1e3).all()));
+      for (let index = 0; index < chunk.length; index++) {
+        const rows = (chunk[index].results || []).slice().reverse();
+        if (rows.length) hist.set(symbols[offset + index], rows);
+      }
+    }
+  }
+
+  const eventIntel = await runMarketEventIntelligence(env, hist, symbols, now);
+  // Real START TRACKING proposals no longer block the independent paper scanner.
+  const paperState = paperStorage ? await paperStorage.get(PAPER_ACCOUNT_KEY) : null;
+  const paperCash = Number(paperState?.availableBalanceMon ?? PAPER_STARTING_BALANCE_MON);
+  const openPaperSymbols = new Set((paperState?.trades || []).filter((trade) => trade.status === "OPEN").map((trade) => String(trade.symbol || "").toUpperCase()));
+  if (!paperStorage || paperCash + 1e-9 < PAPER_MARGIN_MON) {
+    console.log("Ciel has no free 22 MON paper margin; no new recommendation will be issued until a paper slot is free.");
+    return;
+  }
+  const candidates = [];
+  for (const sym of symbols) {
+    if (sym === "MON" || Number(LEVERUP_MARKET_MAX_LEVERAGE[sym]) !== 50 || openPaperSymbols.has(sym)) continue;
+    const signal = analyse(sym, hist.get(sym) || [], now);
+    if (signal && signal.confidence >= setting(env.ADVISORY_MIN_CONFIDENCE, 0.72, 0.5, 0.95)) candidates.push(signal);
+  }
+  candidates.sort((x, y) => eventIntel?.marketImpact === "BROAD_RISK_OFF" ? Number(y.side === "SHORT") - Number(x.side === "SHORT") || y.confidence - x.confidence : y.confidence - x.confidence);
+  await env.CIEL_STATE.put("ciel:advisor:last-scan", JSON.stringify({ at:now, watchCount:symbols.length, historySymbols:hist.size, candidates:candidates.map((x)=>({symbol:x.symbol,side:x.side,strategy:x.strategy,mode:x.mode,regime:x.regime,score:x.confidence,rsi:x.rsi,cci:x.cci})) }), { expirationTtl:86400 }).catch(()=>void 0);
+  const trendCooldownMs = setting(env.ADVISORY_TREND_REVIEW_COOLDOWN_MINUTES, 30, 10, 240) * 6e4;
+  let forecastChecks = 0;
+  for (const candidate of candidates) {
+    if (candidate.mode === "RANGE_SCALP" && eventIntel?.marketImpact === "BROAD_RISK_OFF") continue;
+    const cooldownMs = candidate.mode === "RANGE_SCALP" ? 10 * 6e4 : trendCooldownMs;
+    const priorReview = await env.DB.prepare("SELECT created_at_ms FROM advisor_ai_audit WHERE symbol=? AND model!='CIEL Statistical Ensemble v1' AND model!='CIEL deterministic range guard' ORDER BY created_at_ms DESC LIMIT 1").bind(candidate.symbol).first();
+    if (priorReview && now - Number(priorReview.created_at_ms) < cooldownMs) continue;
+    const quality = await getMarketEvidence(env, candidate.symbol, now, liveEvidence?.[candidate.symbol]);
+    if (!quality.market || quality.reason) {
+      const reason = quality.reason || "Market-quality evidence is unavailable.";
+      await env.DB.prepare("INSERT INTO advisor_ai_audit(created_at_ms,symbol,side,model,verdict,reason,risk_flags,search_queries,grounding_sources,market_context_json) VALUES(?,?,?,?,?,?,?,?,?,?)").bind(now, candidate.symbol, candidate.side, "Hyperliquid market-quality gate", "WAIT", reason, JSON.stringify(["MARKET_QUALITY_GATE"]), JSON.stringify([]), JSON.stringify([]), JSON.stringify(quality.market)).run();
+      console.log("Ciel skipped " + candidate.symbol + ": " + reason);
+      continue;
+    }    const fundingHourly = Number(quality.market.funding);
+    const premiumBps = Number(quality.market.premiumBps);
+    const fundingAprPct = Number.isFinite(fundingHourly) ? fundingHourly * 24 * 365 * 100 : null;
+    const reviewerMarket = { ...quality.market, fundingHourlyPct: Number.isFinite(fundingHourly) ? fundingHourly * 100 : null, fundingAprPct };
+    const crowdedLong = candidate.side === "LONG" && Number.isFinite(fundingHourly) && Number.isFinite(premiumBps) && fundingHourly >= 0.00005 && premiumBps >= 10;
+    const crowdedShort = candidate.side === "SHORT" && Number.isFinite(fundingHourly) && Number.isFinite(premiumBps) && fundingHourly <= -0.00005 && premiumBps <= -10;

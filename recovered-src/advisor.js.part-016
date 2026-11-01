@@ -1,0 +1,40 @@
+
+    const extremeExhaustion = (candidate.side === "SHORT" && Number.isFinite(candidate.rsi) && candidate.rsi < 20 && candidate.bounce?.side !== "SHORT") || (candidate.side === "LONG" && Number.isFinite(candidate.rsi) && candidate.rsi > 80 && candidate.bounce?.side !== "LONG");
+    if (crowdedLong || crowdedShort || extremeExhaustion) {
+      const reason = crowdedLong || crowdedShort ? "Directional crowding: hourly funding " + (fundingAprPct === null ? "n/a" : fundingAprPct.toFixed(1) + "% APR") + " and mark/oracle premium " + premiumBps.toFixed(1) + " bps are stretched against this entry." : "Momentum exhaustion: RSI " + candidate.rsi.toFixed(1) + " is extreme for this entry direction without a confirmed same-side bounce.";
+      const flags = crowdedLong || crowdedShort ? ["DIRECTIONAL_CROWDING","FUNDING_ORACLE_PREMIUM"] : ["MOMENTUM_EXHAUSTION","RSI_EXTREME"];
+      await env.DB.prepare("INSERT INTO advisor_ai_audit(created_at_ms,symbol,side,model,verdict,reason,risk_flags,search_queries,grounding_sources,market_context_json) VALUES(?,?,?,?,?,?,?,?,?,?)").bind(now,candidate.symbol,candidate.side,"CIEL deterministic positioning gate","WAIT",reason,JSON.stringify(flags),JSON.stringify([]),JSON.stringify([]),JSON.stringify({ ...reviewerMarket, rsi:candidate.rsi })).run();
+      console.log("Ciel skipped " + candidate.symbol + ": " + reason);
+      continue;
+    }
+    if (forecastChecks >= 6) break;
+    forecastChecks++;
+    const forecast = forecastWithCloudflareStats(candidate.symbol, hist.get(candidate.symbol) || [], now);
+    const hasForecast = forecast.available && typeof forecast.medianReturnPct === "number" && Number.isFinite(forecast.medianReturnPct) && typeof forecast.lowerReturnPct === "number" && Number.isFinite(forecast.lowerReturnPct) && typeof forecast.upperReturnPct === "number" && Number.isFinite(forecast.upperReturnPct);
+    if (!hasForecast) {
+      console.log("Ciel local forecast unavailable for " + candidate.symbol + ": " + forecast.reason);
+      await env.DB.prepare("INSERT INTO advisor_ai_audit(created_at_ms,symbol,side,model,verdict,reason,risk_flags,search_queries,grounding_sources,forecast_json,market_context_json) VALUES(?,?,?,?,?,?,?,?,?,?,?)").bind(now, candidate.symbol, candidate.side, "CIEL Statistical Ensemble v1", "WAIT", forecast.reason || "Local forecast unavailable; candidate will not be forecast-confirmed.", JSON.stringify(["LOCAL_FORECAST_UNAVAILABLE"]), JSON.stringify([]), JSON.stringify([]), JSON.stringify(forecast), JSON.stringify(quality.market)).run();
+    } else {
+      const minimumForecastMovePct = Math.max(0.08, candidate.stopPct * 0.30);
+      const aligned = candidate.side === "LONG" ? Number(forecast.medianReturnPct) >= minimumForecastMovePct : Number(forecast.medianReturnPct) <= -minimumForecastMovePct;
+      if (!aligned) {
+        const reason = "The five-minute forecast did not support a sufficiently meaningful move in this direction; required magnitude " + minimumForecastMovePct.toFixed(3) + "% for this stop distance.";
+        await env.DB.prepare("INSERT INTO advisor_ai_audit(created_at_ms,symbol,side,model,verdict,reason,risk_flags,search_queries,grounding_sources,forecast_json,market_context_json) VALUES(?,?,?,?,?,?,?,?,?,?,?)").bind(now, candidate.symbol, candidate.side, "CIEL Statistical Ensemble v1 + technical gate", "WAIT", reason, JSON.stringify(["LOCAL_FORECAST_DIRECTION_CONFLICT","FORECAST_TOO_SMALL_FOR_STOP"]), JSON.stringify([]), JSON.stringify([]), JSON.stringify(forecast), JSON.stringify(reviewerMarket)).run();
+        console.log("Ciel skipped " + candidate.symbol + ": " + reason);
+        continue;
+      }
+    }
+    const intraday = candidate.mode === "RANGE_SCALP" ? null : await getIntradayPattern(env,candidate.symbol,now,candidate.entry);
+    const reviewed = candidate.mode === "RANGE_SCALP"
+      ? { verdict: "WAIT", reason: "Range scalp passed deterministic regime, CCI/rejection, statistical forecast and market-quality gates; Gemini review intentionally skipped to conserve daily API quota.", flags: ["LOCAL_RANGE_SCALP_REVIEW"], model: "CIEL deterministic range guard", queries: [], sources: [] }
+      : await review(env,candidate,forecast,reviewerMarket,intraday,eventIntel);
+    const riskFlags = reviewed.flags.join(" ").toUpperCase();
+    const explicitRisk = /\b(ILLIQUID|LOW_LIQUIDITY|CROWDED|EXHAUSTED|SECURITY_INCIDENT|EXPLOIT|HACK|DELISTING|NEGATIVE_CATALYST|ADVERSE_CATALYST|DIRECTION_CONFLICT|HIGH_SPREAD|LOW_DEPTH|ORACLE_DIVERGENCE|MARKET_QUALITY_FAILURE)\b/.test(riskFlags);
+    const waitFallback = reviewed.verdict === "WAIT" && !explicitRisk && (!hasForecast || reviewed.flags.some((flag) => ["NO_GEMINI_KEY", "GEMINI_RATE_LIMIT", "GEMINI_COOLDOWN", "GEMINI_API_ERROR", "GEMINI_UNAVAILABLE", "GEMINI_KEYS_FAILED", "GEMINI_PERMISSION_DENIED", "LOCAL_RANGE_SCALP_REVIEW"].includes(flag)));
+    const technicalOnly = !hasForecast || reviewed.verdict === "WAIT" && reviewed.model !== "CIEL deterministic range guard";
+    await env.DB.prepare("INSERT INTO advisor_ai_audit(created_at_ms,symbol,side,model,verdict,reason,risk_flags,search_queries,grounding_sources,forecast_json,market_context_json) VALUES(?,?,?,?,?,?,?,?,?,?,?)").bind(now, candidate.symbol, candidate.side, reviewed.model, reviewed.verdict, reviewed.reason, JSON.stringify([...reviewed.flags, "CLOUDFLARE_STATISTICAL_FORECAST", ...technicalOnly ? ["TECHNICAL_ONLY_FALLBACK"] : []]), JSON.stringify(reviewed.queries), JSON.stringify(reviewed.sources), JSON.stringify(forecast), JSON.stringify({ ...reviewerMarket, intradayPattern: intraday, technicalScoreModel: candidate.scoreModel, technicalScore: candidate.confidence, technicalScoreComponents: candidate.scoreComponents, rsi:candidate.rsi })).run();
+    if (reviewed.verdict === "REJECT" || reviewed.verdict === "WAIT" && !waitFallback) {
+      console.log("Ciel blocked " + candidate.symbol + ": Gemini " + reviewed.verdict + " \u2014 " + reviewed.reason);
+      return;
+    }
+    const collateral = PAPER_MARGIN_M

@@ -1,0 +1,56 @@
+ON, leverage = PAPER_LEVERAGE;
+    const id = crypto.randomUUID().replace(/-/g, "").slice(0, 10).toUpperCase(), direction = candidate.side === "LONG" ? 1 : -1;
+    const stop = candidate.entry * (1 - direction * candidate.stopPct / 100), target = candidate.entry * (1 + direction * candidate.targetPct / 100), expires = now + 15 * 6e4;
+    const forecastSummary = hasForecast ? "Cloudflare statistical forecast median " + Number(forecast.medianReturnPct).toFixed(3) + "% (heuristic volatility envelope " + Number(forecast.lowerReturnPct).toFixed(3) + "% to " + Number(forecast.upperReturnPct).toFixed(3) + "%)." : "Cloudflare statistical forecast unavailable: " + (forecast.reason || "No complete forecast.") + " Technical-only setup.";
+    const timingSummary = intraday?.sameHour?.days>=3 ? " Intraday context: "+intraday.sameHour.bias+" around "+intraday.localHour+" Lagos time; supplementary only." : " Intraday timing history is building.";
+    const reviewSummary = reviewed.model === "CIEL deterministic range guard" ? "Local deterministic range review: " + reviewed.reason : "Gemini " + reviewed.verdict + ": " + reviewed.reason;
+    const rationale = candidate.reason + " " + forecastSummary + " " + reviewSummary + timingSummary + " Strategy " + candidate.mode + "; technical strength model v3: " + (candidate.confidence * 100).toFixed(0) + "/100 across " + (candidate.scoreComponents || []).join("+") + "; not a win probability." + (technicalOnly ? " Technical-only fallback; confirmation incomplete." : "");
+    const inserted = await env.DB.prepare("INSERT INTO advisor_positions(id,symbol,side,entry_price,stop_price,target_price,stop_pct,target_pct,confidence,strategy,rationale,status,created_at_ms,expires_at_ms,mon_collateral,leverage,entry_mon_usd,updated_at_ms) VALUES(?,?,?,?,?,?,?,?,?,?,?,'PROPOSED',?,?,?,?,?,?)").bind(id, candidate.symbol, candidate.side, candidate.entry, stop, target, candidate.stopPct, candidate.targetPct, candidate.confidence, candidate.strategy, rationale, now, expires, collateral, leverage, prices.MON, now).run();
+    if ((inserted.meta?.changes || 0) > 0) {
+      const position = { id, symbol: candidate.symbol, side: candidate.side, entry_price: candidate.entry, actual_entry_price: null, tracking_entry_price: null, tracking_started_at_ms: null, stop_price: stop, target_price: target, stop_pct: candidate.stopPct, target_pct: candidate.targetPct, confidence: candidate.confidence, strategy: candidate.strategy, rationale, status: "PROPOSED", created_at_ms: now, expires_at_ms: expires, mon_collateral: collateral, leverage, entry_mon_usd: prices.MON, manual_entry_at_ms: null };
+      let paperResult = null;
+      try {
+        paperResult = await openPaperTrade(paperStorage, { signalId:id, symbol:candidate.symbol, side:candidate.side, entryPrice:candidate.entry, stopPrice:stop, targetPrice:target, stopPct:candidate.stopPct, targetPct:candidate.targetPct, confidence:candidate.confidence, strategy:candidate.strategy, entryMonUsd:prices.MON, holdMinutes:candidate.holdMinutes || (candidate.mode === "RANGE_SCALP" ? 12 : 180), mode:candidate.mode, regime:candidate.regime, now });
+      } catch (error) {
+        console.error("Automatic paper entry failed for " + candidate.symbol + ": " + String(error).slice(0, 250));
+      }
+      const paperLine = paperResult?.opened
+        ? "\n\n🧪 PAPER TRADE AUTO-OPENED — " + candidate.side + " " + candidate.symbol + "\nMargin: 22 MON | leverage: 50x | estimated notional: $" + (22 * prices.MON * PAPER_LEVERAGE).toFixed(2) + "\nPaper balance remaining: " + Number(paperResult.availableBalanceMon).toFixed(3) + " MON. Use /profits for live and realised P&L."
+        : "\n\n🧪 PAPER TRADE NOT OPENED: " + (paperResult?.reason || "paper ledger unavailable") + " Use /profits to inspect the paper account.";
+      await notify(env, setupMessage(position, candidate, reviewed, prices.MON, forecast, quality.market, intraday) + paperLine, [
+        [{ text: "\u25B6\uFE0F START TRACKING", callback_data: "start:" + id }],
+        [{ text: "Skip this setup", callback_data: "skip:" + id }]
+      ]).catch((error) => console.error("Proposal message failed", String(error)));
+    }
+    return;
+  }
+}
+__name(runAdvisorCycle, "runAdvisorCycle");
+async function manageOpenPositions(env, prices, now, lastTickAt, storage) {
+  if (now - lastTickAt > MAX_AGE || !(prices.MON > 0)) return;
+  const rows = await env.DB.prepare("SELECT * FROM advisor_positions WHERE status IN ('OPEN','EXIT_ALERTED') ORDER BY created_at_ms ASC LIMIT 50").all();
+  let guardStates = storage ? (await storage.get("ciel:position-profit-guard:v1") || {}) : {};
+  if (!guardStates || typeof guardStates !== "object" || Array.isArray(guardStates)) guardStates = {};
+  let guardsChanged = false;
+  const activeIds = new Set((rows.results || []).filter((p) => p.status === "OPEN").map((p) => String(p.id)));
+  for (const p of rows.results || []) {
+    const current = Number(prices[p.symbol]);
+    if (!(current > 0)) continue;
+    const entry = p.actual_entry_price && p.actual_entry_price > 0 ? p.actual_entry_price : p.tracking_entry_price && p.tracking_entry_price > 0 ? p.tracking_entry_price : p.entry_price;
+    const move = (p.side === "LONG" ? 1 : -1) * pct(current, entry);
+    if (p.status === "EXIT_ALERTED") continue;
+    let reason = move <= -p.stop_pct
+      ? "Stop alert threshold reached (" + move.toFixed(2) + "% adverse)."
+      : move >= p.target_pct
+        ? "Target alert threshold reached (" + move.toFixed(2) + "% favorable)."
+        : now >= p.expires_at_ms ? "Maximum tracking time reached." : null;
+    if (!reason) {
+      const id = String(p.id);
+      const guardState = guardStates[id] || {};
+      const protection = updateProfitProtectionState(guardState, p.target_pct, move, now);
+      if (protection.changed) {
+        guardStates[id] = guardState;
+        guardsChanged = true;
+      }
+      if (protection.trigger && !guardState.profitProtectionAlertedAtMs) {
+        guardState.profitProtectio

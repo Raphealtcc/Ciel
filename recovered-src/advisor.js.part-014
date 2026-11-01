@@ -1,0 +1,93 @@
+ets") (hack OR exploit OR breach OR compromised OR stolen OR "security incident" OR frozen OR depeg OR outage OR insolvency OR bankruptcy OR "withdrawals suspended" OR tariff OR sanctions OR "interest rate" OR "Federal Reserve" OR inflation OR war OR geopolitical OR "ETF outflow" OR "bank failure" OR "liquidity crisis" OR crackdown)');
+      url.searchParams.set("mode","ArtList");
+      url.searchParams.set("format","json");
+      url.searchParams.set("timespan","6h");
+      url.searchParams.set("maxrecords","10");
+      url.searchParams.set("sort","datedesc");
+      const response=await fetch(url.toString(),{headers:{accept:"application/json"},signal:AbortSignal.timeout(8000)});
+      if(!response.ok){console.warn("CIEL event news search HTTP "+response.status);await env.CIEL_STATE.put(statusKey,JSON.stringify({status:"SEARCH_UNAVAILABLE",httpStatus:response.status,at:now}),{expirationTtl:86400});return active;}
+      const data=await response.json();
+      const rawArticles=Array.isArray(data.articles)?data.articles:[];
+      const severe=/hack|exploit|breach|compromis|attack|stolen|drained|frozen|freeze|depeg|de-peg|outage|withdrawal.{0,20}suspend|exchange.{0,20}(halt|suspend)|bankrupt|insolv|security incident|funds.{0,20}(stolen|drained|frozen)|tariff|sanction|federal reserve|interest rate|inflation|geopolit|war|etf.{0,12}outflow|bank failure|liquidity.{0,12}crisis|regulatory.{0,20}(crackdown|action|ban|lawsuit)|crackdown/i;
+      const articles=[];
+      const used=new Set();
+      for(const item of rawArticles){
+        const title=String(item.title||"").replace(/<[^>]*>/g," ").replace(/\s+/g," ").trim().slice(0,240);
+        const articleUrl=String(item.url||"").trim();
+        if(!title||!articleUrl||!severe.test(title))continue;
+        let domain=String(item.domain||"").toLowerCase().replace(/^www\./,"");
+        try{if(!domain)domain=new URL(articleUrl).hostname.toLowerCase().replace(/^www\./,"");}catch{continue;}
+        const key=domain+"|"+title.toLowerCase();
+        if(used.has(key))continue;
+        used.add(key);
+        articles.push({title,url:articleUrl,domain,publishedAt:String(item.seendate||""),publishedAtMs:eventDateMs(item.seendate)});
+        if(articles.length>=8)break;
+      }
+      const domains=new Set(articles.map(x=>x.domain));
+      if(articles.length<2||domains.size<2){
+        await env.CIEL_STATE.put(statusKey,JSON.stringify({status:"NO_CORROBORATED_EVENT",at:now,articleCount:articles.length,sourceCount:domains.size,pulse}),{expirationTtl:86400});
+        return active;
+      }
+      pending={fingerprint:eventFingerprint(articles.slice(0,6)),pulse,articles:articles.slice(0,6),searchedAt:now,lastReviewAttemptAt:0,sourceCount:domains.size};
+      await env.CIEL_STATE.put(pendingKey,JSON.stringify(pending),{expirationTtl:3600});
+    }catch(error){
+      console.warn("CIEL event news search failed: "+String(error).slice(0,180));
+      await env.CIEL_STATE.put(statusKey,JSON.stringify({status:"SEARCH_UNAVAILABLE",reason:String(error).slice(0,160),at:now}),{expirationTtl:86400});
+      return active;
+    }
+  }
+  if(!pending)return active;
+  if(seen.includes(pending.fingerprint)){
+    await env.CIEL_STATE.delete(pendingKey);
+    return active;
+  }
+  if(now-Number(pending.lastReviewAttemptAt||0)<20*60000)return active;
+  let cooldown={};
+  try{cooldown=JSON.parse(await env.CIEL_STATE.get("ciel:gemini:cooldown")||"{}");}catch{}
+  if(Number(cooldown.untilMs)>now)return active;
+  pending.lastReviewAttemptAt=now;
+  await env.CIEL_STATE.put(pendingKey,JSON.stringify(pending),{expirationTtl:3600});
+  const assessment=await reviewMarketEvent(env,pending);
+  if(!assessment.ok){
+    await env.CIEL_STATE.put(statusKey,JSON.stringify({status:"AI_REVIEW_PENDING",reason:assessment.reason,retryAt:assessment.retryAt||null,at:now,sourceCount:pending.sourceCount}),{expirationTtl:86400});
+    return active;
+  }
+  seen=[...seen.filter(x=>x!==pending.fingerprint),pending.fingerprint].slice(-24);
+  await env.CIEL_STATE.put(seenKey,JSON.stringify(seen),{expirationTtl:86400});
+  await env.CIEL_STATE.delete(pendingKey);
+  const qualifies=assessment.action==="ALERT"&&assessment.severity==="HIGH"&&assessment.marketImpact==="BROAD_RISK_OFF"&&assessment.evidenceStatus!=="UNCONFIRMED"&&assessment.confidence>=80&&pending.sourceCount>=2;
+  await env.CIEL_STATE.put(statusKey,JSON.stringify({status:qualifies?"ALERT":"REVIEWED_NO_ALERT",fingerprint:pending.fingerprint,assessment,at:now,sourceCount:pending.sourceCount}),{expirationTtl:86400});
+  if(!qualifies)return active;
+  const event={
+    fingerprint:pending.fingerprint,
+    active:true,
+    eventType:assessment.eventType,
+    severity:assessment.severity,
+    evidenceStatus:assessment.evidenceStatus,
+    confidence:assessment.confidence,
+    marketImpact:assessment.marketImpact,
+    summary:assessment.summary,
+    reason:assessment.reason,
+    model:assessment.model,
+    reviewedAt:assessment.reviewedAt,
+    activatedAt:now,
+    expiresAt:now+2*60*60*1000,
+    marketPulse:pending.pulse,
+    articles:pending.articles.slice(0,5).map(x=>({title:x.title,url:x.url,domain:x.domain,publishedAt:x.publishedAt}))
+  };
+  await env.CIEL_STATE.put(activeKey,JSON.stringify(event),{expirationTtl:7200});
+  const pulse2=event.marketPulse;
+  const lines=[
+    "⚠️ CIEL MARKET EVENT ALERT",
+    "Severity: HIGH | "+event.eventType,
+    "Evidence: "+event.evidenceStatus+" | AI confidence "+event.confidence+"%",
+    "",
+    event.summary,
+    "Assessment: "+event.reason,
+    "",
+    "LIVE MARKET PULSE",
+    "BTC 5m: "+(pulse2.btc5mPct===null?"n/a":pulse2.btc5mPct.toFixed(2)+"%")+" | ETH 5m: "+(pulse2.eth5mPct===null?"n/a":pulse2.eth5mPct.toFixed(2)+"%"),
+    "BTC 15m: "+(pulse2.btc15mPct===null?"n/a":pulse2.btc15mPct.toFixed(2)+"%")+" | ETH 15m: "+(pulse2.eth15mPct===null?"n/a":pulse2.eth15mPct.toFixed(2)+"%"),
+    "Watchlist downside breadth: "+pulse2.downsideBreadthPct.toFixed(0)+"% ("+pulse2.downsideSymbols+"/"+pulse2.validSymbols+")",
+    "",
+    "REPORTIN
