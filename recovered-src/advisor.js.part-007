@@ -1,0 +1,118 @@
+ (best < newPeakRequired) {
+      return { trigger:false, changed:before !== JSON.stringify(state), bestMovePct:best, alreadyAlerted:true };
+    }
+    delete state.profitProtectionAlertedAtMs;
+    delete state.profitProtectionAlertPeakPct;
+    state.profitProtectionBreachAtMs = 0;
+    state.profitProtectionSamples = 0;
+    state.profitProtectionLastSampleAtMs = 0;
+  }
+  const armAtPct = Math.max(0.16, targetPct * 0.45);
+  if (!(best >= armAtPct)) {
+    state.profitProtectionBreachAtMs = 0;
+    state.profitProtectionSamples = 0;
+    state.profitProtectionLastSampleAtMs = 0;
+    return { trigger:false, changed:before !== JSON.stringify(state), bestMovePct:best, armAtPct };
+  }
+  const floorPct = Math.max(0.04, best * 0.55);
+  if (movePct > floorPct) {
+    state.profitProtectionBreachAtMs = 0;
+    state.profitProtectionSamples = 0;
+    state.profitProtectionLastSampleAtMs = 0;
+    return { trigger:false, changed:before !== JSON.stringify(state), bestMovePct:best, floorPct, armAtPct };
+  }
+  const previousAt = Number(state.profitProtectionLastSampleAtMs) || 0;
+  if (!previousAt || now - previousAt > 12000) {
+    state.profitProtectionBreachAtMs = now;
+    state.profitProtectionSamples = 1;
+    state.profitProtectionLastSampleAtMs = now;
+  } else if (now - previousAt >= 4000) {
+    state.profitProtectionSamples = (Number(state.profitProtectionSamples) || 0) + 1;
+    state.profitProtectionLastSampleAtMs = now;
+  }
+  const samples = Number(state.profitProtectionSamples) || 0;
+  const breachAt = Number(state.profitProtectionBreachAtMs) || now;
+  const trigger = samples >= 4 && now - breachAt >= 15000;
+  return {
+    trigger, changed:before !== JSON.stringify(state), bestMovePct:best,
+    floorPct, armAtPct, samples, breachDurationMs:now-breachAt,
+    givebackPct:best > 0 ? (best-movePct)/best*100 : 0
+  };
+}
+__name(updateProfitProtectionState, "updateProfitProtectionState");
+async function managePaperTrades(storage, prices, now, lastTickAt, env) {
+  if (!storage || !lastTickAt || now - lastTickAt > MAX_AGE || !(Number(prices.MON) > 0)) return;
+  const closed = [];
+  await storage.transaction(async () => {
+    let state = await storage.get(PAPER_ACCOUNT_KEY);
+    if (!state || !Array.isArray(state.trades)) return;
+    let changed = false;
+    for (const trade of state.trades) {
+      if (trade.status !== "OPEN") continue;
+      const current = Number(prices[trade.symbol]), entry = Number(trade.entryPrice);
+      if (!(current > 0 && entry > 0)) continue;
+      const direction = trade.side === "SHORT" ? -1 : 1;
+      const movePct = direction * ((current - entry) / entry) * 100;
+      let reason = null, exitPrice = current, protection = null;
+      if (movePct <= -Number(trade.stopPct)) {
+        reason = "STOP_LOSS"; exitPrice = Number(trade.stopPrice);
+      } else if (movePct >= Number(trade.targetPct)) {
+        reason = "TAKE_PROFIT"; exitPrice = Number(trade.targetPrice);
+      } else {
+        protection = updateProfitProtectionState(trade, trade.targetPct, movePct, now);
+        if (protection.changed) changed = true;
+        if (protection.trigger) {
+          reason = "PROFIT_PROTECTION";
+          exitPrice = current;
+        } else if (now >= Number(trade.expiresAtMs)) {
+          reason = "MAX_HOLD";
+          exitPrice = current;
+        }
+      }
+      if (!reason || !(exitPrice > 0)) continue;
+      const pnl = paperTradePnl(trade, exitPrice, Number(prices.MON));
+      if (!pnl) continue;
+      const pnlMon = Math.max(-Number(trade.marginMon), pnl.mon);
+      const pnlUsd = pnlMon * Number(prices.MON);
+      state.availableBalanceMon = Number(state.availableBalanceMon || 0) + Number(trade.marginMon) + pnlMon;
+      state.realizedPnlMon = Number(state.realizedPnlMon || 0) + pnlMon;
+      state.realizedPnlUsd = Number(state.realizedPnlUsd || 0) + pnlUsd;
+      state.closedCount = Number(state.closedCount || 0) + 1;
+      if (pnlMon > 0) state.wins = Number(state.wins || 0) + 1;
+      else if (pnlMon < 0) state.losses = Number(state.losses || 0) + 1;
+      else state.breakeven = Number(state.breakeven || 0) + 1;
+      trade.status = "CLOSED"; trade.exitPrice = exitPrice; trade.exitMonUsd = Number(prices.MON);
+      trade.closedAtMs = now; trade.closeReason = reason; trade.grossPnlMon = pnlMon;
+      trade.grossPnlUsd = pnlUsd;
+      trade.returnOnMarginPct = Number(trade.marginMon) > 0 ? pnlMon / Number(trade.marginMon) * 100 : 0;
+      closed.push({
+        symbol:trade.symbol,side:trade.side,signalId:trade.signalId,reason,exitPrice,pnlMon,pnlUsd,
+        roiPct:trade.returnOnMarginPct,bestMovePct:protection?.bestMovePct ?? (Number(trade.bestFavorableMovePct) || 0)
+      });
+      changed = true;
+    }
+    if (changed) {
+      state.trades = state.trades.slice(0, 1000);
+      state.updatedAtMs = now;
+      await storage.put(PAPER_ACCOUNT_KEY, state);
+    }
+  });
+  if (closed.length && env) {
+    const sign = (value) => (value >= 0 ? "+" : "") + value.toFixed(3);
+    const lines = ["🧪 PAPER TRADE CLOSED"];
+    for (const trade of closed) {
+      lines.push(trade.side + " " + trade.symbol + " | " + trade.reason,
+        "Simulated exit $" + fmt(trade.exitPrice) + " | P&L " + sign(trade.pnlMon) + " MON ($" + sign(trade.pnlUsd) + ")",
+        "Return on margin: " + sign(trade.roiPct) + "% | signal " + trade.signalId);
+      if (trade.reason === "PROFIT_PROTECTION") {
+        lines.push("Profit protection: peak favourable move +" + Number(trade.bestMovePct).toFixed(3) +
+          "%; exit after a confirmed giveback of at least 45% of that peak.");
+      }
+    }
+    lines.push("Gross mark-based paper result; fees, funding, slippage and liquidation mechanics are excluded.");
+    await sendTelegram(env, lines.join("\n")).catch((error) => console.error("Paper close notification failed: " + String(error).slice(0, 250)));
+  }
+}
+async function getPaperSummary(storage, prices, now, lastTickAt) {
+  let state = storage ? await storage.get(PAPER_ACCOUNT_KEY) : null;
+  if (!state || typeof state !== 

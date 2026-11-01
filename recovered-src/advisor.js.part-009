@@ -1,0 +1,54 @@
+ Math.min(100, (referencePrice - displayLow) / (displayHigh - displayLow) * 100)) : null;
+    const expanded = displayLow < sampledLow || displayHigh > sampledHigh;
+    rangeLine = (expanded ? "Today sampled range incl. setup reference: low $" : "Today sampled range: low $") + fmt(displayLow) + ", high $" + fmt(displayHigh) + (position === null ? "." : ", reference at " + position.toFixed(0) + "% of displayed range from low.");
+  }
+  const bounceLine = s.mode === "RANGE_SCALP"
+    ? "Range entry confirmation: CCI(20) " + Number(s.cci).toFixed(1) + " | StochRSI(14) " + (s.stochRsi !== null && Number.isFinite(Number(s.stochRsi)) ? Number(s.stochRsi).toFixed(1) : "n/a") + " | price " + Number(s.rangePositionPct).toFixed(1) + "% from range low | 3-minute rejection confirmed."
+    : s.bounce ? "Entry timing: " + s.bounce.type + " confirmation is included in the technical score | prior " + (s.bounce.side === "LONG" ? "decline " : "rally ") + s.bounce.priorMovePct.toFixed(2) + "% | reversal " + s.bounce.reversalPct.toFixed(2) + "% | last 3m " + (s.bounce.confirm3mPct > 0 ? "+" : "") + s.bounce.confirm3mPct.toFixed(2) + "% | pivot " + s.bounce.pivotAgeMinutes + "m ago | 5m EMA " + s.bounce.emaConfirmed.toLowerCase() + "."
+      : "Entry timing: trend continuation/breakout confirmation; no counter-trend fade is used in a directional regime.";
+  const localRangeReview = r.model === "CIEL deterministic range guard";
+  const researchReady = r.verdict === "APPROVE" || localRangeReview;
+  const forecastStrong = forecastReady && (p.side === "LONG" ? Number(forecast.lowerReturnPct) > 0 : Number(forecast.upperReturnPct) < 0);
+  const fullyConfirmed = forecastStrong && researchReady;
+  const confirmation = [
+    fullyConfirmed
+      ? (localRangeReview ? "✅ Local range, statistical forecast and market-quality gates support this scalp; Gemini was intentionally skipped." : "✅ Forecast envelope and Gemini review support this direction.")
+      : "⚠️ CONFIRMATION IS PARTIAL — technical strength is an evidence score, not a win probability.",
+    ...(!forecastReady ? ["The local statistical forecast is unavailable; this setup is not forecast-confirmed."] : !forecastStrong ? ["The forecast median leans " + p.side + ", but its uncertainty envelope crosses zero. Treat it as tentative support, not strong confirmation."] : []),
+    ...(!researchReady ? ["Gemini review is " + r.verdict + ": " + String(r.reason || "No approval returned.").slice(0, 180)] : [])
+  ];
+  const forecastLine = forecastReady ? "CIEL statistical forecast (5m): " + Number(forecast.medianReturnPct).toFixed(3) + "%; heuristic envelope: " + Number(forecast.lowerReturnPct).toFixed(3) + "% to " + Number(forecast.upperReturnPct).toFixed(3) + "%; " + (forecastStrong ? "the full envelope supports this direction." : "the envelope crosses zero, so directional support is tentative.") + " This is not a calibrated probability interval." : "Local forecast: UNAVAILABLE — " + (forecast.reason || "No complete fresh forecast was returned.").slice(0, 180) + " This setup is not forecast-confirmed.";
+  const regimeLine = s.mode === "RANGE_SCALP"
+    ? "Market regime: RANGE | 30-minute support/resistance band " + Number(s.rangeWidthPct).toFixed(2) + "% wide; entries only at confirmed outer edges, target is the range midpoint."
+    : "Market regime: " + String(s.regime || "DIRECTIONAL TREND") + " | trend continuation only; counter-trend mean-reversion entries are disabled.";
+  return [
+    (fullyConfirmed ? "📍 CIEL TRADE SETUP — " : "🟡 CIEL TECHNICAL SETUP — ") + p.side + " " + p.symbol,
+    "Signal: " + p.id,
+    "Status: PROPOSED — NOT TRACKING",
+    "Execution mode: " + (s.mode === "RANGE_SCALP" ? "RANGE SCALP" : "TREND HOLD") + " | maximum paper hold " + String(s.holdMinutes || (s.mode === "RANGE_SCALP" ? 12 : 180)) + "m",
+    regimeLine,
+    "Confirmation status: " + (fullyConfirmed ? (localRangeReview ? "TECHNICAL + LOCAL RANGE + FORECAST + MARKET QUALITY" : "TECHNICAL + CLOUDFLARE STATISTICAL FORECAST + RESEARCH") : "TECHNICAL + FORECAST / RESEARCH INCOMPLETE"),
+    "Reference price: $" + fmt(p.entry_price),
+    "Stop alert: $" + fmt(p.stop_price) + " (" + s.stopPct.toFixed(2) + "% adverse)",
+    "Target alert: $" + fmt(p.target_price) + " (" + s.targetPct.toFixed(2) + "% favorable)",
+    "Technical signals: " + s.strategy,
+    "Technical strength: " + (s.confidence * 100).toFixed(0) + "/100 (evidence score, NOT a win probability)",
+    "Independent evidence groups: " + (s.scoreComponents || []).join(" + "),
+    "Technical evidence: " + s.reason,
+    bounceLine,
+    forecastLine,
+    intradayLine,
+    extremesLine,
+    rangeLine,
+    "Market quality: 24h notional $" + fmt(market.volume) + " | funding " + (market.funding * 100).toFixed(4) + "% | OI change " + market.oiChangePct.toFixed(2) + "% | spread " + market.spreadBps.toFixed(2) + " bps | top-book depth $" + market.topDepthUsd.toFixed(0) + " | mark/oracle " + market.premiumBps.toFixed(1) + " bps.",
+    localRangeReview ? "Market review (LOCAL DETERMINISTIC / GEMINI SKIPPED): " + r.reason : "Gemini market-context analysis (" + r.verdict + "): " + r.reason,
+    "Risk flags: " + (r.flags.join(", ") || "none"),
+    localRangeReview
+      ? "Review basis: local regime, CCI, 3-minute rejection, statistical forecast and live derivatives/order-book safeguards. Gemini is deliberately skipped for this short-duration scalp to preserve API quota."
+      : "AI evidence basis: CIEL technical signal, local forecast and live derivatives/order-book metrics only. External news and fundamentals were not checked.",
+    "",
+    ...confirmation,
+    "Illustrative paper margin: " + p.mon_collateral.toFixed(0) + " MON at live MON $" + fmt(monUsd) + " ≈ " + money(margin) + ".",
+    "50x notional estimate at 100% collateral ratio ≈ " + money(notional) + ".",
+    "LeverUp discounts MON collateral using its live CR. These figures assume 100% CR and are upper bounds; actual margin and P&L scale by the CR shown in LeverUp.",
+    "At 

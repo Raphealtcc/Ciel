@@ -1,0 +1,74 @@
+"object") state = freshPaperState(now);
+  const fresh = Number(lastTickAt) > 0 && now - Number(lastTickAt) <= MAX_AGE;
+  const monUsd = fresh ? Number(prices.MON) : 0;
+  let openMarginMon = 0, unrealizedPnlMon = 0, unrealizedPnlUsd = 0;
+  const openTrades = [];
+  for (const trade of (state.trades || [])) {
+    if (trade.status !== "OPEN") continue;
+    const current = fresh ? Number(prices[trade.symbol]) : 0;
+    const pnl = current > 0 && monUsd > 0 ? paperTradePnl(trade, current, monUsd) : null;
+    openMarginMon += Number(trade.marginMon) || 0;
+    if (pnl) { unrealizedPnlMon += pnl.mon; unrealizedPnlUsd += pnl.usd; }
+    openTrades.push({
+      signalId: trade.signalId, symbol: trade.symbol, side: trade.side,
+      mode: trade.mode || "LEGACY", regime: trade.regime || null,
+      leverage: trade.leverage, marginMon: trade.marginMon,
+      entryPrice: trade.entryPrice, currentPrice: current > 0 ? current : null,
+      pnlMon: pnl ? pnl.mon : null, pnlUsd: pnl ? pnl.usd : null,
+      roiPct: pnl ? pnl.roiPct : null, stopPrice: trade.stopPrice,
+      targetPrice: trade.targetPrice, openedAtMs: trade.openedAtMs,
+      expiresAtMs: trade.expiresAtMs
+    });
+  }
+  const availableBalanceMon = Number(state.availableBalanceMon ?? state.startingBalanceMon ?? PAPER_STARTING_BALANCE_MON);
+  const startingBalanceMon = Number(state.startingBalanceMon ?? PAPER_STARTING_BALANCE_MON);
+  const allMarksAvailable = openTrades.length === 0 || fresh && openTrades.every((trade) => trade.pnlMon !== null);
+  const totalPnlMon = allMarksAvailable ? Number(state.realizedPnlMon || 0) + unrealizedPnlMon : null;
+  const equityMon = totalPnlMon === null ? null : startingBalanceMon + totalPnlMon;
+  const closedTrades = (state.trades || []).filter((trade) => trade.status === "CLOSED");
+  const modeStats = (mode) => {
+    const matches = closedTrades.filter((trade) => (trade.mode || "LEGACY") === mode);
+    const wins = matches.filter((trade) => Number(trade.grossPnlMon) > 0).length;
+    const losses = matches.filter((trade) => Number(trade.grossPnlMon) < 0).length;
+    const breakeven = matches.filter((trade) => Number(trade.grossPnlMon) === 0).length;
+    const pnl = matches.reduce((sum, trade) => sum + (Number(trade.grossPnlMon) || 0), 0);
+    return { closed: matches.length, wins, losses, breakeven, realizedPnlMon: pnl, winRatePct: matches.length ? wins / matches.length * 100 : null };
+  };
+  const strategyStats = { rangeScalp: modeStats("RANGE_SCALP"), trendHold: modeStats("TREND_HOLD"), legacy: modeStats("LEGACY") };
+  const recentClosed = closedTrades.slice(0, 5).map((trade) => ({
+    signalId: trade.signalId, symbol: trade.symbol, side: trade.side,
+    mode: trade.mode || "LEGACY", regime: trade.regime || null,
+    leverage: trade.leverage, marginMon: trade.marginMon, entryPrice: trade.entryPrice,
+    exitPrice: trade.exitPrice, closeReason: trade.closeReason, pnlMon: trade.grossPnlMon,
+    pnlUsd: trade.grossPnlUsd, returnOnMarginPct: trade.returnOnMarginPct, closedAtMs: trade.closedAtMs
+  }));
+  return {
+    starterBalanceMon: startingBalanceMon, availableBalanceMon, openMarginMon,
+    realizedPnlMon: Number(state.realizedPnlMon || 0),
+    unrealizedPnlMon: allMarksAvailable ? unrealizedPnlMon : null,
+    unrealizedPnlUsd: allMarksAvailable ? unrealizedPnlUsd : null,
+    totalPnlMon, equityMon,
+    returnPct: totalPnlMon === null || !(startingBalanceMon > 0) ? null : totalPnlMon / startingBalanceMon * 100,
+    openCount: openTrades.length, closedCount: Number(state.closedCount || 0),
+    wins: Number(state.wins || 0), losses: Number(state.losses || 0),
+    breakeven: Number(state.breakeven || 0), fresh,
+    lastTickAt: Number(lastTickAt) || null, openTrades, recentClosed, strategyStats
+  };
+}
+function setupMessage(p, s, r, monUsd, forecast, market, intraday) {
+  const t = scenario(p, s.targetPct, monUsd), q = scenario(p, -s.stopPct, monUsd), margin = p.mon_collateral * monUsd, notional = margin * p.leverage;
+  const refs = r.sources.map((x) => x.title + " " + x.url).join("\n");
+  const forecastReady = forecast.available && typeof forecast.medianReturnPct === "number" && Number.isFinite(forecast.medianReturnPct) && typeof forecast.lowerReturnPct === "number" && Number.isFinite(forecast.lowerReturnPct) && typeof forecast.upperReturnPct === "number" && Number.isFinite(forecast.upperReturnPct);
+  const timing = intraday?.sameHour || {};
+  const intradayLine = Number(timing.days)>=3 ? "Intraday timing (Lagos; supplementary): "+timing.bias+" around "+intraday.localHour+"; "+timing.days+" prior days; median "+Number(timing.medianReturnPct).toFixed(3)+"%, up "+Number(timing.upSharePct).toFixed(0)+"%." : s.mode === "RANGE_SCALP" ? "Intraday timing not queried for range scalps; current 30-minute range is used instead." : "Intraday timing (Lagos): building history; no timing bias used yet.";
+  const extremes = intraday?.dailyExtremeTiming || {};
+  const extremesLine = Number(extremes.days)>=3 ? "Sampled daily extremes: low most often around "+(extremes.lowHour?.hour||"n/a")+", high around "+(extremes.highHour?.hour||"n/a")+" across "+extremes.days+" days." : s.mode === "RANGE_SCALP" ? "Daily high/low timing is not queried for range scalps." : "Recurring daily high/low timing: building history; not a standalone signal.";
+  const range = intraday?.todayRange;
+  const referencePrice = Number(p.entry_price);
+  const sampledLow = Number(range?.low);
+  const sampledHigh = Number(range?.high);
+  let rangeLine = s.mode === "RANGE_SCALP" ? "Current 30-minute execution range is shown above; the separate daily range is not queried." : "Today sampled range unavailable.";
+  if (range && Number.isFinite(sampledLow) && sampledLow > 0 && Number.isFinite(sampledHigh) && sampledHigh >= sampledLow && Number.isFinite(referencePrice) && referencePrice > 0) {
+    const displayLow = Math.min(sampledLow, referencePrice);
+    const displayHigh = Math.max(sampledHigh, referencePrice);
+    const position = displayHigh > displayLow ? Math.max(0,

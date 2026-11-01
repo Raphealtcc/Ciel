@@ -1,0 +1,103 @@
+after trying two configured keys: " + message + " Backoff " + Math.ceil(delay/1000) + "s.", "GEMINI_UNAVAILABLE"), flags:["GEMINI_UNAVAILABLE","GEMINI_COOLDOWN"],httpStatus:503,retryAt:untilMs }; }
+  }
+  await env.CIEL_STATE.put("ciel:gemini:key-cursor", String((cursor + 1) % keys.length), { expirationTtl: 86400 });
+  return wait("No Gemini key completed review after invalid-credential rotation.", "GEMINI_KEYS_FAILED");
+}
+__name(review, "review");
+function pnlFor(p, current, monUsd) {
+  if (!(current > 0 && monUsd > 0 && p.entry_mon_usd > 0)) return null;
+  const entry = p.actual_entry_price && p.actual_entry_price > 0 ? p.actual_entry_price : p.tracking_entry_price && p.tracking_entry_price > 0 ? p.tracking_entry_price : p.entry_price, move = (p.side === "LONG" ? 1 : -1) * pct(current, entry);
+  const margin = p.mon_collateral * p.entry_mon_usd, notional = margin * p.leverage, pnl = notional * move / 100;
+  return { usd: pnl, mon: pnl / monUsd, movePct: move, marginUsd: margin, notionalUsd: notional, monUsd, roiPct: margin > 0 ? pnl / margin * 100 : 0 };
+}
+__name(pnlFor, "pnlFor");
+function scenario(p, move, monUsd) {
+  const u = p.mon_collateral * p.entry_mon_usd * p.leverage * move / 100;
+  return { usd: u, mon: u / monUsd };
+}
+__name(scenario, "scenario");
+function freshPaperState(now = Date.now()) {
+  return {
+    version: 1, startingBalanceMon: PAPER_STARTING_BALANCE_MON,
+    availableBalanceMon: PAPER_STARTING_BALANCE_MON,
+    realizedPnlMon: 0, realizedPnlUsd: 0, wins: 0, losses: 0,
+    breakeven: 0, closedCount: 0, trades: [], createdAtMs: now, updatedAtMs: now
+  };
+}
+function minimumMarginForMarketLeverage(leverage) {
+  if (Number(leverage) === 50) return 22;
+  if (Number(leverage) >= 100) return 11;
+  return null;
+}
+async function openPaperTrade(storage, params) {
+  if (!storage) return { opened: false, reason: "Durable Object paper storage is unavailable." };
+  const now = Number(params.now) || Date.now();
+  const symbol = String(params.symbol || "").toUpperCase();
+  const maxLeverage = Number(LEVERUP_MARKET_MAX_LEVERAGE[symbol]);
+  if (maxLeverage !== 50) return { opened: false, reason: "LeverUp market is not a 50x market." };
+  let result = null;
+  await storage.transaction(async () => {
+    let state = await storage.get(PAPER_ACCOUNT_KEY);
+    if (!state || typeof state !== "object") state = freshPaperState(now);
+    if (!Array.isArray(state.trades)) state.trades = [];
+    if (state.trades.some((trade) => trade.signalId === params.signalId)) {
+      result = { opened: false, duplicate: true, reason: "This signal already has a paper trade.", availableBalanceMon: Number(state.availableBalanceMon) || 0 };
+      return;
+    }
+    if (state.trades.some((trade) => trade.status === "OPEN" && String(trade.symbol || "").toUpperCase() === symbol)) {
+      result = { opened: false, reason: "A paper trade for this market is already open.", availableBalanceMon: Number(state.availableBalanceMon) || 0 };
+      return;
+    }
+    const margin = minimumMarginForMarketLeverage(maxLeverage);
+    const available = Number(state.availableBalanceMon ?? PAPER_STARTING_BALANCE_MON);
+    if (!Number.isFinite(available) || available + 1e-9 < margin) {
+      result = { opened: false, reason: "Paper balance has less than the 22 MON minimum margin available.", availableBalanceMon: Number.isFinite(available) ? available : 0 };
+      return;
+    }
+    const entry = Number(params.entryPrice), entryMonUsd = Number(params.entryMonUsd);
+    if (!(entry > 0 && entryMonUsd > 0)) {
+      result = { opened: false, reason: "A valid entry price or MON/USD conversion is unavailable.", availableBalanceMon: available };
+      return;
+    }
+    const trade = {
+      signalId: String(params.signalId), symbol,
+      side: params.side === "SHORT" ? "SHORT" : "LONG",
+      mode: params.mode === "RANGE_SCALP" ? "RANGE_SCALP" : "TREND_HOLD",
+      regime: String(params.regime || ""),
+      maxMarketLeverage: maxLeverage, leverage: PAPER_LEVERAGE, marginMon: margin,
+      entryPrice: entry, entryMonUsd,
+      stopPrice: Number(params.stopPrice), targetPrice: Number(params.targetPrice),
+      stopPct: Number(params.stopPct), targetPct: Number(params.targetPct),
+      confidence: Number(params.confidence) || null, strategy: String(params.strategy || ""),
+      openedAtMs: now, expiresAtMs: now + Number(params.holdMinutes || 90) * 60000,
+      status: "OPEN"
+    };
+    state.availableBalanceMon = available - margin;
+    state.trades.unshift(trade);
+    if (state.trades.length > 1000) state.trades = state.trades.slice(0, 1000);
+    state.updatedAtMs = now;
+    await storage.put(PAPER_ACCOUNT_KEY, state);
+    result = { opened: true, trade, availableBalanceMon: state.availableBalanceMon };
+  });
+  return result;
+}
+function paperTradePnl(trade, currentPrice, currentMonUsd) {
+  const entry = Number(trade.entryPrice), current = Number(currentPrice), monUsd = Number(currentMonUsd);
+  if (!(entry > 0 && current > 0 && monUsd > 0 && Number(trade.entryMonUsd) > 0)) return null;
+  const direction = trade.side === "LONG" ? 1 : -1;
+  const movePct = direction * ((current - entry) / entry) * 100;
+  const marginUsd = Number(trade.marginMon) * Number(trade.entryMonUsd);
+  const notionalUsd = marginUsd * Number(trade.leverage);
+  const pnlUsd = notionalUsd * movePct / 100;
+  const pnlMon = pnlUsd / monUsd;
+  return { movePct, usd: pnlUsd, mon: pnlMon, roiPct: Number(trade.marginMon) > 0 ? pnlMon / Number(trade.marginMon) * 100 : 0, marginUsd, notionalUsd };
+}
+function updateProfitProtectionState(state, targetPctInput, movePct, now) {
+  const before = JSON.stringify(state);
+  const targetPct = Math.abs(Number(targetPctInput) || 0);
+  const best = Math.max(Number(state.bestFavorableMovePct) || 0, Number(movePct) || 0);
+  state.bestFavorableMovePct = best;
+  if (state.profitProtectionAlertedAtMs) {
+    const alertPeak = Number(state.profitProtectionAlertPeakPct) || 0;
+    const newPeakRequired = alertPeak + Math.max(0.10, alertPeak * 0.25);
+    if

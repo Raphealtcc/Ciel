@@ -1,0 +1,40 @@
+own.failures) || 0) + 1);
+        const dailyQuota = /quota_exceeded|daily|per day/i.test(String(errorCode) + " " + String(errorMessage));
+        const baseDelay = dailyQuota ? 3600000 : 900000;
+        const delay = Math.min(21600000, baseDelay * Math.pow(2, Math.min(5, failures - 1)));
+        const retryHeader = r.headers.get("retry-after");
+        const retryNumber = Number(retryHeader);
+        const retryDate = Date.parse(retryHeader || "");
+        let serverDelay = Number.isFinite(retryNumber) && retryNumber >= 0 ? retryNumber * 1000 : Number.isFinite(retryDate) ? Math.max(0, retryDate - Date.now()) : 0;
+        const details = errorBody?.error?.details;
+        if (Array.isArray(details)) for (const detail of details) { const value = detail?.retryDelay || detail?.retry_delay; if (typeof value === "string" && value.endsWith("s")) serverDelay = Math.max(serverDelay, Number(value.slice(0, -1)) * 1000); }
+        const untilMs = Date.now() + Math.max(delay, serverDelay);
+        const safeMessage = String(errorMessage).split("\n").join(" ").slice(0, 170);
+        const state = { failures, httpStatus: 429, errorCode: String(errorCode).slice(0, 80), message: safeMessage, lastFailureAt: Date.now(), untilMs };
+        await env.CIEL_STATE.put(cooldownKey, JSON.stringify(state), { expirationTtl: 604800 });
+        await env.CIEL_STATE.put("ciel:gemini:key-cursor", String((ix + 1) % keys.length), { expirationTtl: 86400 });
+        return { ...wait("Gemini HTTP 429 " + errorCode + ": " + safeMessage + " Backoff " + Math.ceil((untilMs - Date.now()) / 60000) + "m; stopped key rotation because quota may be project-wide.", "GEMINI_RATE_LIMIT"), flags: ["GEMINI_RATE_LIMIT", "GEMINI_COOLDOWN"], httpStatus: 429, errorCode, retryAt: untilMs, retryInSeconds: Math.ceil((untilMs - Date.now()) / 1000) };
+      }
+      if (r.status === 401) continue;
+      if (r.status === 403) { const bodyText = await r.text().catch(() => ""); let body = {}; try { body = bodyText ? JSON.parse(bodyText) : {}; } catch {} const msg = body?.error?.message || bodyText || "Project/API permission denied."; const untilMs = Date.now() + 21600000; await env.CIEL_STATE.put(cooldownKey, JSON.stringify({httpStatus:403,errorCode:body?.error?.status||"PERMISSION_DENIED",message:String(msg).slice(0,170),untilMs,failures:1}), {expirationTtl:604800}); return { ...wait("Gemini HTTP 403: " + String(msg).slice(0,170), "GEMINI_PERMISSION_DENIED"), flags:["GEMINI_PERMISSION_DENIED","GEMINI_COOLDOWN"], httpStatus:403, retryAt:untilMs }; }
+      if (!r.ok) {
+        if (r.status >= 500 || r.status === 408) { const bodyText = await r.text().catch(() => ""); await env.CIEL_STATE.put("ciel:gemini:key-cursor", String((ix + 1) % keys.length), { expirationTtl: 86400 }); if (transientAttempts++ === 0) continue; const failures = Math.min(12, (Number(cooldown.failures) || 0) + 1); const delay = Math.min(1800000, 120000 * Math.pow(2, Math.min(4, failures - 1))); const untilMs = Date.now() + delay; await env.CIEL_STATE.put(cooldownKey, JSON.stringify({failures,httpStatus:r.status,errorCode:"GEMINI_SERVER_ERROR",message:String(bodyText).slice(0,160),lastFailureAt:Date.now(),untilMs}), {expirationTtl:604800}); return { ...wait("Gemini HTTP " + r.status + ": " + String(bodyText).slice(0,160) + " Backoff " + Math.ceil(delay/1000) + "s after trying a second configured key.", "GEMINI_UNAVAILABLE"), flags:["GEMINI_UNAVAILABLE","GEMINI_COOLDOWN"],httpStatus:r.status,retryAt:untilMs }; }
+        return wait("Gemini HTTP " + r.status, "GEMINI_API_ERROR");
+      }
+      const data = await r.json();
+      await env.CIEL_STATE.delete(cooldownKey);
+      const raw = data.candidates?.[0]?.content?.parts?.map((x) => x.text || "").join("") || "", v = JSON.parse(raw), gm = data.candidates?.[0]?.groundingMetadata;
+      const sources = (gm?.groundingChunks || []).flatMap((x) => x.web?.uri ? [{ title: (x.web.title || "Web").slice(0, 120), url: x.web.uri }] : []).filter((x, i2, a) => a.findIndex((y) => y.url === x.url) === i2).slice(0, 6);
+      const domains = new Set(sources.map((x) => {
+        try {
+          return new URL(x.url).hostname.replace(/^www\./, "");
+        } catch {
+          return "";
+        }
+      }).filter(Boolean));
+      const verdict = v.verdict === "APPROVE" || v.verdict === "REJECT" ? v.verdict : "WAIT";
+      
+      const out = { verdict, reason: typeof v.reason === "string" ? v.reason.slice(0, 240) : "No usable Gemini reason.", flags: [...(Array.isArray(v.flags) ? v.flags.filter((x) => typeof x === "string").slice(0, 6) : []), "PROVIDED_DATA_ONLY", ...(eventIntel ? ["EVENT_INTELLIGENCE_SUPPLIED"] : ["NEWS_NOT_ASSESSED"])], model, queries: [], sources: (eventIntel?.articles || []).slice(0, 5).map(x => ({title:String(x.title || "").slice(0,120),url:x.url})), analysisMode: eventIntel ? "provided-market-data-plus-event-headlines" : "provided-market-data-only", analysisBasis: eventIntel ? "CIEL technical/forecast/market-quality evidence plus separately triaged GDELT headlines and source domains; full article text was not fetched." : "CIEL technical signal, local trend check, supplementary intraday price history and live funding/open-interest/order-book data only. External news and fundamentals were not checked." };
+      await env.CIEL_STATE.put("ciel:gemini:key-cursor", String((ix + 1) % keys.length), { expirationTtl: 86400 });
+      return out;
+    } catch (e) { const message = String(e).slice(0,150); await env.CIEL_STATE.put("ciel:gemini:key-cursor", String((ix + 1) % keys.length), { expirationTtl: 86400 }); if (transientAttempts++ === 0) continue; const failures = Math.min(12, (Number(cooldown.failures) || 0) + 1); const delay = Math.min(300000, 30000 * Math.pow(2, Math.min(3, failures - 1))); const untilMs = Date.now() + delay; await env.CIEL_STATE.put(cooldownKey, JSON.stringify({failures,httpStatus:503,errorCode:"NETWORK_OR_TIMEOUT",message,lastFailureAt:Date.now(),untilMs}), {expirationTtl:3600}); return { ...wait("Gemini network/timeout 

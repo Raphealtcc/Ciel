@@ -1,0 +1,68 @@
+ge:null,reason});
+ const present=async(entry,cacheHit)=>{
+  const stats=entry.hourStats?.[String(currentHour)]||{days:0,bias:"BUILDING_HISTORY",medianReturnPct:null,upSharePct:null};
+  let range=entry.todayRange?{...entry.todayRange}:null,changed=false;
+  const p=Number(currentPrice);
+  if(range&&p>0){
+   if(p>Number(range.high)){range.high=p;changed=true;}
+   if(p<Number(range.low)){range.low=p;changed=true;}
+   range.positionFromLowPct=Number(range.high)>Number(range.low)?Math.max(0,Math.min(100,(p-Number(range.low))/(Number(range.high)-Number(range.low))*100)):null;
+  }
+  if(changed){entry.todayRange=range;entry.rangeUpdatedAt=now;try{await env.CIEL_STATE.put(cacheKey,JSON.stringify(entry),{expirationTtl:172800});}catch{}}
+  return {available:true,timezone:"Africa/Lagos",localDay:today,localHour:label(currentHour),historyDays:entry.historyDays,status:Number(stats.days)>=5?"ESTABLISHED":Number(stats.days)>=3?"EARLY":"BUILDING_HISTORY",sameHour:stats,dailyExtremeTiming:entry.dailyExtremeTiming||{days:0,highHour:null,lowHour:null},todayRange:range,source:"Cached 1-minute BTC/ETH/MON and 6-minute wider-watchlist Hyperliquid samples; daily extrema are sampled, not tick-perfect",rangeCoverage:"Range was captured at the once-daily history scan and expanded only when a later advisor price set a new high or low; it is not a continuously refreshed exact daily range.",role:"Supplementary context only; never overrides technical direction or market-quality safeguards",cacheHit,historyComputedAt:entry.computedAt||null};
+ };
+ try{
+  let cached=null;try{cached=JSON.parse(await env.CIEL_STATE.get(cacheKey)||"null");}catch{}
+  if(cached&&cached.schemaVersion===2&&cached.localDay===today&&cached.hourStats)return await present(cached,true);
+  const q=await env.DB.prepare("SELECT ts_ms,mid_price FROM market_samples WHERE symbol=? AND ts_ms>=? ORDER BY ts_ms DESC LIMIT 10080").bind(symbol,now-7*86400000).all();
+  const raw=(q.results||[]).slice().reverse(),groups=new Map();
+  for(const row of raw){
+   const ts=Number(row.ts_ms),price=Number(row.mid_price);if(!Number.isFinite(ts)||ts<=0||!Number.isFinite(price)||price<=0)continue;
+   const local=new Date(ts+3600000),day=local.toISOString().slice(0,10),hr=local.getUTCHours(),key=day+"|"+hr;
+   let g=groups.get(key);if(!g)g={day,hr,n:1,firstTs:ts,lastTs:ts,open:price,close:price,low:price,high:price};
+   else{g.n++;if(ts<g.firstTs){g.firstTs=ts;g.open=price;}if(ts>=g.lastTs){g.lastTs=ts;g.close=price;}if(price<g.low)g.low=price;if(price>g.high)g.high=price;}
+   groups.set(key,g);
+  }
+  const hours=[...groups.values()].sort((a,b)=>a.day.localeCompare(b.day)||a.hr-b.hr);
+  if(!hours.length)return empty("No stored sampled price history is available yet.");
+  const complete=hours.filter(x=>x.day<today&&x.n>=6&&x.lastTs-x.firstTs>=1800000);
+  const hourStats={};
+  for(let h=0;h<24;h++){
+   const same=complete.filter(x=>x.hr===h),ret=same.map(x=>x.open>0?(x.close/x.open-1)*100:null).filter(Number.isFinite),sort=ret.slice().sort((a,b)=>a-b);
+   const median=sort.length?(sort.length%2?sort[(sort.length-1)/2]:(sort[sort.length/2-1]+sort[sort.length/2])/2):null,upShare=ret.length?100*ret.filter(x=>x>0).length/ret.length:null;
+   let bias="BUILDING_HISTORY";
+   if(ret.length>=5&&median!==null&&median>=.05&&upShare>=70)bias="UP";
+   else if(ret.length>=5&&median!==null&&median<=-.05&&upShare<=30)bias="DOWN";
+   else if(ret.length>=3&&upShare>=70)bias="EARLY_UP";
+   else if(ret.length>=3&&upShare<=30)bias="EARLY_DOWN";
+   else if(ret.length>=3)bias="MIXED";
+   hourStats[String(h)]={days:ret.length,bias,medianReturnPct:median,upSharePct:upShare};
+  }
+  const daily=new Map();
+  for(const x of complete){const d=daily.get(x.day)||{hours:0,high:-Infinity,low:Infinity,highHour:null,lowHour:null};d.hours++;if(x.high>d.high){d.high=x.high;d.highHour=x.hr;}if(x.low<d.low){d.low=x.low;d.lowHour=x.hr;}daily.set(x.day,d);}
+  const fullDays=[...daily.values()].filter(x=>x.hours>=12),mode=a=>{if(!a.length)return null;const m=new Map();for(const v of a)m.set(v,(m.get(v)||0)+1);const z=[...m.entries()].sort((a,b)=>b[1]-a[1]||a[0]-b[0])[0];return {hour:label(z[0]),occurrences:z[1],days:a.length,sharePct:100*z[1]/a.length};};
+  const todayRows=hours.filter(x=>x.day===today);let range=null;
+  if(todayRows.length){const high=Math.max(...todayRows.map(x=>x.high)),low=Math.min(...todayRows.map(x=>x.low)),p=Number(currentPrice);range={high,low,positionFromLowPct:high>low&&p>0?Math.max(0,Math.min(100,(p-low)/(high-low)*100)):null};}
+  const entry={schemaVersion:2,localDay:today,computedAt:now,historyDays:new Set(complete.map(x=>x.day)).size,hourStats,dailyExtremeTiming:{days:fullDays.length,highHour:mode(fullDays.map(x=>x.highHour)),lowHour:mode(fullDays.map(x=>x.lowHour))},todayRange:range,rangeUpdatedAt:now};
+  try{await env.CIEL_STATE.put(cacheKey,JSON.stringify(entry),{expirationTtl:172800});}catch{}
+  return await present(entry,false);
+ }catch(e){return empty("Intraday history query failed: "+String(e).slice(0,150));}
+}
+__name(getIntradayPattern,"getIntradayPattern");
+
+function eventWindowReturn(rows, minutes, now) {
+  const points=(Array.isArray(rows)?rows:[]).map(x=>({t:Number(x.ts_ms),p:Number(x.mid_price)})).filter(x=>Number.isFinite(x.t)&&x.t>0&&Number.isFinite(x.p)&&x.p>0).sort((a,b)=>a.t-b.t);
+  if(points.length<minutes+2)return null;
+  const latest=points[points.length-1];
+  if(now-latest.t>120000||latest.t>now+30000)return null;
+  const target=latest.t-minutes*60000;
+  let base=null;
+  for(let i=points.length-2;i>=0;i--){if(points[i].t<=target){base=points[i];break;}}
+  if(!base||target-base.t>120000)return null;
+  return (latest.p/base.p-1)*100;
+}
+function buildMarketEventPulse(hist, symbols, now) {
+  const get=(symbol,minutes)=>eventWindowReturn(hist.get(symbol)||[],minutes,now);
+  const btc5=get("BTC",5),eth5=get("ETH",5),btc15=get("BTC",15),eth15=get("ETH",15);
+  const rows=[];
+  for(const symbol of symbols){if(symbol==="MON")continue;const r=get(symbol,5);if(r!==null)rows.push

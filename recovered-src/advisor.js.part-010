@@ -1,0 +1,57 @@
+target: gross upper-bound estimate " + money(t.usd) + " ≈ " + mon(t.mon) + ".",
+    "At stop: gross upper-bound estimate " + money(q.usd) + " ≈ " + mon(q.mon) + ".",
+    "Stop/target are alert levels, not exchange orders. Place LeverUp native TP/SL protection yourself; Ciel cannot execute trades.",
+    "Live-position tracking will NOT start until you place the trade and press START TRACKING. Paper trading opens automatically and remains separate. Skip the real setup if you do not take it.",
+    "After starting, correct the tracked entry with /entered " + p.id + " YOUR_ACTUAL_ENTRY_PRICE if your LeverUp fill differs.",
+    "Proposal expires in 15 minutes. One new setup is evaluated per five-minute cycle; paper entries pause when less than 22 MON margin is free.",
+    "Encouragement: " + cheer() + " ✨"
+  ].join("\n");
+}
+__name(setupMessage, "setupMessage");
+function closeMessage(p, v, reason, exit) {
+  return [
+    "\u26D4 CIEL CLOSE ALERT \u2014 " + p.side + " " + p.symbol,
+    "Signal: " + p.id,
+    "Latest observed mark: $" + fmt(exit) + " | Entry: $" + fmt(p.actual_entry_price || p.tracking_entry_price || p.entry_price),
+    "Reason: " + reason,
+    v ? "Current estimated gross P&L: " + money(v.usd) + " (" + mon(v.mon) + ") | " + v.roiPct.toFixed(1) + "% of estimated margin." : "P&L unavailable: current MON/USD missing.",
+    "This is an exit recommendation, not an order. Close manually in LeverUp first; Ciel cannot execute or close positions.\n    Press I'VE CLOSED IT only after your LeverUp position is closed. That button stops tracking and saves the latest observed market mark as an estimated exit.",
+    "The saved mark is not your exact LeverUp fill. Fees, funding and slippage are not included.",
+    "P&L assumes 100% MON CR and uses Hyperliquid mids, not LeverUp mark/oracle or execution price."
+  ].join("\n");
+}
+__name(closeMessage, "closeMessage");
+async function getMarketEvidence(env, symbol, now, live) {
+  let market;
+  if (live) {
+    if (!Number.isFinite(live.contextAt) || now - Number(live.contextAt) > 18e4) return { market: null, reason: "Fresh Hyperliquid funding/open-interest context is missing." };
+    if (!Number.isFinite(live.bookAt) || now - Number(live.bookAt) > 18e4) return { market: null, reason: "Fresh order-book evidence is missing." };
+    market = { funding: Number(live.funding), openInterest: Number(live.openInterest), volume: Number(live.volume), mark: Number(live.mark), oracle: Number(live.oracle), premiumBps: Number(live.premiumBps), spreadBps: Number(live.spreadBps), topDepthUsd: Number(live.topDepthUsd), oiChangePct: Number(live.oiChangePct) };
+  } else {
+    const ctx = await env.DB.prepare("SELECT ts_ms,funding_rate,open_interest,day_ntl_volume,mark_px,oracle_px FROM market_context_snapshots WHERE symbol=? AND ts_ms>=? ORDER BY ts_ms ASC").bind(symbol, now - 20 * 6e4).all();
+    const contexts = ctx.results || [], latest = contexts[contexts.length - 1], oldest = contexts[0];
+    const book = await env.DB.prepare("SELECT ts_ms,best_bid,best_ask,bid_size,ask_size,spread_bps FROM market_book_snapshots WHERE symbol=? ORDER BY ts_ms DESC LIMIT 1").bind(symbol).first();
+    if (!latest || now - Number(latest.ts_ms) > 15e4) return { market: null, reason: "Fresh Hyperliquid funding/open-interest context is missing." };
+    if (!book || now - Number(book.ts_ms) > 15e4) return { market: null, reason: "Fresh order-book evidence is missing." };
+    if ([latest.funding_rate, latest.open_interest, latest.day_ntl_volume, latest.mark_px, latest.oracle_px].some((value) => value === null || value === void 0)) return { market: null, reason: "Required derivatives fields are missing from Hyperliquid." };
+    const funding = Number(latest.funding_rate), oi = Number(latest.open_interest), volume = Number(latest.day_ntl_volume), mark = Number(latest.mark_px), oracle = Number(latest.oracle_px);
+    const premiumBps = mark > 0 && oracle > 0 ? (mark / oracle - 1) * 1e4 : Infinity;
+    const spreadBps = Number(book.spread_bps), topDepthUsd = Number(book.best_bid) * Number(book.bid_size) + Number(book.best_ask) * Number(book.ask_size);
+    const oiChangePct = oldest && Number(oldest.open_interest) > 0 ? (oi / Number(oldest.open_interest) - 1) * 100 : 0;
+    market = { funding, openInterest: oi, volume, mark, oracle, premiumBps, spreadBps, topDepthUsd, oiChangePct };
+  }
+  if (!Object.values(market).every(Number.isFinite)) return { market, reason: "Market-quality data is incomplete or invalid." };
+  if (!(market.openInterest > 0 && market.volume > 0 && market.mark > 0 && market.oracle > 0)) return { market, reason: "Derivatives data is invalid or non-positive." };
+  if (market.volume < 25e4) return { market, reason: "24-hour notional volume is below the $250,000 minimum." };
+  if (Math.abs(market.funding) > 5e-4) return { market, reason: "Funding is unusually crowded for this 50x recommendation." };
+  if (Math.abs(market.premiumBps) > 25) return { market, reason: "Mark/oracle divergence exceeds 25 basis points." };
+  if (market.spreadBps > 20) return { market, reason: "Top-of-book spread exceeds 20 basis points." };
+  if (market.topDepthUsd < 500) return { market, reason: "Combined top-of-book notional depth is below $500." };
+  if (Math.abs(market.oiChangePct) > 35) return { market, reason: "Open interest changed more than 35% in the available context window." };
+  return { market, reason: null };
+}
+__name(getMarketEvidence, "getMarketEvidence");
+async function getIntradayPattern(env,symbol,now,currentPrice){
+ const localNow=new Date(now+3600000),today=localNow.toISOString().slice(0,10),currentHour=localNow.getUTCHours(),label=h=>String(h).padStart(2,"0")+":00";
+ const cacheKey="ciel:intraday-pattern:v2:"+symbol+":"+today;
+ const empty=reason=>({available:false,timezone:"Africa/Lagos",localDay:today,localHour:label(currentHour),historyDays:0,sameHour:{days:0,bias:"BUILDING_HISTORY",medianReturnPct:null,upSharePct:null},dailyExtremeTiming:{days:0,highHour:null,lowHour:null},todayRan
