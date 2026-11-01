@@ -185,8 +185,8 @@ assert.ok(Math.abs(summary.equityMon - (summary.availableBalanceMon + summary.op
 
 // Prevent misleading 50x-only copy after the paper engine becomes leverage-tiered.
 assert.ok(source.includes("CIEL PAPER TRADING — AUTOMATIC / LEVERAGE-TIERED"));
-assert.ok(source.includes("/profits \\\\u2014 automatic leverage-tiered paper-trading balance and P&L"));
-assert.ok(!source.includes("/profits \\\\u2014 automatic 50x paper-trading balance and P&L"));
+assert.ok(source.includes("automatic leverage-tiered paper-trading balance and P&L"));
+assert.ok(!source.includes("automatic 50x paper-trading balance and P&L"));
 assert.ok(source.includes('String(p.leverage) + "x notional estimate at 100% collateral ratio ≈ "'));
 assert.ok(source.includes("free balance is below the eligible market's minimum margin"));
 assert.ok(source.includes("const collateral = minimumMarginForMarketLeverage(marketMaxLeverage);"));
