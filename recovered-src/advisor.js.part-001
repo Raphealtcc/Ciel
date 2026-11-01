@@ -1,0 +1,119 @@
+// src/advisor.ts
+var MAX_AGE = 12e4;
+var CYCLE = 3e5;
+var MIN_SAMPLES = 180;
+var WORDS = ["Discipline", "Patience", "Focus", "Resilience", "Clarity", "Consistency", "Courage", "Precision", "Composure", "Steadiness"];
+var enc = /* @__PURE__ */ __name((s) => encodeURIComponent(s), "enc");
+var fmt = /* @__PURE__ */ __name((n) => n >= 1e3 ? n.toLocaleString("en-US", { maximumFractionDigits: 2 }) : n >= 1 ? n.toFixed(4) : Number(n.toPrecision(7)).toString(), "fmt");
+var money = /* @__PURE__ */ __name((n) => (n > 0 ? "+" : n < 0 ? "\u2212" : "") + "$" + Math.abs(n).toFixed(2), "money");
+var mon = /* @__PURE__ */ __name((n) => (n > 0 ? "+" : n < 0 ? "\u2212" : "") + Math.abs(n).toFixed(3) + " MON", "mon");
+var cheer = /* @__PURE__ */ __name(() => WORDS[Math.floor(Math.random() * WORDS.length)], "cheer");
+var pct = /* @__PURE__ */ __name((a, b) => b > 0 ? (a - b) / b * 100 : 0, "pct");
+var clamp = /* @__PURE__ */ __name((n, a, b) => Math.max(a, Math.min(b, n)), "clamp");
+var setting = /* @__PURE__ */ __name((v, d, a, b) => {
+  const n = Number(v);
+  return Number.isFinite(n) ? clamp(n, a, b) : d;
+}, "setting");
+async function notify(env, text, buttons) {
+  const token = (env.TELEGRAM_BOT_TOKEN || "").trim(), chat = (env.TELEGRAM_CHAT_ID || "").trim();
+  if (!token || !chat) throw new Error("Telegram credentials unavailable");
+  const r = await fetch("https://api.telegram.org/bot" + token + "/sendMessage", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ chat_id: chat, text: text.slice(0, 4e3), disable_web_page_preview: true, ...buttons ? { reply_markup: { inline_keyboard: buttons } } : {} }) });
+  const p = await r.json().catch(() => ({}));
+  if (!r.ok || p.ok !== true) throw new Error(p.description || "Telegram delivery failed");
+}
+__name(notify, "notify");
+function ema(xs, p) {
+  if (!xs.length) return 0;
+  const k = 2 / (p + 1);
+  let v = xs[0];
+  for (let i = 1; i < xs.length; i++) v = xs[i] * k + v * (1 - k);
+  return v;
+}
+__name(ema, "ema");
+function rsi(xs, p = 14) {
+  if (xs.length <= p) return 50;
+  let g = 0, l = 0;
+  for (let i = xs.length - p; i < xs.length; i++) {
+    const d = xs[i] - xs[i - 1];
+    if (d > 0) g += d;
+    else l -= d;
+  }
+  return l === 0 ? 100 : 100 - 100 / (1 + g / l);
+}
+__name(rsi, "rsi");
+function avg(xs) {
+  return xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0;
+}
+__name(avg, "avg");
+function dev(xs) {
+  const m = avg(xs);
+  return xs.length > 1 ? Math.sqrt(avg(xs.map((x) => (x - m) ** 2))) : 0;
+}
+__name(dev, "dev");
+function anchoredReturn(points, minutes) {
+  if (!Array.isArray(points) || !points.length) return null;
+  const latest = points[points.length - 1], target = latest.t - minutes * 60000;
+  for (let i = points.length - 2; i >= 0; i--) {
+    if (points[i].t <= target) {
+      if (target - points[i].t > 90000) return null;
+      return pct(latest.p, points[i].p);
+    }
+  }
+  return null;
+}
+__name(anchoredReturn, "anchoredReturn");
+function emaTimed(points, periodMinutes) {
+  if (!Array.isArray(points) || !points.length) return 0;
+  const oneStepAlpha = 2 / (periodMinutes + 1);
+  let value = points[0].p, previousAt = points[0].t;
+  for (let i = 1; i < points.length; i++) {
+    const point = points[i], elapsed = (point.t - previousAt) / 60000;
+    if (elapsed > 0 && Number.isFinite(elapsed)) {
+      const alpha = 1 - Math.pow(1 - oneStepAlpha, elapsed);
+      value += alpha * (point.p - value);
+    }
+    previousAt = point.t;
+  }
+  return value;
+}
+__name(emaTimed, "emaTimed");
+function rsiTimed(points, periodMinutes = 14) {
+  if (!Array.isArray(points) || points.length < 2) return null;
+  const latestAt = points[points.length - 1].t, cutoff = latestAt - periodMinutes * 60000;
+  const recent = points.filter(point => point.t >= cutoff);
+  let gains = 0, losses = 0, coveredMinutes = 0;
+  for (let i = 1; i < recent.length; i++) {
+    const previous = recent[i - 1], current = recent[i], elapsed = (current.t - previous.t) / 60000;
+    if (!(elapsed > 0 && elapsed <= 3)) continue;
+    const change = Math.log(current.p / previous.p) * 100;
+    if (change > 0) gains += change; else losses -= change;
+    coveredMinutes += elapsed;
+  }
+  if (coveredMinutes < periodMinutes * 0.6) return null;
+  if (losses === 0) return gains === 0 ? 50 : 100;
+  return 100 - 100 / (1 + gains / losses);
+}
+__name(rsiTimed, "rsiTimed");
+function detectBounce(rows, now) {
+  if (!Array.isArray(rows) || rows.length < 31) return null;
+  const byTime = new Map();
+  for (const row of rows) {
+    const t = Number(row.ts_ms), p = Number(row.mid_price);
+    if (Number.isFinite(t) && t > 0 && Number.isFinite(p) && p > 0) byTime.set(t, { t, p });
+  }
+  const points = [...byTime.values()].sort((a, b) => a.t - b.t).slice(-31);
+  if (points.length < 31) return null;
+  const first = points[0], latest = points[30];
+  if (now - latest.t > 120000 || latest.t - now > 30000) return null;
+  if (latest.t - first.t < 25 * 60000 || latest.t - first.t > 38 * 60000) return null;
+  for (let i = 1; i < points.length; i++) if (points[i].t - points[i - 1].t > 180000) return null;
+  const prices = points.map(point => point.p), prior = prices.slice(0, 16), swing = prices.slice(16, 28), current = points[30].p;
+  const priorMicroEma = emaTimed(points.slice(23, 30), 5), target3m = latest.t - 180000;
+  let reference3m = null;
+  for (let i = points.length - 2; i >= 0; i--) if (points[i].t <= target3m) { reference3m = points[i]; break; }
+  if (!reference3m || target3m - reference3m.t > 90000) return null;
+  const confirm3mPct = pct(current, reference3m.p);
+  const low = Math.min(...swing), lowIndex = swing.indexOf(low), high = Math.max(...swing), highIndex = swing.indexOf(high);
+  const pivotAgeMinutesUp = (latest.t - points[16 + lowIndex].t) / 60000, pivotAgeMinutesDown = (latest.t - points[16 + highIndex].t) / 60000;
+  const priorHigh = Math.max(...prior), priorLow = Math.min(...prior);
+  const declinePct = (priorHigh - low) / priorHigh * 100, reboundPct = pct(current, 

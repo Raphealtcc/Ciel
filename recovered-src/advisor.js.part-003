@@ -1,0 +1,82 @@
+eData.microEma &&
+      Number.isFinite(regimeData.lowTouchAgeMinutes) && regimeData.lowTouchAgeMinutes <= 8;
+    const upperEdge = regimeData.rangePositionPct >= 80 && ((Number.isFinite(regimeData.stochRsi) && regimeData.stochRsi >= 75) || regimeData.cci >= 80) &&
+      regimeData.r3 <= -0.025 && cur < regimeData.microEma &&
+      Number.isFinite(regimeData.highTouchAgeMinutes) && regimeData.highTouchAgeMinutes <= 8;
+    if (!lowerEdge && !upperEdge) return null;
+    side = lowerEdge ? "LONG" : "SHORT";
+    mode = "RANGE_SCALP";
+    votes = ["RANGE_REVERSION", "CCI_20", "3M_REJECTION"];
+    const rangeWidth = regimeData.high - regimeData.low;
+    const stopBoundary = side === "LONG" ? regimeData.low - rangeWidth * 0.06 : regimeData.high + rangeWidth * 0.06;
+    const rawStopPct = side === "LONG" ? (cur - stopBoundary) / cur * 100 : (stopBoundary - cur) / cur * 100;
+    stop = Math.max(0.18, rawStopPct);
+    const midpoint = (regimeData.high + regimeData.low) / 2;
+    const rawTargetPct = side === "LONG" ? (midpoint - cur) / cur * 100 : (cur - midpoint) / cur * 100;
+    if (!(rawStopPct > 0 && rawTargetPct >= 0.22 && stop <= 0.40 && rawTargetPct >= stop * 1.15)) return null;
+    target = Math.min(0.64, rawTargetPct);
+    if (target < 0.22) return null;
+  } else {
+    const longs = [], shorts = [];
+    if (regimeData.regime === "TREND_UP") {
+      longs.push("TREND");
+      if (r15 > 0.10 && r5 > 0.025 && (!rsiAvailable || rv >= 48 && rv <= 76)) longs.push("MOMENTUM");
+      const priorHigh = Math.max(...points.filter((point) => point.t < latest.t && point.t >= latest.t - 60 * 60000).map((point) => point.p));
+      if (cur > priorHigh && r5 > 0) longs.push("BREAKOUT");
+    } else {
+      shorts.push("TREND");
+      if (r15 < -0.10 && r5 < -0.025 && (!rsiAvailable || rv >= 24 && rv <= 52)) shorts.push("MOMENTUM");
+      const priorLow = Math.min(...points.filter((point) => point.t < latest.t && point.t >= latest.t - 60 * 60000).map((point) => point.p));
+      if (cur < priorLow && r5 < 0) shorts.push("BREAKOUT");
+    }
+    const classicSide = longs.length >= 2 ? "LONG" : shorts.length >= 2 ? "SHORT" : null;
+    bounce = detectBounce(rows, now);
+    if (bounce && classicSide && classicSide !== bounce.side) return null;
+    const alignedVotes = bounce ? (bounce.side === "LONG" ? longs : shorts) : [];
+    side = classicSide || (bounce && alignedVotes.length >= 1 ? bounce.side : null);
+    if (!side) return null;
+    votes = (side === "LONG" ? longs : shorts).slice();
+    if (bounce && bounce.side === side) votes.push(bounce.type);
+    const vol = [], volPoints = points.filter((point) => point.t >= latest.t - 30 * 60000);
+    for (let i = 1; i < volPoints.length; i++) {
+      const elapsed = (volPoints[i].t - volPoints[i - 1].t) / 60000;
+      if (elapsed >= 0.5 && elapsed <= 2.5) vol.push(pct(volPoints[i].p, volPoints[i - 1].p) / Math.sqrt(elapsed));
+    }
+    stop = clamp(dev(vol) * Math.sqrt(15) * 1.8, 0.22, 0.40);
+    target = clamp(stop * 2.0, 0.50, 0.82);
+  }
+  const hasTrend = votes.includes("TREND");
+  const hasMomentum = votes.includes("MOMENTUM");
+  const hasStructure = votes.includes("BREAKOUT") || votes.includes("RANGE_REVERSION");
+  const hasBounce = Boolean(bounce && bounce.side === side);
+  const technicalScore = mode === "RANGE_SCALP"
+    ? 0.76
+    : clamp(0.66 + (hasTrend ? 0.055 : 0) + (hasMomentum ? 0.055 : 0) + (hasStructure ? 0.045 : 0) + (hasBounce ? 0.06 : 0), 0, 0.95);
+  const scoreComponents = mode === "RANGE_SCALP"
+    ? ["RANGE_EDGE_OSCILLATOR", "MICRO_REVERSAL", "PRICE_STRUCTURE"]
+    : [hasTrend ? "TREND" : null, hasMomentum ? "MOMENTUM" : null, hasStructure ? "PRICE_STRUCTURE" : null, hasBounce ? "BOUNCE" : null].filter(Boolean);
+  const baseReason = mode === "RANGE_SCALP"
+    ? "RANGE regime; " + regimeData.rangePositionPct.toFixed(1) + "% from range low, CCI(20) " + regimeData.cci.toFixed(1) + ", 3m return " + (regimeData.r3 > 0 ? "+" : "") + regimeData.r3.toFixed(3) + "%, range width " + regimeData.widthPct.toFixed(2) + "%. Entry waits for the edge rejection."
+    : votes.join(" + ") + " agree in " + regimeData.regime + "; 5m " + r5.toFixed(2) + "%, 15m " + r15.toFixed(2) + "%, 1h " + r60.toFixed(2) + "%, RSI " + (rsiAvailable ? rv.toFixed(1) : "unavailable") + ".";
+  const bounceReason = bounce ? " Confirmed " + bounce.type + " after " + bounce.priorMovePct.toFixed(2) + "% prior " + (bounce.side === "LONG" ? "decline" : "rally") + ", " + bounce.reversalPct.toFixed(2) + "% reversal, " + (bounce.confirm3mPct > 0 ? "+" : "") + bounce.confirm3mPct.toFixed(2) + "% over 3m; pivot " + bounce.pivotAgeMinutes + "m ago and 5m EMA " + bounce.emaConfirmed.toLowerCase() + "." : "";
+  return {
+    symbol, side, entry:cur, stopPct:stop, targetPct:target, confidence:technicalScore,
+    scoreComponents, scoreModel:"regime-switch-v3", strategy:votes.join("+"),
+    reason:baseReason + bounceReason, rsi:rsiAvailable ? rv : null, bounce,
+    regime:regimeData.regime, mode, holdMinutes:mode === "RANGE_SCALP" ? 12 : 180,
+    cci:mode === "RANGE_SCALP" ? regimeData.cci : null,
+    rangePositionPct:mode === "RANGE_SCALP" ? regimeData.rangePositionPct : null,
+    rangeWidthPct:mode === "RANGE_SCALP" ? regimeData.widthPct : null
+  };
+}
+__name(analyse, "analyse");
+
+async function review(env, s, forecast, market, intraday, eventIntel = null) {
+  const keys = [env.GEMINI_API_KEY_1, env.GEMINI_API_KEY_2, env.GEMINI_API_KEY_3, env.GEMINI_API_KEY_4, env.GEMINI_API_KEY_5, env.GEMINI_API_KEY_6, env.GEMINI_API_KEY_7].map((x) => (x || "").trim()).filter(Boolean);
+  let model = (env.GEMINI_MODEL || "gemini-3.8-flash").trim();
+  const models = [...new Set([model, "gemini-3.8-flash", "gemini-3.6-flash"])];
+  const wait = /* @__PURE__ */ __name((reason, flag) => ({ verdict: "WAIT", reason, flags: [flag], model, queries: [], sources: [] }), "wait");
+  if (!keys.length) return wait("No Gemini key configured.", "NO_GEMINI_KEY");
+  const cooldownKey = "ciel:gemini:cooldown";
+  let cooldown = {};
+  try {

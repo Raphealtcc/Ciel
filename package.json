@@ -1,0 +1,12 @@
+{
+  "name": "ciel-recovery",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "reassemble": "node scripts/reassemble-recovered-worker.mjs",
+    "check": "npm run reassemble && node --check reconstructed/worker.js"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
+}
