@@ -142,7 +142,7 @@ assert.ok(Math.abs(stopped.availableBalanceMon - 55.6) < 1e-9);
 const targetStorage = makeStorage();
 const targetOpen = await openPaperTrade(targetStorage, params("BNB", "target-close"));
 const targetNow = targetOpen.trade.openedAtMs + 1_000;
-await managePaperTrades(targetStorage, { MON: 0.2, BNB: 100.8 }, targetNow, targetNow - 1_000, {});
+await managePaperTrades(targetStorage, { MON: 0.2, BNB: 100.81 }, targetNow, targetNow - 1_000, {});
 const targeted = await targetStorage.get("ciel:paper:account:v1");
 assert.equal(targeted.trades[0].closeReason, "TAKE_PROFIT");
 assert.ok(Math.abs(targeted.realizedPnlMon - 8.8) < 1e-9);
