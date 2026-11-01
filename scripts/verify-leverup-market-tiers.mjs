@@ -105,7 +105,6 @@ const pairsResponse = await fetchJson(PAIRS_URL);
 const allPairs = pairsResponse.content || [];
 const selected = WATCHLIST.map((symbol) => {
   const pair = allPairs.find((item) =>
-    item.symbol === symbol &&
     item.pairName === symbol + "/USD" &&
     item.isDegenPair !== true
   );
