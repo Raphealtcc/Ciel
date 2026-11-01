@@ -1,30 +1,56 @@
-# CIEL live-vs-recovery audit — 2026-11-01
+# CIEL live Cloudflare and repository audit — 2026-11-02
 
-## Scope and safety
+## Decision
 
-Audit performed against Cloudflare account profile `leno3z4rrrri@gmail.com` only. Account ID: `479908018ec0f3099f920b1a7751aadb`. The primary Cloudflare profile was not used.
+**Do not switch the Cloudflare connection or deploy to the source account yet.** The connected source account is still accessible and has not been modified. The complete account handoff is recorded in `docs/HANDOFF-2026-11-02.md`.
 
-No Worker upload, deployment, binding mutation, secret rotation, D1 write, KV write, or Durable Object write was performed during this audit. Production Worker remains untouched.
+The recovered production baseline is byte-exact. The leverage-tier patch remains isolated on `audit/paper-trading-fix`. No Worker upload, deployment, binding mutation, secret rotation, D1 write, KV write, or Durable Object write was performed.
 
-## Live Worker identity and deployment
+## 1. Cloudflare account and live Worker
 
+- Account profile: `leno3z4rrrri@gmail.com`
+- Account ID: `479908018ec0f3099f920b1a7751aadb`
+- Workers.dev subdomain: `leno3z4rrrri`
+- Custom Worker domains: none.
+
+Live Worker:
 - Script: `ciel`
-- Latest version: `505`
+- URL: `https://ciel.leno3z4rrrri.workers.dev`
+- Version: `505`
 - Version ID: `2c5ea0a1-1608-4f79-9013-86ddcac0c42a`
-- Created: `2026-10-31T17:34:05.625841Z`
 - Deployment ID: `431af2ec-8ce0-49c3-a222-b1c3a683af41`
-- Deployment allocation: 100% on version 505
+- 100% deployment allocation on version 505.
+- Created: `2026-10-31T17:34:05.625841Z`
 - Handlers: `fetch`, `scheduled`
-- Durable Object classes: `HyperliquidFeed`, `TradingEngine`
 - Cron: `* * * * *`
 - Compatibility date: `2026-09-08`, flag `nodejs_compat`
 - Usage model: `standard`
+- Cloudflare reports migration tag `v2`.
 
-The live Worker settings, version metadata, deployment allocation, bindings and cron were read from Cloudflare's API. The version and deployment agree with the recovered bundle inventory. Earlier same-day read-only endpoint snapshots recorded HTTP 200 for `/health`, `/api/signals`, and `/api/research`, but those snapshots are point-in-time evidence, not a fresh endpoint smoke test.
+The account also contains a separate `ciel-audit-probe-20261101` script with no bindings, no cron schedule and no custom route/domain. It was left untouched. There are two D1 databases and two KV namespaces in the account; the `infotrader_state` database and `infotrader-state` KV namespace are legacy separate-app resources, not CIEL staging resources.
 
-## Live configuration inventory
+## 2. Live bindings and credentials
 
-Non-secret values observed:
+| Binding | Type | Source resource |
+|---|---|---|
+| `DB` | D1 | `fb55e85b-af9b-45b3-ba43-6c7f7996dfa8` |
+| `CIEL_STATE` | KV | `8b5c4b6078ce43a8aec4d9343855a70f` |
+| `HYPERLIQUID_FEED` | Durable Object | `HyperliquidFeed`, namespace `23b7406149df46e1b737473441be73ca` |
+| `TRADING_ENGINE` | Durable Object | `TradingEngine`, namespace `116d1ec659a640c297efdf3326a4a90c` |
+
+Both Durable Object namespaces report `use_sqlite: true`. The feed namespace has one stored object with data. The retired `TradingEngine` namespace has zero objects.
+
+Secret bindings present by name:
+- `GEMINI_API_KEY_1` through `GEMINI_API_KEY_7`
+- `TELEGRAM_BOT_TOKEN`
+- `TELEGRAM_CHAT_ID`
+- `TELEGRAM_WEBHOOK_SECRET`
+
+Cloudflare does not return plaintext secret values. No values were copied, exposed or changed. No LeverUp API credential binding is present.
+
+## 3. Configuration drift
+
+Live plain-text values observed:
 - `ADVISORY_COLLATERAL_MON=10`
 - `ADVISORY_LEVERAGE=100`
 - `ADVISORY_MAX_HOLD_MINUTES=90`
@@ -34,131 +60,172 @@ Non-secret values observed:
 - `GEMINI_MODEL=gemini-3.5-flash-lite`
 - `GEMINI_REVIEW_COOLDOWN_MINUTES=15`
 - `MOVE_ALERT_PCT=2.0`
-- Watchlist: 25 symbols (BTC, ETH, MON, BNB, XRP, HYPE, ONDO, KPEPE, QNT, ZEC, TRX, AAVE, ADA, CASHCAT, DOGE, LINK, LIT, PONS, PUMP, SEI, SOL, SUI, UNI, VIRTUAL, XMR)
+- `WATCH_SYMBOLS`: 25 symbols (BTC, ETH, MON, BNB, XRP, HYPE, ONDO, KPEPE, QNT, ZEC, TRX, AAVE, ADA, CASHCAT, DOGE, LINK, LIT, PONS, PUMP, SEI, SOL, SUI, UNI, VIRTUAL, XMR).
 
-Bindings:
-- D1 `DB` → `fb55e85b-af9b-45b3-ba43-6c7f7996dfa8`
-- KV `CIEL_STATE` → `8b5c4b6078ce43a8aec4d9343855a70f`
-- Durable Object `HYPERLIQUID_FEED` → `23b7406149df46e1b737473441be73ca`, class `HyperliquidFeed`
-- Durable Object `TRADING_ENGINE` → `116d1ec659a640c297efdf3326a4a90c`, class `TradingEngine`
+A search across all recovered JavaScript modules confirms:
+- `ADVISORY_MIN_CONFIDENCE`, `ALERT_COOLDOWN_MINUTES`, `ALERT_WINDOW_MINUTES`, `GEMINI_MODEL`, `MOVE_ALERT_PCT`, and `WATCH_SYMBOLS` are read by code.
+- `ADVISORY_COLLATERAL_MON`, `ADVISORY_LEVERAGE`, `ADVISORY_MAX_HOLD_MINUTES`, and `GEMINI_REVIEW_COOLDOWN_MINUTES` are not referenced by the deployed bundle. They are stale settings, not active controls.
+- Trend-review cooldown is controlled by `ADVISORY_TREND_REVIEW_COOLDOWN_MINUTES`, default 30 minutes; this variable is not set in the source Worker.
+- The current proposal/paper path uses the code's 22 MON / 50x constants, not the stale 10 MON / 100x variables.
+- The paper trend-hold duration defaults to 180 minutes in the proposal path; `ADVISORY_MAX_HOLD_MINUTES=90` does not override it.
 
-Secret bindings already exist by name: `GEMINI_API_KEY_1` through `GEMINI_API_KEY_7`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `TELEGRAM_WEBHOOK_SECRET`. Cloudflare does not return plaintext secret values from the secret-list API. No secret values were copied, exposed or changed. No LeverUp API credential binding is present.
+The staging `wrangler.jsonc` now omits stale variables and explicitly sets the active 30-minute trend cooldown. It uses target-account placeholder IDs, not source-account IDs.
 
-## Live Cloudflare data and actual advisor activity
+## 4. D1 inventory and latest read-only observations
 
-Read-only D1 queries were executed against the live `DB` binding. The D1 database was approximately 34.2 MB at the time of the query. The following are observed database facts, not estimates:
+D1 database:
+- Name: `ciel`
+- ID: `fb55e85b-af9b-45b3-ba43-6c7f7996dfa8`
+- Size at latest query: 35,037,184 bytes.
+- 16 application tables, plus internal SQLite/Cloudflare tables.
+- The repository contains a recovered schema, not a database-data backup.
 
-- `advisor_positions`: 216 records since 2026-10-28.
-- Current status totals: 207 `EXPIRED`, 4 `CLOSING`, 2 `CLOSED`, 3 `CANCELLED`.
-- `advisor_ai_audit`: 867 decisions — 96 `APPROVE`, 39 `REJECT`, 732 `WAIT`.
-- Recent WAIT reasons include missing order-book/funding/open-interest evidence, inadequate top-of-book depth, RSI/momentum exhaustion, and a forecast that does not support the stop distance.
-- The latest recorded advisor scan had 25 configured symbols and 24 symbols with usable history. Market samples were current through 2026-11-01T10:47:48Z in the queried rows.
-- The feed Durable Object namespace contains one stored object. The retired `TradingEngine` namespace contains zero objects.
+Application table row counts:
 
-This confirms the advisor is processing markets and evaluating setups. It also shows a conversion problem: most proposals expire rather than becoming tracked positions. The current audit does not establish why each expired recommendation was not acted on; that needs a separate funnel analysis of notification delivery, callback handling, and user actions.
+| Table | Rows |
+|---|---:|
+| `advisor_ai_audit` | 936 |
+| `advisor_positions` | 233 |
+| `live_executions` | 1 |
+| `live_positions` | 1 |
+| `market_alerts` | 67 |
+| `market_book_snapshots` | 6,634 |
+| `market_candle_hourly_stats` | 2,433 |
+| `market_candles` | 20,080 |
+| `market_context_snapshots` | 44,213 |
+| `market_samples` | 95,798 |
+| `market_snapshots` | 63,226 |
+| `paper_executions` | 0 |
+| `positions` | 0 |
+| `signals` | 1 |
+| `tokens` | 191 |
+| `trades` | 1 |
 
-### Keep the separate ledgers separate
+Advisor AI audit verdict counts:
+- `APPROVE`: 112
+- `REJECT`: 41
+- `WAIT`: 783
 
-The Telegram `/profits` command reads the automatic paper ledger in the `HyperliquidFeed` Durable Object under `ciel:paper:account:v1`. It does **not** read the D1 `paper_executions` table. The D1 table currently has zero rows, which does not contradict the Telegram report of 20 closed paper trades.
+Advisor position statuses:
+- `EXPIRED`: 224
+- `CLOSING`: 4
+- `CLOSED`: 2
+- `CANCELLED`: 3
 
-The D1 `advisor_positions` table is a different ledger for proposed and manually tracked real positions. Its 216 records must not be counted as automatic paper trades.
+This means there are no currently `PROPOSED` or `OPEN` rows in the advisor-position table at the time of this query. Most recommendations expire rather than becoming manually tracked positions. This is a funnel/notification/callback issue to investigate; it is not the same thing as automatic paper trade performance.
 
-There are also legacy token-trader artifacts in the same Worker account:
-- D1 `trades` and `live_executions` each contain one confirmed live execution dated 2026-09-11.
-- D1 `paper_executions` contains zero records.
-- KV key `paper_balance_mon` reads `1000`.
-- KV key `paper_circuit_breaker` reads `paperCircuitOpen: true`, with an old recorded error: `TypeError: Cannot read properties of undefined (reading '0')`, timestamped 2026-09-09.
+Recent stored market-data timestamps:
+- `market_samples`: `2026-11-01T23:47:58.243Z`
+- `market_candles`: `2026-11-01T23:45:00.000Z`
+- `market_context_snapshots`: `2026-11-01T23:43:56.460Z`
+- `market_book_snapshots`: `2026-10-28T22:59:25.064Z`
+- `market_alerts`: `2026-10-31T20:14:15.656Z`
 
-Those KV keys belong to a separate legacy token-trading path; they are not the current perp paper ledger. The circuit-breaker record is stale, so it is evidence that this legacy path had been halted at its last recorded update, not proof of its current runtime state. Do not merge those figures into CIEL perp paper P&L.
+The old `market_book_snapshots` table is no longer persisted by the current feed code; it explicitly avoids high-volume D1 book writes. Live order-book state is maintained in the feed Durable Object and recent advisor audit records contain spread/depth values. Do not treat that old D1 table timestamp as the current live order-book timestamp.
 
-## Execution mode: paper vs live
+The `trades`, `live_executions`, `live_positions`, `tokens`, `signals` and related tables are legacy token-trader data. They are not the current perp paper ledger. Do not mix their records into CIEL perp results.
 
-The recovered code identifies the service as read-only advisory. The retired `TradingEngine` Durable Object responds HTTP 410 with a read-only/retired message. The active advisor does not submit orders to LeverUp or Hyperliquid. This is consistent with the requirement to keep activity in paper mode until LeverUp integration is ready.
+## 5. User-provided Telegram examples cross-checked against live D1
 
-The paper engine is a separate automatic simulation:
-- Fresh paper ledger defaults to 60 MON.
-- Original constants are 22 MON paper margin and 50x paper leverage.
-- A qualifying proposal attempts an automatic paper entry.
-- Paper ledger is held in Durable Object storage under `ciel:paper:account:v1`, not in the D1 trading tables.
-- `/profits` reads the paper ledger and reports balance, open/closed trades, realised/unrealised P&L, wins/losses, and strategy stats.
-- Paper exits are estimated from Hyperliquid mid prices at stop, target, profit-protection or max-hold time.
+The supplied ONDO signal `E35323EDFE` and ADA signal `762352AACB` both exist in D1 and both have status `EXPIRED`, with no manual-entry or tracking timestamp. This is consistent with the messages: pressing START TRACKING controls the separate real-position ledger. The automatic paper trader opens independently.
 
-The user's supplied `/profits` example is arithmetically coherent:
-- 38.745 MON available + 22 MON reserved = 60.745 MON cash/equity before unrealised P&L.
-- +0.745 MON realised P&L − 3.518 MON unrealised P&L = −2.773 MON total P&L.
-- 60 MON starting balance − 2.773 MON total P&L = 57.227 MON equity.
+The automatic paper ledger is stored in the `HyperliquidFeed` Durable Object under `ciel:paper:account:v1`, not in D1 `paper_executions`. D1 `paper_executions` currently has zero rows; that does not contradict the Telegram output.
 
-The displayed AAVE short's entry/mark move also agrees approximately with a 50x gross mark-to-market calculation. Its 0.4% stop distance implies roughly a 20% loss on the 22 MON margin if filled at the stop. This supports that the paper ledger is doing real arithmetic and tracking actual simulated trade state; it is not a fabricated static balance.
+The user-supplied `/profits` snapshot is arithmetically consistent:
+- 38.745 MON available + 22 MON reserved = 60.745 MON before unrealised P&L.
+- +0.745 MON realised − 3.518 MON unrealised = −2.773 MON total P&L.
+- 60 MON starter balance − 2.773 MON = 57.227 MON equity.
 
-However, the paper results are still gross and mark-based:
-- The code books stop/target exits at the configured trigger price, not at a simulated executable bid/ask or gap-through fill.
-- It uses Hyperliquid mids, not LeverUp fills or LeverUp mark/oracle prices.
-- It does not charge trading fees, funding, slippage or collateral conversion haircuts.
-- It does not simulate liquidation or exchange-specific margin checks.
+The sample AAVE short's mark movement also agrees with a 50x gross mark-to-market calculation. A 0.4% adverse move at 50x corresponds to about 20% of the 22 MON margin, or roughly 4.4 MON loss. The paper ledger is performing real stateful arithmetic; it is not a static sample balance.
 
-So the ledger is a valid *gross strategy simulation*, but it is not a faithful LeverUp execution simulator and should not be treated as realised trading profitability.
+### What the paper simulator actually does
 
-Important configuration distinction: live advisory display variables say 10 MON / 100x, while the original paper engine hardcodes 22 MON / 50x. These are separate paths. Do not assume the original paper P&L corresponds to the displayed 10 MON / 100x scenario.
+- Fresh paper state starts with 60 MON.
+- Production baseline uses 22 MON margin and 50x leverage.
+- A qualifying setup automatically attempts a paper entry.
+- Paper trade state is stored in Durable Object KV storage.
+- Stop, target, profit-protection and max-hold exits are evaluated against Hyperliquid mids.
+- P&L is converted to MON using the entry MON/USD price for notional and current MON/USD price at exit.
+- Stop/target exits book at the configured threshold; profit-protection and max-hold book at the observed current mid.
+- The paper engine caps a loss at reserved margin.
 
-## Confirmed paper trading bug and isolated fix
+This is a **gross mark-based strategy simulation**, not a faithful LeverUp execution simulator. It does not model fees, funding, executable bid/ask, spread, slippage, gap-through fills, LeverUp collateral ratio, mark/oracle differences or liquidation mechanics.
 
-The original code contains `minimumMarginForMarketLeverage()`:
+## 6. Confirmed paper-tier defect and staging patch
+
+Original helper:
 - max leverage 50 → 22 MON
 - max leverage >=100 → 11 MON
-- otherwise → unsupported
+- other tiers → unsupported
 
-But two additional gates contradicted that helper:
-1. `openPaperTrade()` rejected any market unless its max leverage was exactly 50.
-2. `runAdvisorCycle()` scanned only markets whose max leverage was exactly 50.
+But original `openPaperTrade()` rejected all markets except max leverage exactly 50, and `runAdvisorCycle()` scanned only max-50x markets. The 11 MON / >=100x branch was unreachable.
 
-Therefore the 11 MON / >=100x branch was unreachable. BTC, ETH, XRP and SOL (as currently represented in the static map) were excluded from automatic paper scanning even though the helper advertised a 100x+ margin tier.
+The isolated patch on `audit/paper-trading-fix` now:
+- allows supported 50x and >=100x market tiers;
+- uses 22 MON for 50x and 11 MON for >=100x;
+- simulates >=100x markets at a conservative 100x baseline, never at 1000x/1001x automatically;
+- makes scanner cash gating tier-aware;
+- stores the same tier-specific margin/leverage in the advisor proposal record;
+- updates the setup card, paper-open notification, `/help`, and `/profits` copy so displayed and actual paper tiers agree.
 
-An isolated patch was added on branch `audit/paper-trading-fix`:
-- Allows paper entries for supported 50x and >=100x tiers.
-- Uses 22 MON for 50x and 11 MON for >=100x.
-- Uses a conservative 100x simulation baseline for markets whose maximum leverage is >=100x (it does not automatically simulate at each market's maximum).
-- Makes the scanner's cash gate tier-aware.
-- Makes the entry notification show the actual margin and leverage.
-- Labels the `/profits` summary as leverage-tiered.
+The source map remains hardcoded in `recovered-src/symbols.js.part-001`. It is not authoritative live LeverUp metadata. Current max leverage and minimum collateral per market still require verification from LeverUp's actual market/order metadata before using the patch as an execution model.
 
-The byte-exact `recovered-src/` files remain unchanged. `scripts/apply-paper-tier-fix.mjs` applies the patch only to `reconstructed/patched-worker.js`, preserving `reconstructed/worker.js` as the exact deployed bundle.
+The byte-exact recovered fragments remain unchanged. `scripts/apply-paper-tier-fix.mjs` writes only `reconstructed/patched-worker.js`.
 
-GitLab pipeline `3014296834` verified the exact recovery hash and syntax-checked both the recovered Worker and patched staging candidate. A subsequent pipeline `3014332523` passed deterministic behavior tests against functions extracted from the patched bundle (including P&L math). Earlier pipeline `3014329246` also completed the REA analysis successfully:
-- 50x market opens with 22 MON margin and 50x simulation leverage.
-- 100x market opens with 11 MON margin and 100x simulation leverage.
-- 1001x market is simulated conservatively at 100x, not 1001x.
-- 25x and 5x tiers are rejected as unsupported by the current model.
-- A 0.4% adverse move calculates to approximately -4.4 MON / -20% ROI at 50x on 22 MON margin, and -4.4 MON / -40% ROI at 100x on 11 MON margin.
-- Insufficient balance, duplicate signal and duplicate open-symbol guards work.
+## 7. Test and REA status
 
-These tests validate the patch's current behavior. They do not prove that LeverUp's current live market configuration matches the hardcoded map.
+Behavioral tests extract the actual patched functions and test:
+- 50x / 22 MON and >=100x / 11 MON entry tiers;
+- conservative 100x baseline for max-1001 markets;
+- unsupported 25x/5x tiers;
+- insufficient balance, duplicate signal and one-open-trade-per-symbol guards;
+- 50x and 100x P&L calculations;
+- stop-loss, take-profit and max-hold closes;
+- profit-protection giveback confirmation;
+- `/profits` equity reconciliation;
+- tier-consistent Telegram setup, open and help copy.
 
-The market leverage map remains hardcoded in `recovered-src/symbols.js.part-001`; it must not be treated as verified live LeverUp market metadata. The user's reported minimums still need authoritative market metadata verification before matching the simulator to LeverUp.
+The latest passing behavioral verification before the current CI update is GitLab pipeline `3015613308` / job `17649637022`. The current CI job is being updated to run REA on the patched candidate and is in progress at the time of this report.
 
-## Endpoint verification status
+REA on the recovered production bundle completed:
+- 7 JavaScript files parsed
+- 66,209 AST nodes visited
+- 216 findings
+- 0 parse failures
+- 134 application graph nodes, 230 edges
+- route inventory coverage: unknown
 
-Recovered route table includes:
+REA is static analysis. Its route inventory is not an HTTP route test and does not prove runtime behavior.
+
+## 8. Endpoint and telemetry limitations
+
+The recovered request handler contains:
 - GET `/`, `/health`, `/api/markets`, `/api/candles`, `/api/orderbook`, `/api/positions`, `/api/signals`, `/api/research`, `/api/intraday`, `/api/alerts`
 - POST `/telegram/webhook`, `/telegram/register-webhook`
 
-The Cloudflare account API was able to verify the Worker configuration and deployment. The available execution environment blocked direct fetch requests to the public `workers.dev` hostname (403 policy block), and the web fetcher could not retrieve the endpoint URLs. Thus a fresh live HTTP smoke test of those public endpoints is not claimed here. Prior same-day snapshots remain recorded in `docs/live-runtime-snapshot-2026-11-01.md`.
+The Cloudflare API verified script settings, deployment allocation, bindings, schedules, resource IDs and version metadata. Direct fetches from this execution environment to the public `workers.dev` hostname were blocked by a 403 network policy. Therefore no fresh HTTP endpoint smoke test is claimed. Prior same-day snapshots remain point-in-time evidence only.
 
-Cloudflare Observability key discovery succeeded, but the two-hour Workers dataset event query returned zero events and the 24-hour usage endpoint also returned zero. This is not proof the Worker received no traffic; it means those telemetry endpoints did not provide usable request/log evidence for this audit.
+Cloudflare Observability key discovery succeeded, but the available telemetry query returned zero event rows and the usage endpoint returned zero. This is not evidence of zero traffic; those endpoints did not provide usable request/log data in this audit.
 
-## Credentials and account access
+## 9. Staging-account safety and remaining work
 
-Cloudflare's secret list confirms that seven Gemini key slots and three Telegram secret bindings already exist. Secret values cannot be read back through Cloudflare's API, by design. Therefore they cannot be safely copied into GitLab CI variables from this session. They remain configured on the source Worker. No credentials were written to the repository. There are no LeverUp API credentials configured in the Worker.
+The updated `wrangler.jsonc` is a new-account template:
+- Worker name `ciel-paper-staging`
+- D1/KV IDs are placeholders and must be replaced with target-account IDs.
+- DO migration uses `new_sqlite_classes`, matching the source namespaces' SQLite backend.
+- Fresh target migration tag is `v1`; do not copy the source Worker `v2` tag blindly.
 
-## Required fixes before any deployment
+Before staging:
+1. Create a target D1 database and KV namespace, then replace the placeholders.
+2. Apply the reviewed recovered D1 schema.
+3. Configure new Gemini and Telegram secrets. Use a separate Telegram bot for staging so its webhook cannot replace the live bot's webhook.
+4. Keep LeverUp credentials absent; staging remains advisory/paper-only.
+5. Test health, all routes, Telegram webhook/buttons, paper open/close lifecycle, DO persistence after restart, feed reconnects, D1 write volume and current LeverUp market limits.
+6. Investigate the 224 expired recommendations and verify notification/callback handling.
+7. Add realistic execution-cost and liquidation assumptions before treating paper results as LeverUp performance.
 
-1. Keep the byte-exact recovered fragments immutable as forensic evidence.
-2. Verify market max leverage and minimum collateral against authoritative LeverUp market metadata before using the static map for real integration.
-3. Freshly smoke-test every GET route, Telegram webhook and callbacks. The current tool environment cannot reach the public Worker hostname directly.
-4. Test paper open/close lifecycle, Durable Object persistence across restarts, feed reconnects, and D1 write volume on a separate staging Worker.
-5. Add realistic bid/ask fills, gap-through stop handling, fees, funding, slippage, collateral conversion, mark/oracle differences and liquidation assumptions before interpreting paper P&L as LeverUp performance.
-6. Investigate why 207 of 216 advisor recommendations expired; verify Telegram delivery and callback handling before assuming the user simply ignored them.
-7. Only then consider production cutover. Do not disable or overwrite the existing source Worker during reconstruction.
+A D1 full export was not initiated because Cloudflare warns that an in-progress export may make the live database unavailable while the export is running. The recovered schema is available in GitLab; D1 data and the protected Durable Object ledger are not copied.
 
-## Decision
+## Final decision
 
-**Production audit is not yet passed for deployment.** The recovered source matches the live version inventory, and the isolated paper-tier patch now passes deterministic behavioral tests. However, fresh live endpoint smoke tests, authoritative LeverUp market metadata, full DO lifecycle testing, and realistic execution-cost modeling remain outstanding. The production Worker was not modified.
+The source account is sufficiently inventoried to prepare a separate staging deployment without losing the code/configuration record. The source Worker remains unchanged. The paper-tier patch has passed deterministic behavior tests, but it is not production-ready until patched-bundle REA, fresh endpoint smoke tests, authoritative LeverUp metadata, DO restart/persistence tests and realistic execution modeling are complete.
