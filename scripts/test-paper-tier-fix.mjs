@@ -6,18 +6,18 @@ const source = await readFile("reconstructed/patched-worker.js", "utf8");
 
 function extractBetween(start, end) {
   const from = source.indexOf(start);
-  assert.notEqual(from, -1, `Missing source marker: ${start}`);
+  assert.notEqual(from, -1, \`Missing source marker: \${start}\`);
   const to = source.indexOf(end, from);
-  assert.notEqual(to, -1, `Missing end marker: ${end}`);
+  assert.notEqual(to, -1, \`Missing end marker: \${end}\`);
   return source.slice(from, to).trim();
 }
 
-const mapMatch = source.match(/var LEVERUP_MARKET_MAX_LEVERAGE = Object\\.freeze\\((\\{[\\s\\S]*?\\})\\);/);
+const mapMatch = source.match(/var LEVERUP_MARKET_MAX_LEVERAGE = Object\.freeze\((\{[\s\S]*?\})\);/);
 assert.ok(mapMatch, "Could not extract the market leverage map from the patched bundle");
 
 const sentMessages = [];
 const context = vm.createContext({
-  LEVERUP_MARKET_MAX_LEVERAGE: vm.runInNewContext(`(${mapMatch[1]})`),
+  LEVERUP_MARKET_MAX_LEVERAGE: vm.runInNewContext(\`(\${mapMatch[1]})\`),
   PAPER_STARTING_BALANCE_MON: 60,
   PAPER_ACCOUNT_KEY: "ciel:paper:account:v1",
   PAPER_LEVERAGE: 50,
@@ -35,10 +35,10 @@ const definitions = [
   extractBetween("function updateProfitProtectionState", "async function managePaperTrades"),
   extractBetween("async function managePaperTrades", "async function getPaperSummary"),
   extractBetween("async function getPaperSummary", "function setupMessage"),
-].join("\\n");
+].join("\n");
 
 vm.runInContext(
-  definitions + "\\nglobalThis.paperTests = { minimumMarginForMarketLeverage, openPaperTrade, paperTradePnl, managePaperTrades, getPaperSummary };",
+  definitions + "\nglobalThis.paperTests = { minimumMarginForMarketLeverage, openPaperTrade, paperTradePnl, managePaperTrades, getPaperSummary };",
   context,
 );
 const { minimumMarginForMarketLeverage, openPaperTrade, paperTradePnl, managePaperTrades, getPaperSummary } = context.paperTests;
@@ -131,7 +131,7 @@ const stopStorage = makeStorage();
 const stopOpen = await openPaperTrade(stopStorage, params("BNB", "stop-close"));
 const stopNow = stopOpen.trade.openedAtMs + 1_000;
 await managePaperTrades(stopStorage, { MON: 0.2, BNB: 99.6 }, stopNow, stopNow - 1_000, {});
-const stopped = (await stopStorage.get("ciel:paper:account:v1"));
+const stopped = await stopStorage.get("ciel:paper:account:v1");
 assert.equal(stopped.trades[0].status, "CLOSED");
 assert.equal(stopped.trades[0].closeReason, "STOP_LOSS");
 assert.ok(Math.abs(stopped.realizedPnlMon - (-4.4)) < 1e-9);
