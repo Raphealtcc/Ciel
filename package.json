@@ -4,7 +4,9 @@
   "type": "module",
   "scripts": {
     "reassemble": "node scripts/reassemble-recovered-worker.mjs",
-    "check": "npm run reassemble && node --check reconstructed/worker.js"
+    "check": "npm run reassemble && node --check reconstructed/worker.js",
+    "patch:paper": "node scripts/apply-paper-tier-fix.mjs",
+    "check:paper": "npm run reassemble && npm run patch:paper && node --check reconstructed/patched-worker.js"
   },
   "devDependencies": {
     "wrangler": "^4.0.0"

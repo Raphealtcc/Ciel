@@ -5,8 +5,10 @@ verify-ciel-recovery:
   stage: verify
   script:
     - node --check scripts/reassemble-recovered-worker.mjs
+    - node --check scripts/apply-paper-tier-fix.mjs
     - node --check scripts/summarize-rea.mjs
     - npm run check
+    - npm run check:paper
   rules:
     - if: '$CI_COMMIT_BRANCH'
 
