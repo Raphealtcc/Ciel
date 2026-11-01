@@ -1,0 +1,88 @@
+// src/cloudflare-forecast.ts
+// A bounded, transparent 5-minute statistical ensemble. It runs in the
+// existing Worker CPU invocation using the in-memory price history only.
+// No Workers AI binding, model request, additional D1/KV write, or new cron.
+function forecastWithCloudflareStats(symbol, rows, now) {
+  const model = "CIEL Statistical Ensemble v1";
+  const source = "Cloudflare Worker CPU (in-process)";
+  const unavailable = (reason, samples = 0) => ({
+    available: false, model, source, reason, symbol, samples,
+    forecastHorizon: 5, contextWindow: 60, generatedAt: now
+  });
+  const points = (Array.isArray(rows) ? rows : []).map((row) => ({
+    ts_ms: Number(row.ts_ms),
+    mid_price: Number(row.mid_price)
+  })).filter((row) => Number.isFinite(row.ts_ms) && row.ts_ms > 0 &&
+    Number.isFinite(row.mid_price) && row.mid_price > 0)
+    .sort((a, b) => a.ts_ms - b.ts_ms).slice(-180);
+  if (points.length < 180) {
+    return unavailable("The local forecast requires 180 valid cached one-minute price samples.", points.length);
+  }
+  const latest = points[points.length - 1];
+  const age = now - latest.ts_ms;
+  if (age < -30000 || age > 120000) {
+    return unavailable("The latest cached price sample is stale or timestamp-invalid.", points.length);
+  }
+  const reference = (minutes) => {
+    const target = latest.ts_ms - minutes * 60000;
+    for (let i = points.length - 1; i >= 0; i--) {
+      if (points[i].ts_ms <= target) {
+        return target - points[i].ts_ms <= 90000 ? points[i].mid_price : null;
+      }
+    }
+    return null;
+  };
+  const p5 = reference(5), p15 = reference(15), p60 = reference(60);
+  if (!(p5 > 0 && p15 > 0 && p60 > 0)) {
+    return unavailable("Price history has gaps around the 5, 15 or 60 minute forecast anchors.", points.length);
+  }
+  const pctChange = (current, previous) => (current / previous - 1) * 100;
+  const r5 = pctChange(latest.mid_price, p5);
+  const r15 = pctChange(latest.mid_price, p15);
+  const r60 = pctChange(latest.mid_price, p60);
+  const fit = points.filter((point) => point.ts_ms >= latest.ts_ms - 30 * 60000).slice(-31);
+  if (fit.length < 20) {
+    return unavailable("Not enough recent points for the local trend fit.", points.length);
+  }
+  let sx = 0, sy = 0, sxx = 0, sxy = 0;
+  for (const point of fit) {
+    const x = (point.ts_ms - latest.ts_ms) / 60000;
+    const y = Math.log(point.mid_price);
+    sx += x; sy += y; sxx += x * x; sxy += x * y;
+  }
+  const n = fit.length;
+  const denominator = n * sxx - sx * sx;
+  if (!(Math.abs(denominator) > 1e-9)) {
+    return unavailable("The local trend fit is degenerate.", points.length);
+  }
+  const slopePctPerMinute = (n * sxy - sx * sy) / denominator * 100;
+  const oneMinuteReturns = [];
+  for (let i = Math.max(1, fit.length - 30); i < fit.length; i++) {
+    const elapsedMinutes = (fit[i].ts_ms - fit[i - 1].ts_ms) / 60000;
+    if (elapsedMinutes < 0.5 || elapsedMinutes > 1.5) continue;
+    oneMinuteReturns.push(100 * Math.log(fit[i].mid_price / fit[i - 1].mid_price) / elapsedMinutes);
+  }
+  if (oneMinuteReturns.length < 15) {
+    return unavailable("Not enough contiguous one-minute returns to estimate forecast volatility.", points.length);
+  }
+  const mean = oneMinuteReturns.reduce((sum, value) => sum + value, 0) / oneMinuteReturns.length;
+  const variance = oneMinuteReturns.reduce((sum, value) => sum + (value - mean) ** 2, 0) / oneMinuteReturns.length;
+  const volatility5mPct = Math.sqrt(Math.max(0, variance)) * Math.sqrt(5);
+  const trendProjection5mPct = slopePctPerMinute * 5;
+  const medianReturnPct = 0.40 * r5 + 0.25 * (r15 / 3) +
+    0.15 * (r60 / 12) + 0.20 * trendProjection5mPct;
+  if (![medianReturnPct, volatility5mPct, r5, r15, r60].every(Number.isFinite)) {
+    return unavailable("The local forecast produced a non-finite value.", points.length);
+  }
+  const envelope = 1.28 * volatility5mPct;
+  return {
+    available: true, model, source, symbol,
+    reason: "Five-minute projection blends observed 5m/15m/60m momentum with a 30m log-price trend fit. The volatility envelope is heuristic, not a calibrated probability interval.",
+    samples: points.length, forecastHorizon: 5, contextWindow: 60,
+    medianReturnPct, lowerReturnPct: medianReturnPct - envelope,
+    upperReturnPct: medianReturnPct + envelope,
+    volatility5mPct, generatedAt: now,
+    components: { return5mPct: r5, return15mPct: r15, return60mPct: r60, trendProjection5mPct }
+  };
+}
+

@@ -1,0 +1,99 @@
+ HTTP " + response.status);
+          const payload = await response.json();
+          const candles = Array.isArray(payload) ? payload : [payload];
+          const valid = candles.flatMap((raw) => {
+            if (!raw || typeof raw !== "object" || Array.isArray(raw)) return [];
+            const candle = raw;
+            const candleSymbol = String(candle.s || symbol).trim().toUpperCase();
+            const interval = String(candle.i || "5m");
+            const openAt = Number(candle.t), closeAt = Number(candle.T || candle.t);
+            const open = Number(candle.o), high = Number(candle.h), low = Number(candle.l), close = Number(candle.c);
+            const volume = Number(candle.v || 0), trades = Number(candle.n || 0);
+            if (candleSymbol !== symbol || interval !== "5m" || !(openAt > 0) || ![open, high, low, close].every((value) => Number.isFinite(value) && value > 0)) return [];
+            return [{
+              openAt,
+              closeAt,
+              open,
+              high,
+              low,
+              close,
+              volume: Number.isFinite(volume) ? volume : 0,
+              trades: Number.isFinite(trades) ? trades : 0
+            }];
+          }).sort((a, b) => a.openAt - b.openAt);
+          if (!valid.length) return;
+          const latestClosed = [...valid].reverse().find((candle) => candle.closeAt <= now);
+          if (!latestClosed) return;
+          if (!CANDLE_HISTORY_SYMBOLS.has(symbol)) {
+            const closed = valid.filter((candle) => candle.closeAt <= now);
+            const buckets = /* @__PURE__ */ new Map();
+            for (const candle of closed) {
+              const bucket = Math.floor(candle.openAt / 36e5) * 36e5;
+              const group = buckets.get(bucket) || [];
+              group.push(candle);
+              buckets.set(bucket, group);
+            }
+            for (const [bucket, group] of buckets) {
+              group.sort((a, b) => a.openAt - b.openAt);
+              const first = group[0], last = group[group.length - 1];
+              statements.push(this.env.DB.prepare(
+                "INSERT INTO market_candle_hourly_stats (symbol,bucket_ms,low_price,high_price,first_ts,last_ts,candle_count) VALUES(?,?,?,?,?,?,?) ON CONFLICT(symbol,bucket_ms) DO UPDATE SET low_price=MIN(market_candle_hourly_stats.low_price,excluded.low_price), high_price=MAX(market_candle_hourly_stats.high_price,excluded.high_price), first_ts=MIN(market_candle_hourly_stats.first_ts,excluded.first_ts), last_ts=MAX(market_candle_hourly_stats.last_ts,excluded.last_ts), candle_count=MIN(12,market_candle_hourly_stats.candle_count + MAX(0,CAST((excluded.last_ts-MAX(market_candle_hourly_stats.last_ts,excluded.first_ts))/300000 AS INTEGER)))"
+              ).bind(
+                symbol,
+                bucket,
+                Math.min(...group.map((candle) => candle.low)),
+                Math.max(...group.map((candle) => candle.high)),
+                first.openAt,
+                last.closeAt,
+                group.length
+              ));
+            }
+            return;
+          }
+          for (const candle of valid) {
+            const isLatestClosed = latestClosed.openAt === candle.openAt;
+            const sql = isLatestClosed ? "INSERT OR REPLACE INTO market_candles (symbol, interval, open_ts_ms, close_ts_ms, open_price, high_price, low_price, close_price, volume, trade_count, updated_at_ms) VALUES (?, '5m', ?, ?, ?, ?, ?, ?, ?, ?, ?)" : "INSERT OR IGNORE INTO market_candles (symbol, interval, open_ts_ms, close_ts_ms, open_price, high_price, low_price, close_price, volume, trade_count, updated_at_ms) VALUES (?, '5m', ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+            statements.push(this.env.DB.prepare(sql).bind(
+              symbol,
+              candle.openAt,
+              candle.closeAt,
+              candle.open,
+              candle.high,
+              candle.low,
+              candle.close,
+              candle.volume,
+              candle.trades,
+              now
+            ));
+          }
+        } catch (error) {
+          console.error("REST candle snapshot failed for " + symbol + ": " + String(error).slice(0, 180));
+        }
+      }));
+    }
+    if (statements.length) {
+      try {
+        await this.env.DB.batch(statements);
+      } catch (error) {
+        console.error("D1 candle/summary batch failed: " + String(error).slice(0, 250));
+      }
+    }
+    if (now - this.lastHourlySummaryAt >= 15 * 60 * 1e3) {
+      this.lastHourlySummaryAt = now;
+      await this.state.storage.put("lastHourlySummaryAt", now);
+      const hourStart = Math.floor(now / 36e5) * 36e5;
+      const aggregateStatements = symbols.filter((symbol) => CANDLE_HISTORY_SYMBOLS.has(symbol)).map((symbol) => this.env.DB.prepare(
+        "INSERT INTO market_candle_hourly_stats (symbol,bucket_ms,low_price,high_price,first_ts,last_ts,candle_count) SELECT symbol,CAST(open_ts_ms/3600000 AS INTEGER)*3600000,MIN(low_price),MAX(high_price),MIN(open_ts_ms),MAX(close_ts_ms),COUNT(*) FROM market_candles WHERE symbol=? AND interval='5m' AND open_ts_ms>=? AND open_ts_ms<? GROUP BY symbol,CAST(open_ts_ms/3600000 AS INTEGER) ON CONFLICT(symbol,bucket_ms) DO UPDATE SET low_price=MIN(market_candle_hourly_stats.low_price,excluded.low_price),high_price=MAX(market_candle_hourly_stats.high_price,excluded.high_price),first_ts=MIN(market_candle_hourly_stats.first_ts,excluded.first_ts),last_ts=MAX(market_candle_hourly_stats.last_ts,excluded.last_ts),candle_count=excluded.candle_count"
+      ).bind(symbol, hourStart, hourStart + 36e5));
+      if (aggregateStatements.length) {
+        try {
+          await this.env.DB.batch(aggregateStatements);
+        } catch (error) {
+          console.error("Hourly candle summary refresh failed: " + String(error).slice(0, 250));
+        }
+      }
+    }
+  }
+  async hydrateHistoryFromD1(now) {
+    const symbols = [...BENCHMARK_PRICE_SYMBOLS].filter((symbol) => Number(this.latest[symbol]) > 0 && (this.history[symbol] || []).length < 180);
+    if (!symbols.lengt

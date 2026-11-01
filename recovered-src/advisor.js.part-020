@@ -1,0 +1,66 @@
+available" : signedMon(trade.pnlMon) + " (" + Number(trade.roiPct).toFixed(2) + "% on margin)";
+        lines.push(trade.side + " " + trade.symbol + " | " + (trade.mode === "RANGE_SCALP" ? "RANGE SCALP" : trade.mode === "TREND_HOLD" ? "TREND HOLD" : "LEGACY") + " | " + trade.leverage + "x | margin " + Number(trade.marginMon).toFixed(2) + " MON");
+        lines.push("Entry $" + fmt(trade.entryPrice) + " | mark " + (trade.currentPrice ? "$" + fmt(trade.currentPrice) : "n/a") + " | " + pnl);
+        lines.push("Stop $" + fmt(trade.stopPrice) + " | target $" + fmt(trade.targetPrice) + " | signal " + trade.signalId);
+      }
+    } else lines.push("", "No open paper trades.");
+    if (data.recentClosed.length) {
+      lines.push("", "RECENT CLOSED TRADES");
+      for (const trade of data.recentClosed) {
+        lines.push(trade.side + " " + trade.symbol + " | " + (trade.mode === "RANGE_SCALP" ? "RANGE SCALP" : trade.mode === "TREND_HOLD" ? "TREND HOLD" : "LEGACY") + " | " + trade.closeReason + " | " + signedMon(trade.pnlMon) + " | " + Number(trade.returnOnMarginPct).toFixed(2) + "%");
+      }
+    }
+    lines.push("", "Gross simulated results using Hyperliquid mids, not LeverUp fills. Fees, funding, slippage, collateral haircuts and liquidation mechanics are not simulated.");
+    await notify(env, lines.join("\n"));
+    return true;
+  }
+  if (cmd === "/entered") {
+    const fill = Number(a[2]);
+    if (!id || !(fill > 0)) {
+      await notify(env, "Usage: /entered SIGNAL_ID ACTUAL_ENTRY_PRICE");
+      return true;
+    }
+    const p = await getOpen(env, id);
+    if (!p) {
+      await notify(env, "Signal not found or not tracking.");
+      return true;
+    }
+    const monPrice2 = await liveMon(env);
+    if (!(monPrice2 > 0)) {
+      await notify(env, "Fresh MON/USD proxy unavailable; fill not registered.");
+      return true;
+    }
+    const direction = p.side === "LONG" ? 1 : -1, now = Date.now();
+    const updated = await env.DB.prepare("UPDATE advisor_positions SET actual_entry_price=?,entry_mon_usd=?,stop_price=?,target_price=?,manual_entry_at_ms=?,updated_at_ms=? WHERE id=? AND status='OPEN'").bind(fill, monPrice2, fill * (1 - direction * p.stop_pct / 100), fill * (1 + direction * p.target_pct / 100), now, now, id).run();
+    await notify(env, (updated.meta?.changes || 0) > 0 ? "Actual manual fill saved at $" + fmt(fill) + ". Ciel continues tracking from this fill." : "Fill could not be saved.");
+    return true;
+  }
+  if (cmd === "/cancel") {
+    if (!id) {
+      await notify(env, "Usage: /cancel SIGNAL_ID");
+      return true;
+    }
+    const updated = await env.DB.prepare("UPDATE advisor_positions SET status='CANCELLED',updated_at_ms=? WHERE id=? AND status='PROPOSED'").bind(Date.now(), id).run();
+    await notify(env, (updated.meta?.changes || 0) > 0 ? "Unstarted proposal cancelled." : "Only an unstarted proposal can be cancelled.");
+    return true;
+  }
+  const monPrice = await liveMon(env);
+  const rows = await env.DB.prepare("SELECT * FROM advisor_positions WHERE status IN ('PROPOSED','OPEN','EXIT_ALERTED','CLOSING') ORDER BY created_at_ms DESC LIMIT 20").all();
+  if (!(rows.results || []).length) {
+    await notify(env, "No pending recommendation or tracked position. Ciel waits for a fully confirmed setup.");
+    return true;
+  }
+  const lines = [cmd === "/signals" ? "\u{1F4E1} CIEL SIGNALS" : "\u{1F4C8} CIEL POSITION TRACKER"];
+  for (const p of rows.results || []) {
+    const row = await env.DB.prepare("SELECT mid_price,ts_ms FROM market_samples WHERE symbol=? ORDER BY ts_ms DESC LIMIT 1").bind(p.symbol).first();
+    const current = row && Date.now() - row.ts_ms <= MAX_AGE ? Number(row.mid_price) || 0 : 0;
+    const value = (p.status === "OPEN" || p.status === "EXIT_ALERTED") && current > 0 && monPrice > 0 ? pnlFor(p, current, monPrice) : null;
+    const entry = p.actual_entry_price || p.tracking_entry_price || p.entry_price;
+    const scoreLabel = String(p.rationale || "").includes("Technical strength model v2:") ? "v2 technical strength " + (p.confidence * 100).toFixed(0) + "/100 (evidence score; not win probability)" : "legacy technical score " + (p.confidence * 100).toFixed(0) + "/100 (old formula; not comparable to v2 or a win probability)";
+    lines.push(p.id + " " + p.side + " " + p.symbol + " | " + p.status, "Entry $" + fmt(entry) + " | current $" + fmt(current), "Stop $" + fmt(p.stop_price) + " | target $" + fmt(p.target_price) + " | " + scoreLabel, value ? "Gross estimated P&L " + money(value.usd) + " (" + mon(value.mon) + ") | " + value.roiPct.toFixed(1) + "% of margin" : "P&L not available or not tracking.", "Use /entered " + p.id + " ACTUAL_ENTRY_PRICE after a fill");
+  }
+  await notify(env, lines.join("\n"));
+  return true;
+}
+__name(handleAdvisorCommand, "handleAdvisorCommand");
+

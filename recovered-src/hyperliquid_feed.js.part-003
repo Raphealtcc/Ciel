@@ -1,0 +1,120 @@
+ 0;
+      this.lastError = "Could not open Hyperliquid WebSocket: " + String(error).slice(0, 250);
+      console.error(this.lastError);
+      void this.state.storage.put("lastError", this.lastError).catch(() => void 0);
+      void this.scheduleAlarm(15e3);
+    }
+  }
+  async checkOpenPositions(now) {
+    if (now - this.lastPositionCheckAt < POSITION_CHECK_INTERVAL_MS) return;
+    this.lastPositionCheckAt = now;
+    try {
+      await manageOpenPositions(this.env, this.latest, now, this.lastTickAt, this.state.storage);
+    } catch (error) {
+      console.error("Ciel position check failed: " + String(error).slice(0, 350));
+    }
+    try {
+      await managePaperTrades(this.state.storage, this.latest, now, this.lastTickAt, this.env);
+    } catch (error) {
+      console.error("Ciel paper-trade check failed: " + String(error).slice(0, 350));
+    }
+  }
+  watchlist() {
+    return configuredWatchSymbols(this.env.WATCH_SYMBOLS);
+  }
+  persistedSymbols(_now) {
+    // Persist the one-minute target series for every live watchlist market.
+    // Missing order books still block market-quality approval, not price history.
+    return this.watchlist().filter((symbol) => Number(this.latest[symbol]) > 0);
+  }
+  snapshot() {
+    const watchlist = this.watchlist();
+    const markets = watchlist.map((symbol) => {
+      const price = this.latest[symbol];
+      return {
+        symbol,
+        price: Number.isFinite(price) && price > 0 ? price : null,
+        available: Number.isFinite(price) && price > 0
+      };
+    });
+    const available = markets.filter((market) => market.available).length;
+    const now = Date.now();
+    const orderBooks = {};
+    for (const symbol of watchlist) { const book = this.latestBooks[symbol]; if (book && Number.isFinite(Number(book.ts_ms)) && now - Number(book.ts_ms) >= 0 && now - Number(book.ts_ms) <= 18e4) orderBooks[symbol] = book; }
+    const bookCount = Object.keys(orderBooks).length;
+    return {
+      service: "Ciel Hyperliquid Market Watch",
+      mode: "read-only",
+      source: "Hyperliquid allMids (WebSocket with public REST fallback)",
+      websocketUrl: HYPERLIQUID_WS,
+      connected: this.connected,
+      connectionState: !this.socket ? "closed" : this.socket.readyState === WebSocket.OPEN ? "open" : this.socket.readyState === WebSocket.CONNECTING ? "connecting" : this.socket.readyState === WebSocket.CLOSING ? "closing" : "closed",
+      lastConnectAttemptAt: this.lastConnectAttemptAt || null,
+      lastOpenAt: this.lastOpenAt || null,
+      lastCloseAt: this.lastCloseAt || null,
+      lastCloseCode: this.lastCloseCode,
+      lastCloseReason: this.lastCloseReason || null,
+      reconnectAttempts: this.reconnectAttempts,
+      lastMessageAt: this.lastMessageAt || null,
+      lastPongAt: this.lastPongAt || null,
+      lastPingAt: this.lastPingAt || null,
+      lastMessageAt: this.lastMessageAt || null,
+      lastTickAt: this.lastTickAt || null,
+      lastSampleAt: this.lastSampleAt || null,
+      lastError: this.lastError,
+      alertThresholdPct: numericSetting(this.env.MOVE_ALERT_PCT, 2, 0.1, 50),
+      alertWindowMinutes: numericSetting(this.env.ALERT_WINDOW_MINUTES, 5, 1, 30),
+      alertCooldownMinutes: numericSetting(this.env.ALERT_COOLDOWN_MINUTES, 15, 1, 1440),
+      watchlist,
+      availableCount: available,
+      missingSymbols: markets.filter((market) => !market.available).map((market) => market.symbol),
+      bookCount,
+      bookWatchlistCount: watchlist.length,
+      missingBookSymbols: watchlist.filter((symbol) => !orderBooks[symbol]),
+      orderBooks,
+      markets
+    };
+  }
+  async onSocketMessage(raw) {
+    let packet;
+    try {
+      packet = JSON.parse(String(raw));
+    } catch {
+      return;
+    }
+    this.lastMessageAt = Date.now();
+    if (packet.channel === "pong") {
+      this.lastPongAt = this.lastMessageAt;
+      return;
+    }
+    if (!packet.data || typeof packet.data !== "object") return;
+    const data = packet.data;
+    if (packet.channel === "candle") {
+      const candleUpdates = Array.isArray(data) ? data : [data];
+      for (const rawCandle of candleUpdates) {
+        if (!rawCandle || typeof rawCandle !== "object" || Array.isArray(rawCandle)) continue;
+        const candle = rawCandle;
+        const symbol = String(candle.s || candle.coin || "").trim().toUpperCase();
+        const interval = String(candle.i || "1m");
+        const openAt = Number(candle.t);
+        const closeAt = Number(candle.T || candle.t);
+        const open = Number(candle.o), high = Number(candle.h), low = Number(candle.l), close = Number(candle.c);
+        const volume = Number(candle.v || 0), trades = Number(candle.n || 0);
+        if (!symbol || !["1m", "5m", "15m", "1h"].includes(interval) || !(openAt > 0) || ![open, high, low, close].every((value) => Number.isFinite(value) && value > 0)) continue;
+        try {
+          await this.env.DB.prepare(
+            "INSERT OR REPLACE INTO market_candles (symbol, interval, open_ts_ms, close_ts_ms, open_price, high_price, low_price, close_price, volume, trade_count, updated_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+          ).bind(symbol, interval, openAt, closeAt, open, high, low, close, Number.isFinite(volume) ? volume : 0, Number.isFinite(trades) ? trades : 0, Date.now()).run();
+        } catch (error) {
+          console.error("Candle storage failed for " + symbol + ": " + String(error).slice(0, 250));
+        }
+      }
+      return;
+    }
+    if (packet.channel === "l2Book" || packet.channel === "bbo") {
+      const symbol = String(data.coin || data.s || "").trim().toUpperCase();
+      const levels = packet.channel === "bbo" ? [data.bbo && data.bbo[0] ? [data.bbo[0]] : [], data.bbo && data.bbo[1] ? [data.bbo[1]] : []] : data.levels;
+      if (!symbol || !Array.isArray(levels) || !Array.isArray(levels[0]) || !Array.isArray(levels[1])) return;
+      const parseLevel = /* @__PURE__ */ __name((raw2) => {
+        if (Array.isArray(raw2)) return { price: Number(raw2[0]), size: Number(raw2[1]) };
+      

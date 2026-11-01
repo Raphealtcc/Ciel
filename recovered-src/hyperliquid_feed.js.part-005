@@ -1,0 +1,105 @@
+ter) && retryAfter > 0 ? Math.min(1200, retryAfter * 1000) : 350)); continue;
+              }
+              throw new Error(lastBookFailure);
+            }
+            if (!bookPayload) throw new Error(lastBookFailure || "l2Book did not return a payload.");
+            const levels = bookPayload?.levels;
+            if (!Array.isArray(levels) || !Array.isArray(levels[0]) || !Array.isArray(levels[1])) throw new Error("l2Book returned an empty or invalid book");
+            const parseLevel = (rawLevel) => {
+              if (Array.isArray(rawLevel)) return { price: Number(rawLevel[0]), size: Number(rawLevel[1]) };
+              if (rawLevel && typeof rawLevel === "object") return { price: Number(rawLevel.px), size: Number(rawLevel.sz) };
+              return null;
+            };
+            const bid = parseLevel(levels[0][0]), ask = parseLevel(levels[1][0]);
+            if (!bid || !ask || !(bid.price > 0 && ask.price > bid.price && bid.size >= 0 && ask.size >= 0)) throw new Error("l2Book returned invalid top levels");
+            const receivedAt = Date.now();
+            const sourceTime = Number(bookPayload.time);
+            const mid = (bid.price + ask.price) / 2;
+            const snapshot = { ts_ms: receivedAt, source_ts_ms: Number.isFinite(sourceTime) && sourceTime > 0 ? sourceTime : null, best_bid: bid.price, best_ask: ask.price, bid_size: Number.isFinite(bid.size) ? bid.size : 0, ask_size: Number.isFinite(ask.size) ? ask.size : 0, spread_bps: (ask.price - bid.price) / mid * 1e4 };
+            this.latestBooks[symbol] = snapshot;
+            this.bookLastWrite[symbol] = receivedAt;
+            // Keep REST-fallback book in Durable Object memory/state; no duplicate D1 write.
+          } catch (error) {
+            console.error("REST order-book fallback failed for " + symbol + ": " + String(error).slice(0, 160));
+          }
+        }));
+      }
+      for (let i = 0; i < Math.min(universe.length, contexts.length); i++) {
+        const symbol = String(universe[i]?.name || "").trim().toUpperCase();
+        const ctx = contexts[i] || {};
+        if (!symbol || !watch.has(symbol)) continue;
+        const values = {
+          mid: Number(ctx.midPx),
+          mark: Number(ctx.markPx),
+          oracle: Number(ctx.oraclePx),
+          funding: Number(ctx.funding),
+          oi: Number(ctx.openInterest),
+          volume: Number(ctx.dayNtlVlm),
+          previous: Number(ctx.prevDayPx),
+          premium: Number(ctx.premium)
+        };
+        const point = {
+          ts_ms: now,
+          mark_px: Number.isFinite(values.mark) ? values.mark : null,
+          oracle_px: Number.isFinite(values.oracle) ? values.oracle : null,
+          funding_rate: Number.isFinite(values.funding) ? values.funding : null,
+          open_interest: Number.isFinite(values.oi) ? values.oi : null,
+          day_ntl_volume: Number.isFinite(values.volume) ? values.volume : null
+        };
+        const history = this.contextHistory[symbol] || [];
+        if (!history.length || history[history.length - 1].ts_ms !== now) history.push(point);
+        const cutoff = now - 25 * 60 * 1e3;
+        this.contextHistory[symbol] = history.filter((row) => row.ts_ms >= cutoff).slice(-16);
+        
+        if (persistContextSnapshots) {
+          statements.push(this.env.DB.prepare(
+            "INSERT OR REPLACE INTO market_context_snapshots (symbol, ts_ms, mid_px, mark_px, oracle_px, funding_rate, open_interest, day_ntl_volume, previous_day_px, premium) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+          ).bind(
+            symbol,
+            now,
+            Number.isFinite(values.mid) ? values.mid : null,
+            Number.isFinite(values.mark) ? values.mark : null,
+            Number.isFinite(values.oracle) ? values.oracle : null,
+            Number.isFinite(values.funding) ? values.funding : null,
+            Number.isFinite(values.oi) ? values.oi : null,
+            Number.isFinite(values.volume) ? values.volume : null,
+            Number.isFinite(values.previous) ? values.previous : null,
+            Number.isFinite(values.premium) ? values.premium : null
+          ));
+        }
+      }
+      await this.state.storage.put("contextHistory", this.contextHistory).catch(() => void 0);
+      await this.state.storage.put("latestBooks", this.latestBooks).catch(() => void 0);
+      await this.state.storage.put("lastBookPersistAt", this.lastBookPersistAt).catch(() => void 0);
+      if (statements.length) {
+        await this.env.DB.batch(statements);
+        this.lastContextSnapshotPersistAt = now;
+        await this.state.storage.put("lastContextSnapshotPersistAt", now).catch(() => void 0);
+      }
+    } catch (error) {
+      console.error("Hyperliquid derivatives context refresh failed: " + String(error).slice(0, 300));
+    }
+  }
+  async writeCandleSnapshots(now) {
+    const allSymbols = this.persistedSymbols(now);
+    const rangeSlot = Math.floor(now / (5 * 60 * 1e3)) % 4;
+    const nonCoreSymbols = allSymbols.filter((symbol) => !CANDLE_HISTORY_SYMBOLS.has(symbol));
+    const symbols = [...allSymbols.filter((symbol) => CANDLE_HISTORY_SYMBOLS.has(symbol)), ...nonCoreSymbols.filter((symbol, index) => index % 4 === rangeSlot)];
+    const statements = [];
+    const refreshRangeSummaries = now - this.lastHourlySummaryAt >= 15 * 60 * 1e3;
+    const startTime = now - 20 * 60 * 1e3;
+    const endTime = now;
+    for (let offset = 0; offset < symbols.length; offset += 6) {
+      const batchSymbols = symbols.slice(offset, offset + 6);
+      await Promise.all(batchSymbols.map(async (symbol) => {
+        try {
+          const response = await fetch(HYPERLIQUID_INFO, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              type: "candleSnapshot",
+              req: { coin: symbol, interval: "5m", startTime, endTime }
+            }),
+            signal: AbortSignal.timeout(1e4)
+          });
+          if (!response.ok) throw new Error("candleSnapshot returned

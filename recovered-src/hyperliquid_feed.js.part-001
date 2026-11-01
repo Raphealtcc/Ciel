@@ -1,0 +1,161 @@
+// src/hyperliquid_feed.ts
+var BENCHMARK_PRICE_SYMBOLS = /* @__PURE__ */ new Set(["BTC", "ETH", "MON"]);
+var CANDLE_HISTORY_SYMBOLS = /* @__PURE__ */ new Set(["BTC", "ETH", "MON"]);
+var HYPERLIQUID_WS = "wss://api.hyperliquid.xyz/ws";
+var HYPERLIQUID_INFO = "https://api.hyperliquid.xyz/info";
+var SAMPLE_INTERVAL_MS = 6e4;
+var POSITION_CHECK_INTERVAL_MS = 5e3;
+var PRICE_STALE_MS = 15e3;
+var HEARTBEAT_INTERVAL_MS = 25e3;
+var HEARTBEAT_TIMEOUT_MS = 5e4;
+var MAX_HISTORY_POINTS = 200;
+function numericSetting(raw, fallback, min, max) {
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(min, Math.min(max, parsed));
+}
+__name(numericSetting, "numericSetting");
+function json(data, status = 200) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" }
+  });
+}
+__name(json, "json");
+var HyperliquidFeed = class {
+  constructor(state, env) {
+    this.state = state;
+    this.env = env;
+    this.ready = this.restore();
+  }
+  state;
+  env;
+  static {
+    __name(this, "HyperliquidFeed");
+  }
+  socket = null;
+  connectingSinceAt = 0;
+  lastConnectAttemptAt = 0;
+  lastOpenAt = 0;
+  lastCloseAt = 0;
+  lastCloseCode = null;
+  lastCloseReason = null;
+  reconnectAttempts = 0;
+  connected = false;
+  lastPongAt = 0;
+  lastPingAt = 0;
+  lastMessageAt = 0;
+  lastPositionCheckAt = 0;
+  lastTickAt = 0;
+  lastSampleAt = 0;
+  lastError = null;
+  restRefreshInProgress = false;
+  lastCleanupAt = 0;
+  lastHistoryHydrationAt = 0;
+  lastCandleSnapshotAt = 0;
+  lastContextWriteAt = 0;
+  lastContextSnapshotPersistAt = 0;
+  lastHourlySummaryAt = 0;
+  lastForecastResolveAt = 0;
+  latest = {};
+  history = {};
+  lastAlertAt = {};
+  // Keep full live book/context snapshots in the Durable Object. D1 stores bounded market history; forecasting is calculated from the existing in-memory samples.
+  latestBooks = {};
+  lastBookPersistAt = {};
+  contextHistory = {};
+  bookLastWrite = {};
+  ready;
+  async restore() {
+    const values = await Promise.all([
+      this.state.storage.get("latest"),
+      this.state.storage.get("history"),
+      this.state.storage.get("lastAlertAt"),
+      this.state.storage.get("lastTickAt"),
+      this.state.storage.get("lastSampleAt"),
+      this.state.storage.get("lastCleanupAt"),
+      this.state.storage.get("lastCandleSnapshotAt"),
+      this.state.storage.get("lastContextWriteAt"),
+      this.state.storage.get("lastHourlySummaryAt"),
+      this.state.storage.get("lastForecastResolveAt"),
+      this.state.storage.get("lastError"),
+      this.state.storage.get("lastHistoryHydrationAt"),
+      this.state.storage.get("latestBooks"),
+      this.state.storage.get("lastBookPersistAt"),
+      this.state.storage.get("contextHistory"),
+      this.state.storage.get("lastConnectAttemptAt"),
+      this.state.storage.get("lastOpenAt"),
+      this.state.storage.get("lastCloseAt"),
+      this.state.storage.get("lastCloseCode"),
+      this.state.storage.get("lastCloseReason"),
+      this.state.storage.get("reconnectAttempts"),
+      this.state.storage.get("lastContextSnapshotPersistAt")
+    ]);
+    this.latest = values[0] || {};
+    this.history = values[1] || {};
+    this.lastAlertAt = values[2] || {};
+    this.lastTickAt = values[3] || 0;
+    this.lastSampleAt = values[4] || 0;
+    this.lastCleanupAt = values[5] || 0;
+    this.lastCandleSnapshotAt = values[6] || 0;
+    this.lastContextWriteAt = values[7] || 0;
+    this.lastHourlySummaryAt = values[8] || 0;
+    this.lastForecastResolveAt = values[9] || 0;
+    this.lastError = values[10] || null;
+    this.lastHistoryHydrationAt = values[11] || 0;
+    this.latestBooks = values[12] || {};
+    this.lastBookPersistAt = values[13] || {};
+    this.bookLastWrite = Object.fromEntries(Object.entries(this.latestBooks).map(([symbol, book]) => [symbol, Number(book?.ts_ms) || 0]));
+    this.contextHistory = values[14] || {};
+    this.lastConnectAttemptAt = values[15] || 0;
+    this.lastOpenAt = values[16] || 0;
+    this.lastCloseAt = values[17] || 0;
+    this.lastCloseCode = values[18] ?? null;
+    this.lastCloseReason = values[19] || "";
+    this.reconnectAttempts = Number(values[20]) || 0;
+    this.lastContextSnapshotPersistAt = Number(values[21]) || 0;
+  }
+  async fetch(request) {
+    await this.ready;
+    const path = new URL(request.url).pathname;
+    if (path === "/ensure") {
+      this.connect();
+      if (Date.now() - this.lastTickAt > PRICE_STALE_MS) {
+        await this.refreshFromRest().catch((error) => {
+          this.lastError = "Hyperliquid REST mid fallback failed: " + String(error).slice(0, 250);
+          void this.state.storage.put("lastError", this.lastError);
+        });
+      }
+      await this.scheduleNextAlarm();
+      return json(this.snapshot());
+    }
+    if (path === "/status" || path === "/markets") {
+      return json(this.snapshot());
+    }
+    if (path === "/paper/profits") {
+      try {
+        const summary = await getPaperSummary(this.state.storage, this.latest, Date.now(), this.lastTickAt);
+        return json({ ok: true, ...summary });
+      } catch (error) {
+        const detail = String(error).slice(0, 500);
+        console.error("CIEL paper profits DO route failed: " + detail);
+        return json({ ok: false, error: "PAPER_PROFITS_ROUTE_FAILED", detail }, 500);
+      }
+    }
+    return json({ error: "Not found" }, 404);
+  }
+  async alarm() {
+    await this.ready;
+    this.connect();
+    const now = Date.now();
+    const socket = this.socket;
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      if (this.lastPongAt > 0 && now - this.lastPongAt > HEARTBEAT_TIMEOUT_MS) {
+        this.connected = false;
+        this.lastError = "Hyperliquid heartbeat timed out; reconnect scheduled";
+        void this.state.storage.put("lastError", this.lastError).catch(() => void 0);
+        try {
+          socket.close(1011, "Heartbeat timeout");
+        } catch {
+        }
+        await this.scheduleNextAlarm()

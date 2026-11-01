@@ -1,0 +1,141 @@
+;
+        return;
+      }
+      try {
+        socket.send(JSON.stringify({ method: "ping" }));
+        this.lastPingAt = now;
+      } catch (error) {
+        this.connected = false;
+        this.lastError = "Hyperliquid heartbeat send failed: " + String(error).slice(0, 180);
+        void this.state.storage.put("lastError", this.lastError).catch(() => void 0);
+        try {
+          socket.close();
+        } catch {
+        }
+      }
+    }
+    if (Date.now() - this.lastTickAt > PRICE_STALE_MS) {
+      await this.refreshFromRest().catch((error) => {
+        this.lastError = "Hyperliquid REST mid fallback failed: " + String(error).slice(0, 250);
+        void this.state.storage.put("lastError", this.lastError).catch(() => void 0);
+      });
+    }
+    await this.checkOpenPositions(Date.now());
+    await this.scheduleNextAlarm();
+  }
+  async scheduleAlarm(delayMs) {
+    try {
+      await this.state.storage.setAlarm(Date.now() + delayMs);
+    } catch (error) {
+      this.lastError = "Alarm scheduling failed: " + String(error).slice(0, 250);
+      console.error(this.lastError);
+    }
+  }
+  async scheduleNextAlarm() {
+    let delay = this.socket && this.socket.readyState === WebSocket.CONNECTING ? 5e3 : HEARTBEAT_INTERVAL_MS;
+    try {
+      const active = await this.env.DB.prepare(
+        "SELECT 1 AS active FROM advisor_positions WHERE status='OPEN' LIMIT 1"
+      ).first();
+      if (active) delay = POSITION_CHECK_INTERVAL_MS;
+      const paperState = await this.state.storage.get(PAPER_ACCOUNT_KEY);
+      if ((paperState?.trades || []).some((trade) => trade.status === "OPEN")) delay = POSITION_CHECK_INTERVAL_MS;
+    } catch (error) {
+      console.error("Could not inspect active advisor positions for alarm cadence: " + String(error).slice(0, 200));
+    }
+    await this.scheduleAlarm(delay);
+  }
+  connect() {
+    const now = Date.now();
+    if (this.socket && this.socket.readyState === WebSocket.OPEN) return;
+    if (this.socket && this.socket.readyState === WebSocket.CONNECTING) {
+      const since = this.connectingSinceAt || this.lastConnectAttemptAt || now;
+      if (now - since < 15e3) return;
+      const staleSocket = this.socket;
+      this.socket = null;
+      this.connectingSinceAt = 0;
+      this.connected = false;
+      this.lastError = "Hyperliquid WebSocket connection attempt timed out; retrying";
+      try { staleSocket.close(1011, "Connection attempt timed out"); } catch {}
+    }
+    this.connected = false;
+    try {
+      const attemptAt = Date.now();
+      this.lastConnectAttemptAt = attemptAt;
+      this.reconnectAttempts += 1;
+      void Promise.all([
+        this.state.storage.put("lastConnectAttemptAt", this.lastConnectAttemptAt),
+        this.state.storage.put("reconnectAttempts", this.reconnectAttempts)
+      ]).catch(() => void 0);
+      const socket = new WebSocket(HYPERLIQUID_WS);
+      this.socket = socket;
+      this.connectingSinceAt = attemptAt;
+      socket.addEventListener("open", () => {
+        if (this.socket !== socket) {
+          try { socket.close(); } catch {}
+          return;
+        }
+        this.connected = true;
+        this.connectingSinceAt = 0;
+        this.lastOpenAt = Date.now();
+        this.lastError = null;
+        this.lastPongAt = this.lastOpenAt;
+        this.lastMessageAt = this.lastOpenAt;
+        try {
+          socket.send(JSON.stringify({
+            method: "subscribe",
+            subscription: { type: "allMids" }
+          }));
+          // Temporary isolation: keep one allMids stream while diagnosing upstream 1006 closes.
+          // REST order-book fallback remains enabled independently.
+        } catch (error) {
+          this.lastError = "Could not subscribe to allMids/BBO: " + String(error).slice(0, 250);
+          console.error(this.lastError);
+        }
+        void Promise.all([
+          this.state.storage.put("lastOpenAt", this.lastOpenAt),
+          this.state.storage.put("lastError", "")
+        ]).catch(() => void 0);
+        console.info("Hyperliquid WebSocket connected; subscribed to allMids and BBO.");
+        void this.scheduleNextAlarm();
+      });
+      socket.addEventListener("message", (event) => {
+        if (this.socket !== socket) return;
+        void this.onSocketMessage(event.data).catch((error) => {
+          this.lastError = "Message processing failed: " + String(error).slice(0, 250);
+          console.error(this.lastError);
+        });
+      });
+      socket.addEventListener("close", (event) => {
+        if (this.socket !== socket) return;
+        this.connected = false;
+        this.socket = null;
+        this.connectingSinceAt = 0;
+        this.lastPongAt = 0;
+        this.lastPingAt = 0;
+        this.lastCloseAt = Date.now();
+        this.lastCloseCode = event.code;
+        this.lastCloseReason = event.reason || "";
+        this.lastError = "Hyperliquid WebSocket disconnected (code " + event.code + (event.reason ? ", reason " + event.reason : "") + "); reconnect scheduled";
+        void Promise.all([
+          this.state.storage.put("lastCloseAt", this.lastCloseAt),
+          this.state.storage.put("lastCloseCode", this.lastCloseCode),
+          this.state.storage.put("lastCloseReason", this.lastCloseReason),
+          this.state.storage.put("lastError", this.lastError)
+        ]).catch(() => void 0);
+        console.warn("Hyperliquid WebSocket closed: code=" + event.code + "; clean=" + event.wasClean + "; reason=" + (event.reason || "(none)"));
+        void this.scheduleAlarm(15e3);
+      });
+      socket.addEventListener("error", () => {
+        if (this.socket !== socket) return;
+        this.connected = false;
+        this.lastError = "Hyperliquid WebSocket reported an error";
+        void this.state.storage.put("lastError", this.lastError).catch(() => void 0);
+        console.warn(this.lastError);
+        try { socket.close(); } catch {}
+        void this.scheduleAlarm(15e3);
+      });
+    } catch (error) {
+      this.connected = false;
+      this.socket = null;
+      this.connectingSinceAt =

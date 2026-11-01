@@ -1,0 +1,118 @@
+  if (raw2 && typeof raw2 === "object") {
+          const level = raw2;
+          return { price: Number(level.px), size: Number(level.sz) };
+        }
+        return null;
+      }, "parseLevel");
+      const bid = parseLevel(levels[0][0]), ask = parseLevel(levels[1][0]);
+      if (!bid || !ask) return;
+      const bidPrice = bid.price, bidSize = bid.size, askPrice = ask.price, askSize = ask.size;
+      const now = Date.now();
+      if (!(bidPrice > 0 && askPrice > bidPrice && bidSize >= 0 && askSize >= 0)) return;
+      const mid = (bidPrice + askPrice) / 2;
+      const spreadBps = (askPrice - bidPrice) / mid * 1e4;
+      const snapshot = {
+        ts_ms: now,
+        best_bid: bidPrice,
+        best_ask: askPrice,
+        bid_size: Number.isFinite(bidSize) ? bidSize : 0,
+        ask_size: Number.isFinite(askSize) ? askSize : 0,
+        spread_bps: spreadBps
+      };
+      this.latestBooks[symbol] = snapshot;
+      this.bookLastWrite[symbol] = now;
+      // Keep the latest order book in Durable Object state; do not duplicate live snapshots in D1.
+      return;
+    }
+    if (packet.channel !== "allMids") return;
+    const rawMids = data.mids;
+    if (!rawMids || typeof rawMids !== "object" || Array.isArray(rawMids)) return;
+    const watch = new Set(this.watchlist());
+    const next = {};
+    for (const [coin, rawPrice] of Object.entries(rawMids)) {
+      const symbol = coin.trim().toUpperCase();
+      const price = Number(rawPrice);
+      if (watch.has(symbol) && Number.isFinite(price) && price > 0) {
+        next[symbol] = price;
+      }
+    }
+    this.latest = next;
+    this.lastTickAt = Date.now();
+    await this.checkOpenPositions(this.lastTickAt);
+    if (this.lastSampleAt === 0 || this.lastTickAt - this.lastSampleAt >= SAMPLE_INTERVAL_MS) {
+      const sampleAt = this.lastTickAt;
+      this.lastSampleAt = sampleAt;
+      await this.samplePrices(sampleAt);
+    } else {
+    }
+  }
+  async refreshFromRest() {
+    if (this.restRefreshInProgress || Date.now() - this.lastTickAt <= PRICE_STALE_MS) return;
+    this.restRefreshInProgress = true;
+    try {
+      const response = await fetch(HYPERLIQUID_INFO, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ type: "allMids" }),
+        signal: AbortSignal.timeout(1e4)
+      });
+      if (!response.ok) throw new Error("allMids REST returned HTTP " + response.status);
+      const mids = await response.json();
+      const watch = new Set(this.watchlist());
+      const next = {};
+      for (const [rawSymbol, rawPrice] of Object.entries(mids)) {
+        const symbol = rawSymbol.trim().toUpperCase();
+        const value = Number(rawPrice);
+        if (watch.has(symbol) && Number.isFinite(value) && value > 0) next[symbol] = value;
+      }
+      if (!Object.keys(next).length) throw new Error("allMids REST returned no watched symbols");
+      this.latest = next;
+      this.lastTickAt = Date.now();
+      await this.checkOpenPositions(this.lastTickAt);
+      if (this.lastSampleAt === 0 || this.lastTickAt - this.lastSampleAt >= SAMPLE_INTERVAL_MS) {
+        this.lastSampleAt = this.lastTickAt;
+        await this.samplePrices(this.lastSampleAt);
+      }
+    } finally {
+      this.restRefreshInProgress = false;
+    }
+  }
+  async writeMarketContexts(now) {
+    try {
+      const response = await fetch(HYPERLIQUID_INFO, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ type: "metaAndAssetCtxs" }),
+        signal: AbortSignal.timeout(1e4)
+      });
+      if (!response.ok) throw new Error("metaAndAssetCtxs returned HTTP " + response.status);
+      const payload = await response.json();
+      if (!Array.isArray(payload) || !payload[0] || !payload[1] || typeof payload[0] !== "object" || !Array.isArray(payload[1])) {
+        throw new Error("metaAndAssetCtxs returned an unexpected shape");
+      }
+      const meta = payload[0];
+      const universe = Array.isArray(meta.universe) ? meta.universe : [];
+      const contexts = payload[1];
+      const watch = new Set(this.watchlist());
+      const statements = [];
+      // Keep full derivatives context live in the DO every two minutes, but persist
+      // historical D1 snapshots only every 15 minutes to stay inside the Free quota.
+      const persistContextSnapshots = !this.lastContextSnapshotPersistAt || now - this.lastContextSnapshotPersistAt >= 15 * 60 * 1e3;
+      // WebSocket L2 subscriptions can disconnect independently of allMids.
+      // Fill stale/missing books from Hyperliquid's public REST l2Book endpoint.
+      const perpSymbols = universe.map((asset) => String(asset?.name || "").trim().toUpperCase()).filter((symbol) => watch.has(symbol) && Number(this.latest[symbol]) > 0);
+      const missingBooks = perpSymbols.filter((symbol) => now - (this.bookLastWrite[symbol] || 0) > 15e4);
+      for (let offset = 0; offset < missingBooks.length; offset += 4) {
+        await Promise.all(missingBooks.slice(offset, offset + 4).map(async (symbol) => {
+          try {
+            let bookPayload = null;
+            let lastBookFailure = "";
+            for (let attempt = 0; attempt < 2; attempt++) {
+              const bookResponse = await fetch(HYPERLIQUID_INFO, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ type: "l2Book", coin: symbol }), signal: AbortSignal.timeout(8000) });
+              if (bookResponse.ok) { bookPayload = await bookResponse.json(); break; }
+              const status = bookResponse.status;
+              const detail = await bookResponse.text().catch(() => "");
+              lastBookFailure = "l2Book returned HTTP " + status + (detail ? ": " + detail.slice(0, 120) : "");
+              if (attempt === 0 && (status === 408 || status === 429 || status >= 500)) {
+                const retryAfter = Number(bookResponse.headers.get("retry-after"));
+                await new Promise((resolve) => setTimeout(resolve, Number.isFinite(retryAf
