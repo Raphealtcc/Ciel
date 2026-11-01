@@ -24,6 +24,7 @@ const context = vm.createContext({
   MAX_AGE: 120_000,
   fmt: (value) => Number(value).toFixed(4),
   sendTelegram: async (_env, message) => sentMessages.push(message),
+  __name: () => {},
   console: { log() {}, error() {} },
 });
 
