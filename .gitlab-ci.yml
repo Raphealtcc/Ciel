@@ -1,0 +1,33 @@
+stages: [verify, reverse-engineer]
+
+verify-ciel-recovery:
+  image: node:22-alpine
+  stage: verify
+  script:
+    - node --check scripts/reassemble-recovered-worker.mjs
+    - node --check scripts/summarize-rea.mjs
+    - npm run check
+  rules:
+    - if: '$CI_COMMIT_BRANCH'
+
+analyze-ciel-with-rea:
+  image: node:22-alpine
+  stage: reverse-engineer
+  needs: [verify-ciel-recovery]
+  script:
+    - apk add --no-cache procps
+    - npm run reassemble
+    - npx -y rea-agents@latest analyze-javascript-application "$CI_PROJECT_DIR/reconstructed" --json > "$CI_PROJECT_DIR/rea-analysis.json" 2> "$CI_PROJECT_DIR/rea-analysis.stderr.log" || true
+    - node scripts/summarize-rea.mjs "$CI_PROJECT_DIR/rea-analysis.json"
+  artifacts:
+    when: always
+    paths: [rea-analysis.json, rea-summary.json, rea-analysis.stderr.log]
+    expire_in: 30 days
+  allow_failure: true
+  rules:
+    - changes:
+        - recovered-src/**/*
+        - scripts/**/*
+        - package.json
+        - wrangler.jsonc
+        - .gitlab-ci.yml

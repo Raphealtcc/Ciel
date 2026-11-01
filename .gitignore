@@ -1,0 +1,16 @@
+# Local secrets and credentials
+.dev.vars
+.dev.vars.*
+.env
+.env.*
+!.env.example
+!.dev.vars.example
+
+# Local tooling and generated output
+node_modules/
+.wrangler/
+dist/
+reconstructed/
+rea-analysis.json
+rea-summary.json
+rea-analysis.stderr.log
