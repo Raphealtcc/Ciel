@@ -6,7 +6,8 @@
     "reassemble": "node scripts/reassemble-recovered-worker.mjs",
     "check": "npm run reassemble && node --check reconstructed/worker.js",
     "patch:paper": "node scripts/apply-paper-tier-fix.mjs",
-    "check:paper": "npm run reassemble && npm run patch:paper && node --check reconstructed/patched-worker.js && node scripts/test-paper-tier-fix.mjs"
+    "check:paper": "npm run reassemble && npm run patch:paper && node --check reconstructed/patched-worker.js && node scripts/test-paper-tier-fix.mjs && npm run check:staging-config",
+    "check:staging-config": "node scripts/check-staging-config.mjs"
   },
   "devDependencies": {
     "wrangler": "^4.0.0"
