@@ -1,8 +1,10 @@
 {
-  // RECOVERY TEMPLATE — not deploy-ready until target-account bindings and DO migration history are reviewed.
-  // IDs below identify the currently connected SOURCE account. Replace them for a different target account.
-  "name": "ciel",
-  "main": "reconstructed/worker.js",
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  // NEW-ACCOUNT STAGING TEMPLATE ONLY.
+  // Do not use these placeholders as IDs. Create the target D1/KV resources first,
+  // then replace the IDs below. This config never points at the source account.
+  "name": "ciel-paper-staging",
+  "main": "reconstructed/patched-worker.js",
   "compatibility_date": "2026-09-08",
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": true,
@@ -10,28 +12,25 @@
     "crons": ["* * * * *"]
   },
   "vars": {
-    "ADVISORY_COLLATERAL_MON": "10",
-    "ADVISORY_LEVERAGE": "100",
-    "ADVISORY_MAX_HOLD_MINUTES": "90",
     "ADVISORY_MIN_CONFIDENCE": "0.72",
+    "ADVISORY_TREND_REVIEW_COOLDOWN_MINUTES": "30",
     "ALERT_COOLDOWN_MINUTES": "15",
     "ALERT_WINDOW_MINUTES": "5",
     "GEMINI_MODEL": "gemini-3.5-flash-lite",
-    "GEMINI_REVIEW_COOLDOWN_MINUTES": "15",
     "MOVE_ALERT_PCT": "2.0",
     "WATCH_SYMBOLS": "BTC,ETH,MON,BNB,XRP,HYPE,ONDO,KPEPE,QNT,ZEC,TRX,AAVE,ADA,CASHCAT,DOGE,LINK,LIT,PONS,PUMP,SEI,SOL,SUI,UNI,VIRTUAL,XMR"
   },
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "ciel",
-      "database_id": "fb55e85b-af9b-45b3-ba43-6c7f7996dfa8"
+      "database_name": "ciel-paper-staging",
+      "database_id": "REPLACE_WITH_NEW_ACCOUNT_D1_DATABASE_ID"
     }
   ],
   "kv_namespaces": [
     {
       "binding": "CIEL_STATE",
-      "id": "8b5c4b6078ce43a8aec4d9343855a70f"
+      "id": "REPLACE_WITH_NEW_ACCOUNT_KV_NAMESPACE_ID"
     }
   ],
   "durable_objects": {
@@ -42,9 +41,9 @@
   },
   "migrations": [
     {
-      // Fresh-target bootstrap only. Do not apply to the existing source Worker namespace.
+      // Fresh namespace creation: both source namespaces are SQLite-backed.
       "tag": "v1",
-      "new_classes": ["HyperliquidFeed", "TradingEngine"]
+      "new_sqlite_classes": ["HyperliquidFeed", "TradingEngine"]
     }
   ]
 }
