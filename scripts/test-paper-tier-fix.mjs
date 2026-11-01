@@ -12,7 +12,7 @@ function extractBetween(start, end) {
   return source.slice(from, to).trim();
 }
 
-const mapMatch = source.match(/var LEVERUP_MARKET_MAX_LEVERAGE = Object\\.freeze\\((\\{[\\s\\S]*?\\})\\);/);
+const mapMatch = source.match(/var LEVERUP_MARKET_MAX_LEVERAGE = Object\.freeze\((\{[\s\S]*?\})\);/);
 assert.ok(mapMatch, "Could not extract the market leverage map from the patched bundle");
 
 const context = vm.createContext({
@@ -26,9 +26,9 @@ const definitions = [
   extractBetween("function freshPaperState", "function minimumMarginForMarketLeverage"),
   extractBetween("function minimumMarginForMarketLeverage", "async function openPaperTrade"),
   extractBetween("async function openPaperTrade", "function paperTradePnl"),
-].join("\\n");
+].join("\n");
 
-vm.runInContext(definitions + "\\nglobalThis.paperTests = { minimumMarginForMarketLeverage, openPaperTrade };", context);
+vm.runInContext(definitions + "\nglobalThis.paperTests = { minimumMarginForMarketLeverage, openPaperTrade };", context);
 const { minimumMarginForMarketLeverage, openPaperTrade } = context.paperTests;
 
 function makeStorage(initialBalance = 60, trades = []) {
