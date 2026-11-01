@@ -1,30 +1,58 @@
 # CIEL
 
-Hyperliquid market monitoring, technical setup detection, research enrichment, and trade lifecycle alerts running on Cloudflare Workers.
+Hyperliquid market monitoring, technical setup detection, local statistical forecasting, Gemini market-context review, Telegram trade cards, manual position tracking, and automatic paper trading on Cloudflare Workers.
 
 - Live Worker: https://ciel.leno3z4rrrri.workers.dev
-- Health: https://ciel.leno3z4rrrri.workers.dev/health
-- Verified deployed bundle SHA-256: `24e6452b4a2854a1e37f864adcb201d588771460eed68bcd100f5cfbafd564b6`
+- Health endpoint: https://ciel.leno3z4rrrri.workers.dev/health
+- Exact deployed bundle SHA-256: `24e6452b4a2854a1e37f864adcb201d588771460eed68bcd100f5cfbafd564b6`
+- Current live version: 505 (100% allocation); production has not been changed by this audit.
+
+## Repository branches
+
+- `main`: byte-exact recovered production baseline.
+- `audit/paper-trading-fix`: isolated paper-tier staging patch, behavioral tests, current source-account audit and account handoff. Do not merge to `main` or deploy to the source account yet.
 
 ## Layout
-- `recovered-src/`: recovered JavaScript module fragments from the deployed bundle.
+
+- `recovered-src/`: recovered JavaScript module fragments from the deployed bundle. Treat as immutable evidence.
 - `cloudflare-export/`: compressed original Worker export, split into chunks.
-- `scripts/`: reassembly and Reverse Engineer Anything analysis helpers.
-- `migrations/`: recovered live D1 schema only.
-- `docs/`: architecture, runtime snapshot, and reverse-engineering findings.
-- `wrangler.jsonc`: fresh-target template; review bindings and Durable Object migrations before deployment.
+- `scripts/`: exact bundle reconstruction, isolated staging patch, behavioral tests and REA summary helper.
+- `migrations/0000_recovered_live_schema.sql`: recovered live D1 schema; this is not a data backup.
+- `docs/`: architecture, runtime snapshot, REA findings, live Cloudflare audit and account handoff.
+- `wrangler.jsonc`: new-account staging template only. It contains explicit placeholder D1/KV IDs and uses SQLite-backed Durable Object migrations. It does not point to the source account.
 
 ## Verify
+
 Requires Node.js and npm.
 
 ```sh
-npm run reassemble
 npm run check
+npm run check:paper
 ```
 
-The check verifies recovered module lengths and the deployed bundle SHA-256, then runs Node syntax validation.
+- `npm run check` reconstructs the exact deployed bundle, verifies its length and SHA-256, and runs Node syntax validation.
+- `npm run check:paper` reconstructs the baseline, applies the patch to `reconstructed/patched-worker.js`, syntax-checks that candidate, and runs deterministic paper-entry, P&L, close-lifecycle, profit-protection and Telegram-copy tests.
+- The patch never edits `recovered-src/` or `reconstructed/worker.js`.
+
+## Paper trading
+
+The production baseline uses a 60 MON starter paper ledger, 22 MON margin and 50x simulation. The isolated staging patch enables the 11 MON / 100x conservative baseline for markets whose maximum leverage is at least 100x, while preserving 22 MON / 50x for 50x markets. It also keeps the setup card, open notification, `/help` and `/profits` labels consistent with the actual simulated tier.
+
+The market leverage map is still hardcoded and has not been verified against authoritative current LeverUp market metadata. The simulator is gross and mark-based; it does not model fees, funding, spread, slippage, gap-through fills, LeverUp collateral ratio, mark/oracle differences or liquidation. Do not interpret its paper P&L as LeverUp execution profitability.
+
+## Staging safety
+
+Do not deploy the template until:
+1. The target account has its own D1 database and KV namespace and their IDs replace the placeholders.
+2. The target Durable Object namespaces are created with the declared `new_sqlite_classes` migration.
+3. The recovered D1 schema is reviewed and applied to the target database.
+4. Fresh Gemini/Telegram secrets are configured outside Git. Use a separate Telegram bot for staging so its webhook does not overwrite the live bot's webhook.
+5. The staging Worker has a separate name and does not receive production traffic.
+
+No LeverUp order credentials are configured. CIEL remains advisory-only; paper trading is automatic and separate from manual START TRACKING.
 
 ## Recovery limits
-Cloudflare exposed deployed JavaScript, not the original TypeScript project. Original TypeScript, source maps, git history, lockfile, tests, and release assets were not recovered. The D1 schema was exported, but database rows, KV values, Durable Object storage, and secrets were not. Never commit secrets.
 
-The Wrangler file is a target-environment template. Do not deploy it over the live Worker without checking bindings, resource IDs, and Durable Object migration compatibility.
+Cloudflare exposed the deployed JavaScript bundle, not the original TypeScript project. Original TypeScript, original source maps, package lock, test suite, and release pipeline were not recovered. The D1 schema is in GitLab, but D1 row data, KV values, Durable Object state and secret plaintext are not. The paper ledger lives inside the feed Durable Object and its internal KV key cannot be read through the available Cloudflare SQL query API.
+
+See `docs/HANDOFF-2026-11-02.md` before changing the connected Cloudflare account. It records the source account, live Worker, bindings, resource IDs, secret names, current D1 activity and what cannot be cloned.
