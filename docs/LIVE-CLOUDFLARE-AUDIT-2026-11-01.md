@@ -44,9 +44,36 @@ Bindings:
 
 Secret bindings already exist by name: `GEMINI_API_KEY_1` through `GEMINI_API_KEY_7`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `TELEGRAM_WEBHOOK_SECRET`. Cloudflare does not return plaintext secret values from the secret-list API. No secret values were copied, exposed or changed. No LeverUp API credential binding is present.
 
+## Live Cloudflare data and actual advisor activity
+
+Read-only D1 queries were executed against the live `DB` binding. The D1 database was approximately 34.2 MB at the time of the query. The following are observed database facts, not estimates:
+
+- `advisor_positions`: 216 records since 2026-10-28.
+- Current status totals: 207 `EXPIRED`, 4 `CLOSING`, 2 `CLOSED`, 3 `CANCELLED`.
+- `advisor_ai_audit`: 867 decisions — 96 `APPROVE`, 39 `REJECT`, 732 `WAIT`.
+- Recent WAIT reasons include missing order-book/funding/open-interest evidence, inadequate top-of-book depth, RSI/momentum exhaustion, and a forecast that does not support the stop distance.
+- The latest recorded advisor scan had 25 configured symbols and 24 symbols with usable history. Market samples were current through 2026-11-01T10:47:48Z in the queried rows.
+- The feed Durable Object namespace contains one stored object. The retired `TradingEngine` namespace contains zero objects.
+
+This confirms the advisor is processing markets and evaluating setups. It also shows a conversion problem: most proposals expire rather than becoming tracked positions. The current audit does not establish why each expired recommendation was not acted on; that needs a separate funnel analysis of notification delivery, callback handling, and user actions.
+
+### Keep the separate ledgers separate
+
+The Telegram `/profits` command reads the automatic paper ledger in the `HyperliquidFeed` Durable Object under `ciel:paper:account:v1`. It does **not** read the D1 `paper_executions` table. The D1 table currently has zero rows, which does not contradict the Telegram report of 20 closed paper trades.
+
+The D1 `advisor_positions` table is a different ledger for proposed and manually tracked real positions. Its 216 records must not be counted as automatic paper trades.
+
+There are also legacy token-trader artifacts in the same Worker account:
+- D1 `trades` and `live_executions` each contain one confirmed live execution dated 2026-09-11.
+- D1 `paper_executions` contains zero records.
+- KV key `paper_balance_mon` reads `1000`.
+- KV key `paper_circuit_breaker` reads `paperCircuitOpen: true`, with an old recorded error: `TypeError: Cannot read properties of undefined (reading '0')`, timestamped 2026-09-09.
+
+Those KV keys belong to a separate legacy token-trading path; they are not the current perp paper ledger. The circuit-breaker record is stale, so it is evidence that this legacy path had been halted at its last recorded update, not proof of its current runtime state. Do not merge those figures into CIEL perp paper P&L.
+
 ## Execution mode: paper vs live
 
-The recovered code identifies the service as read-only advisory. The retired `TradingEngine` Durable Object responds HTTP 410 with a read-only/retired message. The active advisor does not submit orders to LeverUp or Hyperliquid. This is consistent with the user's requirement to keep all activity in paper mode until LeverUp integration is ready.
+The recovered code identifies the service as read-only advisory. The retired `TradingEngine` Durable Object responds HTTP 410 with a read-only/retired message. The active advisor does not submit orders to LeverUp or Hyperliquid. This is consistent with the requirement to keep activity in paper mode until LeverUp integration is ready.
 
 The paper engine is a separate automatic simulation:
 - Fresh paper ledger defaults to 60 MON.
@@ -54,8 +81,22 @@ The paper engine is a separate automatic simulation:
 - A qualifying proposal attempts an automatic paper entry.
 - Paper ledger is held in Durable Object storage under `ciel:paper:account:v1`, not in the D1 trading tables.
 - `/profits` reads the paper ledger and reports balance, open/closed trades, realised/unrealised P&L, wins/losses, and strategy stats.
-- Paper exits are estimated from Hyperliquid mid prices at stop, target, or max-hold time.
-- Paper P&L excludes fees, funding, slippage, liquidation mechanics and LeverUp-specific mark/oracle/fill differences. It is not a faithful execution simulator and should not yet be used as evidence of LeverUp profitability.
+- Paper exits are estimated from Hyperliquid mid prices at stop, target, profit-protection or max-hold time.
+
+The user's supplied `/profits` example is arithmetically coherent:
+- 38.745 MON available + 22 MON reserved = 60.745 MON cash/equity before unrealised P&L.
+- +0.745 MON realised P&L − 3.518 MON unrealised P&L = −2.773 MON total P&L.
+- 60 MON starting balance − 2.773 MON total P&L = 57.227 MON equity.
+
+The displayed AAVE short's entry/mark move also agrees approximately with a 50x gross mark-to-market calculation. Its 0.4% stop distance implies roughly a 20% loss on the 22 MON margin if filled at the stop. This supports that the paper ledger is doing real arithmetic and tracking actual simulated trade state; it is not a fabricated static balance.
+
+However, the paper results are still gross and mark-based:
+- The code books stop/target exits at the configured trigger price, not at a simulated executable bid/ask or gap-through fill.
+- It uses Hyperliquid mids, not LeverUp fills or LeverUp mark/oracle prices.
+- It does not charge trading fees, funding, slippage or collateral conversion haircuts.
+- It does not simulate liquidation or exchange-specific margin checks.
+
+So the ledger is a valid *gross strategy simulation*, but it is not a faithful LeverUp execution simulator and should not be treated as realised trading profitability.
 
 Important configuration distinction: live advisory display variables say 10 MON / 100x, while the original paper engine hardcodes 22 MON / 50x. These are separate paths. Do not assume the original paper P&L corresponds to the displayed 10 MON / 100x scenario.
 
@@ -82,7 +123,14 @@ An isolated patch was added on branch `audit/paper-trading-fix`:
 
 The byte-exact `recovered-src/` files remain unchanged. `scripts/apply-paper-tier-fix.mjs` applies the patch only to `reconstructed/patched-worker.js`, preserving `reconstructed/worker.js` as the exact deployed bundle.
 
-GitLab pipeline `3014296834` verified the exact recovery hash and syntax-checked both the recovered Worker and patched staging candidate. The paper patch is syntax-validated, not yet behaviorally unit-tested or deployed.
+GitLab pipeline `3014296834` verified the exact recovery hash and syntax-checked both the recovered Worker and patched staging candidate. A subsequent pipeline `3014329246` passed deterministic behavior tests against functions extracted from the patched bundle:
+- 50x market opens with 22 MON margin and 50x simulation leverage.
+- 100x market opens with 11 MON margin and 100x simulation leverage.
+- 1001x market is simulated conservatively at 100x, not 1001x.
+- 25x and 5x tiers are rejected as unsupported by the current model.
+- Insufficient balance, duplicate signal and duplicate open-symbol guards work.
+
+These tests validate the patch's current behavior. They do not prove that LeverUp's current live market configuration matches the hardcoded map.
 
 The market leverage map remains hardcoded in `recovered-src/symbols.js.part-001`; it must not be treated as verified live LeverUp market metadata. The user's reported minimums still need authoritative market metadata verification before matching the simulator to LeverUp.
 
@@ -103,13 +151,13 @@ Cloudflare's secret list confirms that seven Gemini key slots and three Telegram
 ## Required fixes before any deployment
 
 1. Keep the byte-exact recovered fragments immutable as forensic evidence.
-2. Add deterministic behavior tests for 50x, >=100x, unsupported <50x, insufficient balance, duplicate signal, one-open-trade-per-symbol, and P&L calculations.
-3. Verify market max leverage and minimum collateral against authoritative LeverUp market metadata before using the static map for real integration.
-4. Freshly smoke-test every GET route, Telegram webhook and callbacks. The current tool environment cannot reach the public Worker hostname directly.
-5. Test paper open/close lifecycle, DO persistence across restarts, feed reconnects, and D1 write volume on a separate staging Worker.
-6. Compare paper P&L with realistic fees, funding, slippage, mark/oracle and liquidation assumptions before interpreting strategy profitability.
+2. Verify market max leverage and minimum collateral against authoritative LeverUp market metadata before using the static map for real integration.
+3. Freshly smoke-test every GET route, Telegram webhook and callbacks. The current tool environment cannot reach the public Worker hostname directly.
+4. Test paper open/close lifecycle, Durable Object persistence across restarts, feed reconnects, and D1 write volume on a separate staging Worker.
+5. Add realistic bid/ask fills, gap-through stop handling, fees, funding, slippage, collateral conversion, mark/oracle differences and liquidation assumptions before interpreting paper P&L as LeverUp performance.
+6. Investigate why 207 of 216 advisor recommendations expired; verify Telegram delivery and callback handling before assuming the user simply ignored them.
 7. Only then consider production cutover. Do not disable or overwrite the existing source Worker during reconstruction.
 
 ## Decision
 
-**Production audit is not yet passed for deployment.** The recovered source matches the live version inventory and the paper-tier code fix has a syntax-checked staging candidate. However, behavioral tests, fresh live endpoint smoke tests, and authoritative LeverUp market metadata checks remain outstanding. The production Worker was not modified.
+**Production audit is not yet passed for deployment.** The recovered source matches the live version inventory, and the isolated paper-tier patch now passes deterministic behavioral tests. However, fresh live endpoint smoke tests, authoritative LeverUp market metadata, full DO lifecycle testing, and realistic execution-cost modeling remain outstanding. The production Worker was not modified.
