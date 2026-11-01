@@ -123,11 +123,12 @@ An isolated patch was added on branch `audit/paper-trading-fix`:
 
 The byte-exact `recovered-src/` files remain unchanged. `scripts/apply-paper-tier-fix.mjs` applies the patch only to `reconstructed/patched-worker.js`, preserving `reconstructed/worker.js` as the exact deployed bundle.
 
-GitLab pipeline `3014296834` verified the exact recovery hash and syntax-checked both the recovered Worker and patched staging candidate. A subsequent pipeline `3014329246` passed deterministic behavior tests against functions extracted from the patched bundle:
+GitLab pipeline `3014296834` verified the exact recovery hash and syntax-checked both the recovered Worker and patched staging candidate. A subsequent pipeline `3014332523` passed deterministic behavior tests against functions extracted from the patched bundle (including P&L math). Earlier pipeline `3014329246` also completed the REA analysis successfully:
 - 50x market opens with 22 MON margin and 50x simulation leverage.
 - 100x market opens with 11 MON margin and 100x simulation leverage.
 - 1001x market is simulated conservatively at 100x, not 1001x.
 - 25x and 5x tiers are rejected as unsupported by the current model.
+- A 0.4% adverse move calculates to approximately -4.4 MON / -20% ROI at 50x on 22 MON margin, and -4.4 MON / -40% ROI at 100x on 11 MON margin.
 - Insufficient balance, duplicate signal and duplicate open-symbol guards work.
 
 These tests validate the patch's current behavior. They do not prove that LeverUp's current live market configuration matches the hardcoded map.
