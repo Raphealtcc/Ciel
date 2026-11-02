@@ -228,12 +228,17 @@ assert.ok(source.includes("free balance is below the eligible market's minimum m
 assert.ok(source.includes("const collateral = choosePaperMargin(reviewed.verdict === \"APPROVE\" ? reviewed.paperMarginMon : null, sizingLimits);"));
 assert.ok(source.includes("PAPER_STARTING_BALANCE_MON = 100"));
 assert.ok(source.includes("TELEGRAM_STAGING_BOT_ID"));
+assert.ok(source.includes("ensureStagingTelegramIdentity"));
+assert.ok(source.includes("Staging bot identity not verified"));
+assert.ok(source.includes("telegramWebhookMarkerTargetsProduction"));
 assert.ok(source.includes("bot identity does not match TELEGRAM_STAGING_BOT_ID"));
 assert.ok(source.includes("TELEGRAM_WEBHOOK_URL"));
 assert.ok(source.includes("/api/paper"));
 assert.ok(source.includes("/api/diagnostics"));
 assert.ok(source.includes("xyz:QNT"));
 assert.ok(source.includes("historyBootstrapDone"));
+assert.ok(source.includes("ciel:intraday-pattern:v2:"));
+assert.ok(source.includes("Number(cached.historyDays)>=5"));
 assert.ok(source.includes("paperMarginMon"));
 assert.ok(source.includes("const marginSizingSource = reviewed.verdict === \"APPROVE\""));
 assert.ok(source.includes("const perpAssets = universe.map((asset) => ({ symbol: String(asset?.name || \"\").trim().toUpperCase(), coin: String(asset?.name || \"\").trim() }))"));
