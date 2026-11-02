@@ -223,8 +223,8 @@ replaceExactlyOnce(
   "open the paper trade with the exact AI-sized margin shown in the proposal",
 );
 replaceExactlyOnce(
-  '"Illustrative paper margin: " + p.mon_collateral + " MON at live MON $"',
-  '"AI-sized paper margin (" + (p.margin_sizing_source || "MINIMUM_FALLBACK") + "): " + p.mon_collateral + " MON at live MON $"',
+  '"Illustrative paper margin: " + p.mon_collateral.toFixed(0) + " MON at live MON $"',
+  '"AI-sized paper margin (" + (p.margin_sizing_source || "MINIMUM_FALLBACK") + "): " + p.mon_collateral.toFixed(3) + " MON at live MON $"',
   "show the AI-selected or minimum-fallback margin on the setup card",
 );
 
