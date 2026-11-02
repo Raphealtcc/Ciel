@@ -49,7 +49,7 @@ Using the $0.019208 MON/USD reference shown in the user's ONDO notification, the
 | 10x | 104.12 → 105 MON | 109.60 → 110 MON |
 | 5x | 208.25 → 209 MON | 219.20 → 220 MON |
 | 3x | 347.08 → 348 MON | 365.35 → 366 MON |
-| 2x | 520.61 → 521 MON | 547.00 → 547 MON |
+| 2x | 520.61 → 521 MON | 548.02 → 549 MON |
 
 These are calculations from the verified $20 notional floor and the stated MON reference price, not a claim that LeverUp will accept those exact rounded amounts in every live order. The live CR and order panel can raise the requirement. The user's observed 22 MON at 50x and 11 MON at 100x are consistent with the order-of-magnitude of this calculation, but the current MON CR was not independently read from the live order panel during this audit.
 
