@@ -43,8 +43,6 @@ The current Cloudflare `ciel2` settings have **no `LEVERUP_*` bindings or secret
 - LeverUp Diamond: `0xea1b8E4aB7f14F7dCA68c5B214303B13078FC5ec`.
 - WMON: `0x3bd359C1119dA7Da1D913D1C4D2B7c461115433A` (18 decimals).
 - LVMON: `0x91b81bfbe3A747230F0529Aa28d8b2Bc898E6D56` (18 decimals).
-- USDC: `0x754704Bc059F8C67012fEd69BC8A327a5aafb603` (6 decimals).
-- LVUSD: `0xFD44B35139Ae53FFF7d8F2A9869c503D987f00d1` (18 decimals).
 - 1CT accepts ERC-20 collateral only. MON must be wrapped to WMON before use.
 - The trader must approve the Diamond for WMON collateral and for each enabled 1CT fee token actually selected. Approval is separate from agent authorization.
 - The 1CT execution fee configuration is fetched from `/v2/trading/anti-ddos-config` and refreshed/cached for 60 seconds. Fee-token selection must include the trade's own WMON spend when WMON is also the fee token.
@@ -74,7 +72,7 @@ Cost formulas used for projections:
 
 ## Important unresolved input
 
-The WMON collateral ratio is not returned in the public `GET /v1/pairs` response or the documented pair-view structure. LeverUp's AnyCollateral documentation says the ratio is shown in the trading UI. The code therefore requires a verified ratio and fails closed if it is missing. Do not substitute the 15% maintenance-margin figure for the WMON collateral ratio; they are different concepts.
+The WMON collateral ratio is not returned in the public `GET /v1/pairs` response or the documented pair-view structure. LeverUp's AnyCollateral guidance says collateral ratios can change and must be checked in the order panel at trade time. A published example uses 70%, but that is not a live value and must not be hardcoded. The code therefore requires a verified ratio and fails closed if it is missing. Do not substitute the 15% maintenance-margin figure for the WMON collateral ratio; they are different concepts.
 
 The venue minimum notional is read from the live contract, not hardcoded. Minimum WMON collateral is calculated from the current MON/USD price, selected leverage, and verified WMON collateral ratio. This is why the old approximate 22 MON at 50x / 11 MON at 100x figures are not hardcoded.
 
