@@ -223,3 +223,17 @@ The public Hyperliquid checks resolved the missing-book causes:
 - QNT is absent from default `allMids` and from `metaAndAssetCtxs` for both default and `xyz`. The `allMids` request for DEX `xyz` does return `xyz:QNT` (34.186 at the check), and `l2Book` works for `xyz:QNT` (bid 34.111 / ask 34.261). But no derivatives context was returned for QNT in either metadata universe. The production Worker does not request the xyz DEX price or map this alias. QNT therefore remains excluded from advisor-ready market coverage until a valid funding/OI/mark/oracle context source is found; price/book alone is insufficient.
 
 This makes the current production coverage gap precise: KPEPE's book is fixable with a case-preserving coin name (patched for staging); QNT is a separate DEX alias plus missing derivatives-context problem (not silently patched into a complete signal).
+
+### Latest 14-route read-only smoke — 2026-11-02 00:55 UTC
+
+- All 14 GET routes returned HTTP 200 with valid JSON. No POST or state-changing route was called.
+- `/health`: `ok=true`, `connected=true`, `websocketConnected=true`, `fresh=true`, `degraded=false`; latest tick was about 2 seconds old.
+- Feed diagnostics also showed 1,179 reconnect attempts and last close code 1006 (abnormal closure). The feed was open/fresh at the check, but the reconnect count is notable transport churn and should be monitored rather than dismissed.
+- `/api/markets`: 25 configured markets, 24 priced; QNT had no price. 23/25 order books were present; KPEPE and QNT were missing books.
+- BTC, ETH, MON, ONDO and ADA order books were fresh in this sample.
+- Hyperliquid MON/USD mid reference: $0.019033; this is not LeverUp's Pyth collateral oracle or a live MON collateral-ratio quote.
+- `/api/candles?symbol=BTC&interval=15m`: 100 candles aggregated from saved native 5m candles.
+- `/api/positions`: 50 entries. `/api/signals`: 0 entries at the exact smoke-test time.
+- `/api/research`: CIEL Statistical Ensemble v1 with 25 recent research items.
+
+The QNT and KPEPE gaps remain signal-quality blockers. Do not treat a 25-symbol configured watchlist as 25 fully supported markets. The current code has a REST recovery path for disconnected WebSockets, but the latest successful smoke captured an open WebSocket; it did not force a disconnect or prove the fallback under a real outage.
