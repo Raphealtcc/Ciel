@@ -75,11 +75,7 @@ replaceExactlyOnce(
   "refresh REST books on the two-minute context cadence before they become stale",
 );
 
-replaceExactlyOnce(
-  '    await this.checkOpenPositions(Date.now());\n    await this.scheduleNextAlarm();',
-  '    const maintenanceNow = Date.now();\n    if (maintenanceNow - this.lastContextWriteAt >= 2 * 60 * 1e3) {\n      this.lastContextWriteAt = maintenanceNow;\n      await this.state.storage.put("lastContextWriteAt", maintenanceNow);\n      await this.writeMarketContexts(maintenanceNow);\n    }\n    if (maintenanceNow - this.lastCandleSnapshotAt >= 5 * 60 * 1e3) {\n      this.lastCandleSnapshotAt = maintenanceNow;\n      await this.state.storage.put("lastCandleSnapshotAt", maintenanceNow);\n      await this.writeCandleSnapshots(maintenanceNow);\n    }\n    await this.checkOpenPositions(maintenanceNow);\n    if (this.lastTickAt > 0 && maintenanceNow - this.lastTickAt <= PRICE_STALE_MS * 2) {\n      try {\n        await runAdvisorCycle(this.env, this.latest, maintenanceNow, this.lastTickAt, this.history, this.liveMarketInputs(maintenanceNow), this.state.storage);\n      } catch (error) {\n        console.error("Ciel fallback advisor cycle failed: " + String(error).slice(0, 400));\n      }\n    }\n    await this.scheduleNextAlarm();',
-  "keep market context, candles and advisor cycles running from REST data while WebSocket is disconnected",
-);
+
 
 
 
