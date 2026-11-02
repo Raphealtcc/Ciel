@@ -11,6 +11,8 @@ export const MIN_EXECUTION_LEVERAGE = 50;
 export const LEVERUP_TOKENS = Object.freeze({
   WMON: "0x3bd359C1119dA7Da1D913D1C4D2B7c461115433A",
   LVMON: "0x91b81bfbe3A747230F0529Aa28d8b2Bc898E6D56",
+  USDC: "0x754704Bc059F8C67012fEd69BC8A327a5aafb603",
+  LVUSD: "0xFD44B35139Ae53FFF7d8F2A9869c503D987f00d1",
 });
 export const MIN_NOTIONAL_SELECTOR = "0x3569c2f7";
 export const PAIR_BY_BASE_SELECTOR = "0x9bd39764";
@@ -52,6 +54,20 @@ const POSITION_V4_ABI = [{
       { name: "accruedHoldingFee", type: "uint256" },
     ],
   }],
+}];
+
+const AGENT_AUTH_ABI = [{
+  type: "function", name: "getAgentAuth", stateMutability: "view",
+  inputs: [{ name: "trader", type: "address" }, { name: "agent", type: "address" }],
+  outputs: [{ type: "tuple", name: "", components: [
+    { name: "agent", type: "address" }, { name: "name", type: "bytes32" },
+    { name: "permissions", type: "uint256" }, { name: "authorizedAt", type: "uint32" },
+  ] }],
+}];
+const LAST_NONCE_ABI = [{
+  type: "function", name: "getLastNonce", stateMutability: "view",
+  inputs: [{ name: "trader", type: "address" }, { name: "signer", type: "address" }],
+  outputs: [{ name: "", type: "uint64" }],
 }];
 
 const MARKET_INFO_V2_ABI = [{
@@ -305,6 +321,38 @@ export async function readPositionsV4(traderAddress, pairBase, { publicClient = 
     functionName: "getPositionsV4",
     args: [traderAddress, pairBase],
     ...(blockNumber == null ? {} : { blockNumber }),
+  });
+}
+
+export function hasAgentPermission(permissions, action) {
+  const mask = BigInt(permissions);
+  if (mask === (2n ** 256n - 1n)) return true;
+  return (mask & (1n << BigInt(action))) !== 0n;
+}
+
+export async function readAgentAuthorization(traderAddress, agentAddress, { publicClient = createLeverUpPublicClient() } = {}) {
+  const auth = await publicClient.readContract({
+    address: LEVERUP_1CT.diamond, abi: AGENT_AUTH_ABI,
+    functionName: "getAgentAuth", args: [traderAddress, agentAddress],
+  });
+  const authorizedAgent = auth.agent ?? auth[0];
+  const permissions = BigInt(auth.permissions ?? auth[2] ?? 0n);
+  const authorized = String(authorizedAgent).toLowerCase() === String(agentAddress).toLowerCase();
+  return {
+    authorized,
+    agentAddress: authorizedAgent,
+    permissions: permissions.toString(),
+    authorizedAt: Number(auth.authorizedAt ?? auth[3] ?? 0),
+    canMarketOpen: authorized && hasAgentPermission(permissions, 0),
+    canMarketClose: authorized && hasAgentPermission(permissions, 1),
+    canPartialClose: authorized && hasAgentPermission(permissions, 9),
+  };
+}
+
+export async function readLastAgentNonce(traderAddress, agentAddress, { publicClient = createLeverUpPublicClient() } = {}) {
+  return publicClient.readContract({
+    address: LEVERUP_1CT.diamond, abi: LAST_NONCE_ABI,
+    functionName: "getLastNonce", args: [traderAddress, agentAddress],
   });
 }
 
@@ -663,7 +711,7 @@ export function reconcileClosedPosition(closedPosition, lastLiveSnapshot = null,
 }
 
 export async function readLeverUpAccountSnapshot({
-  traderAddress, symbol, collateralRatio, rpcUrl = "https://rpc.monad.xyz",
+  traderAddress, agentAddress, symbol, collateralRatio, rpcUrl = "https://rpc.monad.xyz",
   fetchImpl = fetch, publicClient = createLeverUpPublicClient(rpcUrl),
 }) {
   const [pairs, antiDdos] = await Promise.all([
@@ -689,9 +737,13 @@ export async function readLeverUpAccountSnapshot({
   ]);
   const feeTokens = antiDdos.config.filter((item) => item.enabled && item.feeToken)
     .map((item) => item.feeToken);
-  const accountTokenStates = traderAddress
-    ? await readTokenBalancesAndAllowances(traderAddress, [LEVERUP_TOKENS.WMON, LEVERUP_TOKENS.LVMON, ...feeTokens], { publicClient })
-    : {};
+  const [accountTokenStates, agentAuthorization, lastAgentNonce] = traderAddress
+    ? await Promise.all([
+      readTokenBalancesAndAllowances(traderAddress, [LEVERUP_TOKENS.WMON, LEVERUP_TOKENS.LVMON, LEVERUP_TOKENS.USDC, LEVERUP_TOKENS.LVUSD, ...feeTokens], { publicClient }),
+      agentAddress ? readAgentAuthorization(traderAddress, agentAddress, { publicClient }) : Promise.resolve(null),
+      agentAddress ? readLastAgentNonce(traderAddress, agentAddress, { publicClient }) : Promise.resolve(null),
+    ])
+    : [{}, null, null];
   return {
     checkedAt: Date.now(),
     blockNumber: blockNumber.toString(),
@@ -711,6 +763,8 @@ export async function readLeverUpAccountSnapshot({
     accountTokenStates: Object.fromEntries(Object.entries(accountTokenStates).map(([token, state]) => [token, {
       balance: state.balance.toString(), allowance: state.allowance.toString(),
     }])),
+    agentAuthorization,
+    lastAgentNonce: lastAgentNonce == null ? null : String(lastAgentNonce),
     antiDdosConfig: antiDdos,
     collateralRatio: collateralRatio ?? null,
   };

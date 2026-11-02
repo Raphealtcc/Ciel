@@ -10,6 +10,9 @@ import {
   estimateProtocolCosts,
   selectInferredLeverage,
   calculateNotionalFromMarginMon,
+  hasAgentPermission,
+  readAgentAuthorization,
+  readLastAgentNonce,
 } from "../src/leverup-readonly.js";
 
 const tiers = [
@@ -17,6 +20,24 @@ const tiers = [
   { notionalUsdRaw: "100000000000000000000", tier: 1, maxLeverage: 50, initialLostPRaw: "0", liqLostPRaw: "0" },
 ];
 assert.equal(MIN_EXECUTION_LEVERAGE, 50);
+const permissionMask = (1n << 0n) | (1n << 1n) | (1n << 9n);
+assert.equal(hasAgentPermission(permissionMask, 0), true);
+assert.equal(hasAgentPermission(permissionMask, 1), true);
+assert.equal(hasAgentPermission(permissionMask, 9), true);
+assert.equal(hasAgentPermission(permissionMask, 6), false);
+assert.equal(hasAgentPermission((2n ** 256n) - 1n, 6), true);
+const testTrader = "0x1111111111111111111111111111111111111111";
+const testAgent = "0x2222222222222222222222222222222222222222";
+const mockClient = {
+  readContract: async ({ functionName }) => functionName === "getAgentAuth"
+    ? { agent: testAgent, name: "0x" + "00".repeat(32), permissions: permissionMask, authorizedAt: 1790000000 }
+    : 77n,
+};
+const authCheck = await readAgentAuthorization(testTrader, testAgent, { publicClient: mockClient });
+assert.equal(authCheck.authorized, true);
+assert.equal(authCheck.canMarketOpen, true);
+assert.equal(authCheck.canPartialClose, true);
+assert.equal(await readLastAgentNonce(testTrader, testAgent, { publicClient: mockClient }), 77n);
 assert.ok(Math.abs(calculateNotionalFromMarginMon({ marginMon: 22, leverage: 50, monUsdPrice: 0.026, collateralRatio: 0.7 }) - 20.02) < 1e-9);
 assert.ok(Math.abs(calculateNotionalFromMarginMon({ marginMon: 11, leverage: 100, monUsdPrice: 0.026, collateralRatio: 0.7 }) - 20.02) < 1e-9);
 assert.equal(selectInferredLeverage(100, 50, 100), 50);
