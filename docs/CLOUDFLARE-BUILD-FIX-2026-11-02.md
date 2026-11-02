@@ -1,4 +1,4 @@
-# CIEL   Cloudflare staging build — 2026-11-02
+# CIEL Cloudflare staging build — 2026-11-02
 
 ## Correct staging target
 
