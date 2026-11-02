@@ -1,7 +1,6 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
-  // Separate-account staging template. Replace resource placeholders only after
-  // creating the staging D1/KV resources in the connected staging account.
+  // Separate-account staging configuration. IDs supplied by the user.
   "name": "ciel-paper-staging",
   "main": "reconstructed/patched-worker.js",
   "compatibility_date": "2026-09-08",
@@ -20,15 +19,15 @@
   "d1_databases": [{
     "binding": "DB",
     "database_name": "ciel-paper-staging",
-    "database_id": "REPLACE_WITH_NEW_ACCOUNT_D1_DATABASE_ID"
+    "database_id": "a41e95fe-58cc-443a-839e-5ee0525e9fcf"
   }],
   "kv_namespaces": [{
     "binding": "CIEL_STATE",
-    "id": "REPLACE_WITH_NEW_ACCOUNT_KV_NAMESPACE_ID"
+    "id": "6e1fa505914c4d3b87b5b49c9d54f6fe"
   }],
   "previews": {
     // Preview settings do not inherit top-level vars or bindings.
-    // All branch Previews intentionally share the NEW-ACCOUNT staging D1/KV.
+    // Branch Previews intentionally share the isolated staging D1/KV dataset.
     "vars": {
       "ADVISORY_MIN_CONFIDENCE": "0.72",
       "ADVISORY_TREND_REVIEW_COOLDOWN_MINUTES": "30",
@@ -41,11 +40,11 @@
     "d1_databases": [{
       "binding": "DB",
       "database_name": "ciel-paper-staging",
-      "database_id": "REPLACE_WITH_NEW_ACCOUNT_D1_DATABASE_ID"
+      "database_id": "a41e95fe-58cc-443a-839e-5ee0525e9fcf"
     }],
     "kv_namespaces": [{
       "binding": "CIEL_STATE",
-      "id": "REPLACE_WITH_NEW_ACCOUNT_KV_NAMESPACE_ID"
+      "id": "6e1fa505914c4d3b87b5b49c9d54f6fe"
     }]
   },
   "durable_objects": {
