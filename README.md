@@ -63,3 +63,6 @@ See `docs/HANDOFF-2026-11-02.md` before changing the connected Cloudflare accoun
 The latest 14-route GitLab smoke test reached the live Worker. Health was connected/open/fresh; 25 markets were listed, 24 had prices and 23 had order books. QNT is missing price/book and KPEPE is missing a book. The sampled BTC, ETH, MON, ONDO and ADA books were fresh. Do not treat a healthy global feed flag as proof that every symbol has full market-quality data.
 
 Do not connect the second Cloudflare account until the account-switch preflight is reviewed. The source secrets and Durable Object paper ledger are not exportable through the available API. The new staging Worker must use new D1/KV/DO resources and a separate Telegram bot.
+
+
+The staging Worker name in the template is `ciel-paper-staging`. Run `npm run check:paper` to reconstruct and syntax-check the patched bundle before deploying with `npx wrangler deploy --config wrangler.jsonc`. The staging config uses placeholders for fresh account resources and must not be deployed until they are replaced and validated.
