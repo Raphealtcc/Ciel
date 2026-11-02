@@ -195,7 +195,7 @@ once(
 
 
 once(
-  '    const priorReview = await env.DB.prepare("SELECT created_at_ms FROM advisor_ai_audit WHERE symbol=? AND model!=\\'CIEL Statistical Ensemble v1\\' AND model!=\\'CIEL deterministic range guard\\' ORDER BY created_at_ms DESC LIMIT 1").bind(candidate.symbol).first();',
+  "    const priorReview = await env.DB.prepare(\"SELECT created_at_ms FROM advisor_ai_audit WHERE symbol=? AND model!='CIEL Statistical Ensemble v1' AND model!='CIEL deterministic range guard' ORDER BY created_at_ms DESC LIMIT 1\").bind(candidate.symbol).first();",
   `    const priorReviewSql = candidate.mode === "CORE_PULLBACK_SCALP"
       ? "SELECT created_at_ms FROM advisor_ai_audit WHERE symbol=? AND model='CIEL deterministic core scalp guard' ORDER BY created_at_ms DESC LIMIT 1"
       : candidate.mode === "RANGE_SCALP"
