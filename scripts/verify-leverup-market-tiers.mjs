@@ -111,9 +111,13 @@ async function mapLimit(items, limit, fn) {
 }
 
 const symbolsSource = await readFile("recovered-src/symbols.js.part-001", "utf8");
-const staticMatch = symbolsSource.match(/var LEVERUP_MARKET_MAX_LEVERAGE = Object\.freeze\((\{[\s\S]*?\})\);/);
-if (!staticMatch) throw new Error("Could not extract the recovered static leverage map");
-const staticMap = vm.runInNewContext("(" + staticMatch[1] + ")");
+const sourceMapMatch = symbolsSource.match(/var LEVERUP_MARKET_MAX_LEVERAGE = Object\.freeze\((\{[\s\S]*?\})\);/);
+if (!sourceMapMatch) throw new Error("Could not extract the recovered source leverage map");
+const sourceMap = vm.runInNewContext("(" + sourceMapMatch[1] + ")");
+const patchedSource = await readFile("reconstructed/patched-worker.js", "utf8");
+const patchedMapMatch = patchedSource.match(/var LEVERUP_MARKET_MAX_LEVERAGE = Object\.freeze\((\{[\s\S]*?\})\);/);
+if (!patchedMapMatch) throw new Error("Could not extract the staging patched leverage map");
+const stagingMap = vm.runInNewContext("(" + patchedMapMatch[1] + ")");
 
 const pairsResponse = await fetchJson(PAIRS_URL);
 const allPairs = pairsResponse.content || [];
