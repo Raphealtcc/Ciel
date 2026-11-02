@@ -26,11 +26,7 @@ async function ensureTelegramWebhook(env) {
   const secret = (env.TELEGRAM_WEBHOOK_SECRET || "").trim();
   if (!token || !secret || !/^[A-Za-z0-9_-]{1,256}$/.test(secret)) return;
   const marker = "ciel:telegram:webhook:auto-registration";
-  const webhookUrl = (env.TELEGRAM_WEBHOOK_URL || "").trim();
-  if (!webhookUrl) return;
-  let target;
-  try { target = new URL(webhookUrl); } catch { return; }
-  if (target.protocol !== "https:" || target.hostname !== "ciel2.gatakehanami.workers.dev" || target.pathname !== "/telegram/webhook" || target.search || target.hash) return;
+  const webhookUrl = "https://ciel.leno3z4rrrri.workers.dev/telegram/webhook";
   try {
     const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(secret));
     const fingerprint = Array.from(new Uint8Array(digest), (value) => value.toString(16).padStart(2, "0")).join("");
