@@ -10,6 +10,7 @@ verify-ciel-recovery:
     - node --check scripts/check-staging-config.mjs
     - node --check scripts/summarize-rea.mjs
     - node --check scripts/verify-leverup-market-tiers.mjs
+    - node --check scripts/smoke-live-worker.mjs
     - npm run check
     - npm run check:paper
   rules:
@@ -56,17 +57,6 @@ analyze-ciel-with-rea:
         - package.json
         - wrangler.jsonc
         - .gitlab-ci.yml
-
-live-readonly-smoke:
-  image: node:22-alpine
-  stage: verify
-  needs: []
-  script:
-    - node scripts/smoke-live-worker.mjs
-  when: manual
-  allow_failure: true
-  rules:
-    - if: '$CI_COMMIT_BRANCH == "audit/paper-trading-fix"'
 
 live-readonly-smoke:
   image: node:22-alpine
