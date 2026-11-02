@@ -101,7 +101,7 @@ assert.throws(() => buildLeverUpPreflight({
   requestedLeverage: 50, availableMarginMon: 100, collateralRatio: 1,
 }), /MIN_HOLDING_DURATION_NOT_MET/);
 assert.throws(() => buildLeverUpPreflight({
-  market: { status: "AVAILABLE", minHoldingSeconds: 0, executionVenue: "HYPERLIQUID" },
+  market: { status: "AVAILABLE", minHoldingSeconds: 0, executionVenue: "POOL" },
   pairView: { leverageMargins: tiers },
   oraclePriceRaw: "1", monUsdPriceRaw: "1", minimumNotionalRaw: "20000000000000000000",
   requestedLeverage: 25, availableMarginMon: 100, collateralRatio: 1,
