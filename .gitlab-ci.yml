@@ -26,6 +26,7 @@ verify-leverup-market-metadata:
   stage: verify
   needs: [verify-ciel-recovery]
   script:
+    - npm install --ignore-scripts
     - npm run check:paper
     - node scripts/verify-leverup-market-tiers.mjs
   artifacts:
@@ -44,6 +45,7 @@ analyze-ciel-with-rea:
   stage: reverse-engineer
   needs: [verify-ciel-recovery]
   script:
+    - npm install --ignore-scripts
     - apk add --no-cache procps
     - npm run check:paper
     - mkdir -p "$CI_PROJECT_DIR/rea-patched"
