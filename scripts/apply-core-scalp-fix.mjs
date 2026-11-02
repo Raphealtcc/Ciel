@@ -275,9 +275,15 @@ once(
 
 
 once(
-  '    if (processedCandidateSymbols.has(candidate.symbol)) continue;\\n    processedCandidateSymbols.add(candidate.symbol);\\n    const isScalpMode = candidate.mode === "RANGE_SCALP" || candidate.mode === "CORE_PULLBACK_SCALP";\\n    if (isScalpMode && eventIntel?.marketImpact === "BROAD_RISK_OFF") continue;',
-  '    if (processedCandidateSymbols.has(candidate.symbol)) continue;\\n    const isScalpMode = candidate.mode === "RANGE_SCALP" || candidate.mode === "CORE_PULLBACK_SCALP";\\n    if (isScalpMode && eventIntel?.marketImpact === "BROAD_RISK_OFF") continue;\\n    processedCandidateSymbols.add(candidate.symbol);',
-  "allow a valid extended trend candidate if the same-symbol scalp is blocked by broad risk-off",
+  '    processedCandidateSymbols.add(candidate.symbol);',
+  '',
+  "delay symbol reservation until after the scalp risk-off filter",
+);
+
+once(
+  '    if (isScalpMode && eventIntel?.marketImpact === "BROAD_RISK_OFF") continue;',
+  '    if (isScalpMode && eventIntel?.marketImpact === "BROAD_RISK_OFF") continue;\\n    processedCandidateSymbols.add(candidate.symbol);',
+  "allow the extended trend candidate when its scalp counterpart is blocked",
 );
 
 once(
