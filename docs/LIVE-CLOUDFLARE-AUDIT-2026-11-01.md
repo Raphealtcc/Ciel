@@ -259,3 +259,14 @@ The latest jobs individually report success for exact-bundle recovery and behavi
 - Telegram: KV auto-registration marker exists. Source code writes it only after successful `setWebhook` and `getWebhookInfo` verification of `message` and `callback_query`; the webhook handler validates the Telegram secret header and chat ID. This is last-known registration proof, not a live button-click test.
 - Current D1 row counts and latest timestamps are recorded in the handoff. All audit queries were read-only and returned `rows_written=0`.
 - The latest pipeline's individual jobs all show success, but GitLab's top-level pipeline status reports `failed` with no failed/cancelled jobs or bridges listed. This anomaly remains unresolved; do not call the pipeline green.
+
+
+### Latest feed coverage (00:37 UTC, 2026-11-02)
+
+The 14-route smoke job passed. Health was connected/open/fresh (last tick age ~3.7s). The 25-market endpoint had 24 priced symbols; QNT had no price. It had 23/25 books, missing KPEPE and QNT. The sampled books for BTC, ETH, MON, ONDO and ADA were all fresh in this run. BTC 15m candles returned 100 rows. Positions returned 50 rows, active signals returned 0, research returned 25 recent records, and alerts returned 5.
+
+A previous single-BTC orderbook probe briefly returned stale/empty before the later five-market check returned fresh books for all five symbols. Treat order-book freshness as per-symbol and intermittent; the overall feed health flag alone is not enough. QNT is a LeverUp 5x market but has no Hyperliquid price/book in the current feed; KPEPE has price but no book. These symbols cannot supply complete technical + market-quality evidence at that moment.
+
+The latest market endpoint MON reference was $0.019038. At 100% CR, 22 MON × 50x and 11 MON × 100x imply about $20.94 notional. The $20 minimum is met only if CR is at least ~95.5%; at 95% CR, those amounts are slightly short. The live CR was not read from the LeverUp order panel, so 22/11 remain illustrative observed tiers rather than guaranteed minima.
+
+Staging must use a separate Telegram bot token/chat ID/webhook secret; two Workers using one bot token would compete to register the same webhook every minute. See the account-switch preflight document.
