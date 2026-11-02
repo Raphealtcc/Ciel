@@ -60,7 +60,7 @@ The root endpoint's advertised list omits `/api/signals`, `/api/research` and `/
 - Maintains the WebSocket connection and reconnect metadata.
 - Keeps latest prices, in-memory history, latest order books, context history and alert timestamps.
 - Persists these values through Durable Object `state.storage.get/put`.
-- Hydrates/records D1 market samples, candles, order-book/context snapshots and hourly summaries using bounded write intervals.
+- Persists D1 market samples, candles, context snapshots and hourly summaries using bounded write intervals. The old `market_book_snapshots` table is no longer written to; live order-book snapshots stay in the Durable Object to avoid high-volume D1 writes.
 - The public `/health` endpoint checks the feed's connected state and latest tick freshness.
 
 ### Advisor engine
@@ -88,7 +88,7 @@ LINK: 50, LIT: 5, PONS: 3, PUMP: 50, SEI: 50,
 SOL: 100, SUI: 50, UNI: 50, VIRTUAL: 50, XMR: 25
 ```
 
-The paper account defaults to 60 MON, a 22 MON paper margin and 50x leverage. `minimumMarginForMarketLeverage()` returns 22 MON for 50x, 11 MON for leverage >=100x, and null for other values. But `openPaperTrade()` currently rejects any market whose maximum leverage is not exactly 50x. Consequently the 100x+ minimum-margin branch is not actually reachable through that paper-open path. The user-reported LeverUp minimums (50x ≈22 MON; 100x–1000x ≈11 MON) still need live verification against LeverUp market metadata and the exact order path before the model is changed.
+The production baseline paper account defaults to 60 MON, a 22 MON paper margin and 50x leverage. `minimumMarginForMarketLeverage()` returns 22 MON for 50x, 11 MON for leverage >=100x, and null for other values. The original production code rejected all non-50x markets, so the 100x+ branch was unreachable. The isolated staging patch enables verified 100x markets at a conservative 100x simulation baseline, stores the same 11 MON / 100x in the advisor proposal, corrects BTC/ETH from 1001x to 100x, and makes Telegram setup/open/help/profits copy tier-aware. The current watchlist has no verified 1000x market. The verified global minimum notional is $20; exact MON collateral remains dependent on live CR.
 
 This is a concrete code inconsistency to fix after verifying the exchange's real constraints. Do not use the static map as proof of current market max leverage or minimum collateral.
 
@@ -110,15 +110,15 @@ Non-secret runtime variables and secret names are in `../README.md` and `wrangle
 
 ## D1 schema
 
-The current `ciel` D1 database is 34,095,104 bytes and has 16 application tables plus 14 indexes. The recovered live schema is `migrations/0000_recovered_live_schema.sql`. It includes market/advisor tables and older token-trading tables such as `tokens`, `signals`, `trades`, `positions`, `live_positions` and `live_executions`. Do not drop those legacy tables simply because the current Worker code is read-only.
+The current `ciel` D1 database is approximately 35,086,336 bytes and has 16 application tables plus 14 indexes at the latest read-only inventory. The live schema exactly matches the recovered migration. The recovered live schema is `migrations/0000_recovered_live_schema.sql`. It includes market/advisor tables and older token-trading tables such as `tokens`, `signals`, `trades`, `positions`, `live_positions` and `live_executions`. Do not drop those legacy tables simply because the current Worker code is read-only.
 
 ## Known gaps and defects to address
 
-1. **LeverUp margin model mismatch:** the 100x+ 11 MON branch exists but paper trading rejects non-50x markets.
-2. **Symbol mapping:** previous investigation found QNT on Hyperliquid under `xyz:QNT`, while the watchlist uses `QNT`. Verify and add an explicit symbol mapping; do not bypass per-market leverage checks.
+1. **LeverUp margin model mismatch:** the original 100x+ 11 MON branch existed but paper trading rejected non-50x markets. The isolated `audit/paper-trading-fix` branch now enables supported 100x+ tiers, aligns proposal records and Telegram estimates, and tests open/close lifecycle; the static market map still needs authoritative LeverUp verification.
+2. **Symbol mapping/feed coverage:** the live feed currently reports 24/25 prices and 23/25 order books. QNT has no price/book; KPEPE has a price but no book. A possible `xyz:QNT` alias needs a fresh allMids/meta/l2Book verification before adding an explicit mapping. Do not treat QNT as usable until both price and context/book are available.
 3. **Alert delivery:** worker health does not prove Telegram messages or inline callbacks are working. Audit send failures and test callback actions.
 4. **D1 migrations:** live schema is recovered, but original ordered migration files are not. The bundle references `migrations/0004_market_monitor.sql`; the exact historical migration chain must be reconstructed from schema and queries.
-5. **Durable Object migration history:** active version reports migration tag `v2`; the full original migration chain was not exposed by the inspected version metadata. The provided Wrangler config is a fresh-target template, not a verified source-account migration history.
+5. **Durable Object migration history:** active version reports migration tag `v2`; the full original migration chain was not exposed by the inspected version metadata. The provided Wrangler config is a new-account staging template with target D1/KV placeholders, not a verified source-account migration history.
 6. **State:** KV values and Durable Object storage were not copied. D1 schema is not a D1 data backup.
 7. **Source map/build:** original TS source map, dependencies, package lock, tests and CI config were not present in the deployment export.
 
@@ -130,7 +130,7 @@ The current `ciel` D1 database is 34,095,104 bytes and has 16 application tables
 - Create target KV namespace and DO namespaces; define a fresh-target migration plan.
 - Add Telegram and Gemini secrets through Cloudflare/GitLab protected variables only.
 - Deploy to a staging Worker with a different name/route.
-- Test /health, all GET APIs, webhook registration, incoming Telegram updates, callback buttons, scheduled feed startup and D1 write volume.
+- Test /health, all GET APIs, webhook registration, incoming Telegram updates, callback buttons, scheduled feed startup and D1 write volume. Use a separate staging Telegram bot; do not reuse the production token.
 - Verify 24/25 or full watchlist symbol coverage and resolve the QNT alias.
 - Verify LeverUp leverage and minimum collateral per market from authoritative live data.
 - Only then cut traffic over. Do not disable the existing source Worker during reconstruction.
@@ -139,3 +139,19 @@ The current `ciel` D1 database is 34,095,104 bytes and has 16 application tables
 ## Byte-level recovery verification
 
 The recovered Worker was reassembled to exactly 209,745 characters. Its SHA-256 is `24e6452b4a2854a1e37f864adcb201d588771460eed68bcd100f5cfbafd564b6`, matching the digest calculated directly from the Cloudflare deployed `index.js` export. REA independently recorded the same digest for `reconstructed/worker.js`. The reassembly script now enforces both the exact length and this SHA-256 before it writes the output.
+
+
+## Latest source-account audit
+
+The 2026-11-02 read-only account inventory is documented in `HANDOFF-2026-11-02.md`. It confirms 234 advisor position rows (225 expired, 4 closing, 2 closed, 3 cancelled) and 944 AI audit rows (113 APPROVE, 41 REJECT, 790 WAIT). The two supplied ONDO/ADA proposal IDs are present as expired manual-tracking proposals; their automatic paper entries are separate DO state.
+
+The source account has one CIEL feed DO object and zero objects in the retired TradingEngine namespace. The protected DO internal paper ledger cannot be read via the available Cloudflare SQL API. D1 `paper_executions` is empty because it is not the current perp paper ledger.
+
+
+## Hyperliquid symbol and book identity diagnostics (2026-11-02)
+
+The public Hyperliquid checks resolved the missing-book causes:
+- KPEPE is named `kPEPE` in default `allMids` and `metaAndAssetCtxs`. The metadata universe contains the asset and context. `l2Book` works for exact coin `kPEPE` (bid 0.004892 / ask 0.004894 at the check) but returns HTTP 500 for uppercase `KPEPE`. Production normalizes the market symbol to uppercase and then requests the book using that uppercase value, so its REST fallback misses this book. The staging patch now preserves the original upstream coin name while keeping canonical uppercase CIEL symbols.
+- QNT is absent from default `allMids` and from `metaAndAssetCtxs` for both default and `xyz`. The `allMids` request for DEX `xyz` does return `xyz:QNT` (34.186 at the check), and `l2Book` works for `xyz:QNT` (bid 34.111 / ask 34.261). But no derivatives context was returned for QNT in either metadata universe. The production Worker does not request the xyz DEX price or map this alias. QNT therefore remains excluded from advisor-ready market coverage until a valid funding/OI/mark/oracle context source is found; price/book alone is insufficient.
+
+This makes the current production coverage gap precise: KPEPE's book is fixable with a case-preserving coin name (patched for staging); QNT is a separate DEX alias plus missing derivatives-context problem (not silently patched into a complete signal).
