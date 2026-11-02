@@ -512,12 +512,19 @@ export function buildLeverUpPreflight({
   safetyBufferPct = 5, now = Date.now(),
 }) {
   if (!market || market.status !== "AVAILABLE") throw new Error("MARKET_NOT_AVAILABLE");
-  if (market.executionVenue && market.executionVenue !== "LEVERUP") throw new Error("MARKET_NOT_EXECUTED_BY_LEVERUP");
+  if (market.executionVenue === "HYPERLIQUID" ||
+      (market.executionVenue && !["POOL", "LEVERUP"].includes(market.executionVenue))) {
+    throw new Error("MARKET_NOT_EXECUTED_BY_LEVERUP");
+  }
   if (!pairView?.leverageMargins?.length) throw new Error("LIVE_LEVERAGE_TIERS_MISSING");
   if (!oraclePriceRaw || BigInt(oraclePriceRaw) <= 0n) throw new Error("LEVERUP_ORACLE_PRICE_MISSING");
   if (!monUsdPriceRaw || BigInt(monUsdPriceRaw) <= 0n) throw new Error("LEVERUP_MON_ORACLE_PRICE_MISSING");
   if (minimumNotionalRaw == null || BigInt(minimumNotionalRaw) <= 0n) throw new Error("GLOBAL_MIN_NOTIONAL_MISSING");
   if (market.minHoldingSeconds == null) throw new Error("MIN_HOLDING_REQUIREMENT_MISSING");
+  if (!Number.isFinite(Number(expectedHoldSeconds)) || Number(expectedHoldSeconds) < Number(market.minHoldingSeconds)) {
+    throw new Error("MIN_HOLDING_DURATION_NOT_MET");
+  }
+  if (typeof isLong !== "boolean") throw new Error("TRADE_DIRECTION_MISSING");
 
   const minimumNotionalUsd = Number(minimumNotionalRaw) / 1e18;
   const notionalUsd = Number(intendedNotionalUsd ?? minimumNotionalUsd);
@@ -667,6 +674,7 @@ export async function readLeverUpAccountSnapshot({
   if (!market) throw new Error("LEVERUP_MARKET_NOT_FOUND: " + symbol);
   const pairBase = market.base || market.pairBase;
   if (!pairBase) throw new Error("LEVERUP_PAIR_BASE_MISSING");
+  if (market.executionVenue === "HYPERLIQUID") throw new Error("MARKET_NOT_EXECUTED_BY_LEVERUP");
   const monMarket = pairs.find((item) => item.symbol === "MON" || item.pairName === "MON/USD");
   if (!monMarket?.base) throw new Error("MON_COLLATERAL_PRICE_PAIR_MISSING");
   const blockNumber = await publicClient.getBlockNumber();

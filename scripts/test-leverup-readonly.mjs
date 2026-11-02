@@ -54,7 +54,15 @@ assert.equal(preflight.requestedLeverage, 100);
 assert.equal(preflight.minimumNotionalUsd, 20);
 assert.ok(preflight.estimatedCarryCosts);
 assert.throws(() => buildLeverUpPreflight({
-  market: { status: "AVAILABLE", minHoldingSeconds: 0 },
+  market: { status: "AVAILABLE", minHoldingSeconds: 180, executionVenue: "POOL" },
+  pairView: { leverageMargins: tiers, feeConfig: { openFeeP: 3, closeFeeP: 3, enabled: true }, longHoldingFeeRateRaw: "1000000", shortHoldingFeeRateRaw: "1000000" },
+  marketInfo: { fundingFeeRate: "1000000000000000" },
+  intendedNotionalUsd: 20, isLong: true, expectedHoldSeconds: 120,
+  oraclePriceRaw: "1", monUsdPriceRaw: "1", minimumNotionalRaw: "20000000000000000000",
+  requestedLeverage: 50, availableMarginMon: 100, collateralRatio: 1,
+}), /MIN_HOLDING_DURATION_NOT_MET/);
+assert.throws(() => buildLeverUpPreflight({
+  market: { status: "AVAILABLE", minHoldingSeconds: 0, executionVenue: "HYPERLIQUID" },
   pairView: { leverageMargins: tiers },
   oraclePriceRaw: "1", monUsdPriceRaw: "1", minimumNotionalRaw: "20000000000000000000",
   requestedLeverage: 25, availableMarginMon: 100, collateralRatio: 1,
