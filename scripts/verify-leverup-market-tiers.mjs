@@ -293,13 +293,17 @@ const hyperliquidFeedDiagnostics = {
   qnt: {},
   kpepe: {},
   bookChecks: [],
-  metaAndAssetCtxs: {}
+  metaAndAssetCtxs: {},
+  allWatchlistBookChecks: []
 };
+const metaAndAssetCtxsUniverses = { default: [], xyz: [] };
 try {
   const mids = await hyperliquidAllMids(null);
+  const keys = Object.keys(mids || {});
   hyperliquidFeedDiagnostics.allMidsDefault = {
-    qntKey: Object.keys(mids || {}).filter((key) => key.toUpperCase().includes("QNT")),
-    kpepeKey: Object.keys(mids || {}).filter((key) => key.toUpperCase().includes("KPEPE"))
+    qntKey: keys.filter((key) => key.toUpperCase().includes("QNT")),
+    kpepeKey: keys.filter((key) => key.toUpperCase().includes("KPEPE")),
+    watchlistPriceSymbols: WATCHLIST.filter((symbol) => keys.some((key) => key.split(":").at(-1).toUpperCase() === symbol))
   };
   hyperliquidFeedDiagnostics.qnt.defaultMid = mids?.QNT ?? null;
   hyperliquidFeedDiagnostics.kpepe.defaultMid = mids?.KPEPE ?? null;
@@ -308,9 +312,11 @@ try {
 }
 try {
   const mids = await hyperliquidAllMids("xyz");
+  const keys = Object.keys(mids || {});
   hyperliquidFeedDiagnostics.allMidsXyz = {
-    qntKey: Object.keys(mids || {}).filter((key) => key.toUpperCase().includes("QNT")),
-    kpepeKey: Object.keys(mids || {}).filter((key) => key.toUpperCase().includes("KPEPE"))
+    qntKey: keys.filter((key) => key.toUpperCase().includes("QNT")),
+    kpepeKey: keys.filter((key) => key.toUpperCase().includes("KPEPE")),
+    watchlistPriceSymbols: WATCHLIST.filter((symbol) => keys.some((key) => key.split(":").at(-1).toUpperCase() === symbol))
   };
   hyperliquidFeedDiagnostics.qnt.xyzMid = mids?.QNT ?? mids?.["xyz:QNT"] ?? null;
   hyperliquidFeedDiagnostics.kpepe.xyzMid = mids?.KPEPE ?? mids?.["xyz:KPEPE"] ?? null;
@@ -332,7 +338,9 @@ for (const dex of [null, "xyz"]) {
     const response = await hyperliquidMetaAndAssetCtxs(dex);
     const meta = Array.isArray(response) ? response[0] : null;
     const contexts = Array.isArray(response) ? response[1] : [];
-    const names = meta?.universe?.map((asset) => asset.name) || [];
+    const assets = Array.isArray(meta?.universe) ? meta.universe : [];
+    const names = assets.map((asset) => asset.name);
+    metaAndAssetCtxsUniverses[dex || "default"] = assets;
     hyperliquidFeedDiagnostics.metaAndAssetCtxs[dex || "default"] = {
       qnt: names.includes("QNT"),
       kpepe: names.includes("KPEPE") || names.includes("kPEPE"),
@@ -343,6 +351,22 @@ for (const dex of [null, "xyz"]) {
     };
   } catch (error) {
     hyperliquidFeedDiagnostics.metaAndAssetCtxs[dex || "default"] = { error: String(error).slice(0, 300) };
+  }
+}
+const allAssets = [...metaAndAssetCtxsUniverses.default, ...metaAndAssetCtxsUniverses.xyz];
+const bookTargets = WATCHLIST.map((symbol) => {
+  const asset = allAssets.find((candidate) => String(candidate?.name || "").trim().toUpperCase() === symbol);
+  const coin = asset?.name || (symbol === "QNT" ? "xyz:QNT" : null);
+  return { symbol, coin, metadataFound: Boolean(asset) };
+});
+for (let offset = 0; offset < bookTargets.length; offset += 4) {
+  const batch = await Promise.all(bookTargets.slice(offset, offset + 4).map(async (target) => {
+    if (!target.coin) return { ...target, ok: false, error: "No Hyperliquid metadata coin found" };
+    return { ...target, ...await hyperliquidBook(target.coin) };
+  }));
+  hyperliquidFeedDiagnostics.allWatchlistBookChecks.push(...batch);
+}
+
   }
 }
 
