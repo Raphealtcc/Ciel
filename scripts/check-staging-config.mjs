@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
 const raw = await readFile("wrangler.jsonc", "utf8");
-const json = raw.replace(/^\\s*\\/\\/.*$/gm, "");
+const json = raw.replace(/^\s*\/\/.*$/gm, "");
 const config = JSON.parse(json);
 
 assert.equal(config.name, "ciel-paper-staging");
