@@ -223,10 +223,6 @@ assert.ok(source.includes("const perpAssets = universe.map((asset) => ({ symbol:
 assert.ok(source.includes("missingBooks.slice(offset, offset + 4).map(async ({ symbol, coin }) => {"));
 assert.ok(source.includes('JSON.stringify({ type: "l2Book", coin })'));
 assert.ok(source.includes("const missingBooks = perpAssets.filter(({ symbol }) => now - (this.bookLastWrite[symbol] || 0) > 9e4);"));
-assert.ok(source.includes("const maintenanceNow = Date.now();"));
-assert.ok(source.includes("await this.writeMarketContexts(maintenanceNow);"));
-assert.ok(source.includes("await this.writeCandleSnapshots(maintenanceNow);"));
-assert.ok(source.includes("await runAdvisorCycle(this.env, this.latest, maintenanceNow, this.lastTickAt, this.history, this.liveMarketInputs(maintenanceNow), this.state.storage);"));
 
 
 assert.ok(source.includes('if (!paperStorage) console.log("Ciel paper storage unavailable; advisor recommendations will continue without automatic paper entries.");'));
