@@ -106,7 +106,7 @@ Repository: https://gitlab.com/leno3z4rrrri/ciel2
 - Private repository; default branch `main`.
 - `main` remains the recovered production baseline (latest inspected commit `753cc711`).
 - `audit/paper-trading-fix` contains the isolated tier-aware staging patch, tests, audit documentation, and read-only checks.
-- Latest audit-branch commit at this check: `a1f193f8`.
+- Latest audit-branch commit at this check: `650aaed3`.
 - No merge request exists. The staging patch has not been merged into `main`.
 - The recovered exact deployed bundle is 209,745 characters with SHA-256 `24e6452b4a2854a1e37f864adcb201d588771460eed68bcd100f5cfbafd564b6`.
 - GitLab contains the compressed Cloudflare export fragments, recovered JavaScript module fragments, D1 schema migration, architecture notes, REA reports, and deterministic reassembly/patch/test scripts.
@@ -132,7 +132,7 @@ The subsequent read-only smoke job passed all 10 GET routes:
 
 All returned HTTP 200 and valid JSON. The health endpoint returned `ok: true`. The smoke test issued GET requests only and performed no state-changing actions.
 
-The API-sourced pipeline associated with the smoke run reported an aggregate failed status even though all four listed jobs (recovery verification, LeverUp metadata verification, live smoke, and REA analysis) were successful. The later push pipelines use the corrected single-job CI definition; verify their final aggregate status before merging.
+The API-sourced pipeline associated with the smoke run reported an aggregate failed status even though all four listed jobs (recovery verification, LeverUp metadata verification, live smoke, and REA analysis) were successful. Two immediate push pipelines after the CI edits also reported failed aggregate statuses despite their listed required jobs succeeding and the smoke job remaining manual. The latest push pipeline, #76 at commit `650aaed3`, completed successfully; it reran `verify-ciel-recovery`. The REA analysis job also completed successfully on commit `a1f193f8`, and the 10-route live smoke job passed on pipeline #73. The duplicate job definition is now removed. Check the pipeline's final status again before merging.
 
 ## LeverUp Monad verification
 
