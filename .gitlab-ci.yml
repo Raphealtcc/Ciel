@@ -102,7 +102,7 @@ build-cloudflare-release-candidate:
     - npm install --ignore-scripts
     - npm run build
     - npx wrangler deploy --dry-run --outdir dist --config wrangler.jsonc
-    - node --input-type=module -e 'import fs from "node:fs"; const files=fs.readdirSync("dist").filter((f)=>f.endsWith(".js")); if(files.length!==1) throw new Error("Expected exactly one bundled Worker JS file in dist, found "+files.join(",")); const file="dist/"+files[0]; const data=fs.readFileSync(file); console.log("WORKER_BUNDLE_FILE="+file+" BYTES="+data.length); console.log("WORKER_BUNDLE_B64_BEGIN"); process.stdout.write(data.toString("base64")); console.log("\\nWORKER_BUNDLE_B64_END");'
+    - node --input-type=module -e 'import fs from "node:fs"; const files=fs.readdirSync("dist").filter((f)=>f.endsWith(".js")); if(files.length!==1) throw new Error("Expected exactly one bundled Worker JS file in dist, found "+files.join(",")); const file="dist/"+files[0]; const data=fs.readFileSync(file); const b64=data.toString("base64"); console.log("WORKER_BUNDLE_FILE="+file+" BYTES="+data.length); for(let i=0,n=0;i<b64.length;i+=3000,n++) console.log("WORKER_BUNDLE_CHUNK_"+n+":"+b64.slice(i,i+3000)); console.log("WORKER_BUNDLE_CHUNK_COUNT="+Math.ceil(b64.length/3000));'
   artifacts:
     when: always
     paths: [dist/, reconstructed/patched-worker.js]
