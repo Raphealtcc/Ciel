@@ -194,13 +194,16 @@ once(
 );
 
 once(
-  '    const intraday = candidate.mode === "RANGE_SCALP" ? null : await getIntradayPattern(env,candidate.symbol,now,candidate.entry);\n    const reviewed = candidate.mode === "RANGE_SCALP"\n      ? { verdict: "WAIT", reason: "Range scalp passed deterministic regime, CCI/rejection, statistical forecast and market-quality gates; Gemini review intentionally skipped to conserve daily API quota.", flags: ["LOCAL_RANGE_SCALP_REVIEW"], model: "CIEL deterministic range guard", queries: [], sources: [] }\n      : await review(env,candidate,forecast,reviewerMarket,intraday,eventIntel);',
-  `    const intraday = isScalpMode ? null : await getIntradayPattern(env,candidate.symbol,now,candidate.entry);
-    const reviewed = candidate.mode === "CORE_PULLBACK_SCALP"
+  'const intraday = candidate.mode === "RANGE_SCALP" ? null : await getIntradayPattern',
+  'const intraday = isScalpMode ? null : await getIntradayPattern',
+  "skip intraday research lookups for both scalp modes",
+);
+
+once(
+  'const reviewed = candidate.mode === "RANGE_SCALP"',
+  `const reviewed = candidate.mode === "CORE_PULLBACK_SCALP"
       ? { verdict:"WAIT", reason:"Closed 1m/5m pullback, reclaim, volume, freshness and market-quality gates passed; deterministic scalp review avoids extra Gemini calls.", flags:["LOCAL_CORE_PULLBACK_SCALP"], model:"CIEL deterministic core scalp guard", queries:[], sources:[] }
-      : candidate.mode === "RANGE_SCALP"
-        ? { verdict: "WAIT", reason: "Range scalp passed deterministic regime, CCI/rejection, statistical forecast and market-quality gates; Gemini review intentionally skipped to conserve daily API quota.", flags: ["LOCAL_RANGE_SCALP_REVIEW"], model: "CIEL deterministic range guard", queries: [], sources: [] }
-        : await review(env,candidate,forecast,reviewerMarket,intraday,eventIntel);`,
+      : candidate.mode === "RANGE_SCALP"`,
   "use deterministic local review for core scalps without Gemini calls",
 );
 
