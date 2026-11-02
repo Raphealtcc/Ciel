@@ -5,6 +5,7 @@ import vm from "node:vm";
 const source = await readFile("reconstructed/patched-worker.js", "utf8");
 assert.ok(source.includes('new Set(["BTC", "ETH", "MON", "SOL"])'), "SOL candle history must be added without dropping MON");
 assert.ok(source.includes('interval: "1m"'));
+assert.ok(source.includes("candles.slice(-45) : candles.slice(-1)"), "1m candle persistence must backfill once and write only the newest candle per minute");
 assert.ok(!source.includes("processedCandidateSymbols"), "trend candidates must not reserve a symbol before scalp evaluation");
 assert.ok(source.includes("model='CIEL deterministic core scalp guard'"), "core scalp cooldown must be mode-specific");
 assert.ok(source.includes("model NOT IN ('CIEL Statistical Ensemble v1','CIEL Statistical Ensemble v1 + technical gate','CIEL deterministic range guard','CIEL deterministic core scalp guard'"), "trend cooldown must ignore scalp and pre-review gate rows");
