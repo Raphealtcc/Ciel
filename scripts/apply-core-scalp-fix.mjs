@@ -172,8 +172,10 @@ once(
 );
 
 once(
-  '    if (sym === "MON" || Number(LEVERUP_MARKET_MAX_LEVERAGE[sym]) !== 50 || openPaperSymbols.has(sym)) continue;\n    const signal = analyse(sym, hist.get(sym) || [], now);\n    if (signal && signal.confidence >= setting(env.ADVISORY_MIN_CONFIDENCE, 0.72, 0.5, 0.95)) candidates.push(signal);',
-  `    if (sym === "MON" || minimumMarginForMarketLeverage(Number(LEVERUP_MARKET_MAX_LEVERAGE[sym])) === null || openPaperSymbols.has(sym)) continue;
+  'const marketMaxLeverage = Number(LEVERUP_MARKET_MAX_LEVERAGE[sym]);\\n    const requiredPaperMargin = minimumMarginForMarketLeverage(marketMaxLeverage);\\n    if (sym === "MON" || requiredPaperMargin === null || openPaperSymbols.has(sym)) continue;\\n    const signal = analyse(sym, hist.get(sym) || [], now);\\n    if (signal && signal.confidence >= setting(env.ADVISORY_MIN_CONFIDENCE, 0.72, 0.5, 0.95)) candidates.push(signal);',
+  `    const marketMaxLeverage = Number(LEVERUP_MARKET_MAX_LEVERAGE[sym]);
+    const requiredPaperMargin = minimumMarginForMarketLeverage(marketMaxLeverage);
+    if (sym === "MON" || requiredPaperMargin === null || openPaperSymbols.has(sym)) continue;
     const signal = analyse(sym, hist.get(sym) || [], now);
     const isCore = ["BTC","ETH","SOL"].includes(sym);
     if (signal && signal.confidence >= setting(env.ADVISORY_MIN_CONFIDENCE, 0.72, 0.5, 0.95) && (!isCore || signal.mode === "TREND_HOLD")) candidates.push(signal);
