@@ -351,8 +351,13 @@ export async function persistLeverUpPreflight(db, signalId, preflight, {
   return id;
 }
 
-export async function persistPositionFeeSnapshot(db, position, sourceBlock = null) {
+export async function persistPositionFeeSnapshot(db, position, sourceBlock = null, minIntervalMs = 300_000) {
   if (!db?.prepare || !position?.positionHash) throw new Error("POSITION_SNAPSHOT_PERSISTENCE_INPUT_INVALID");
+  const latest = await db.prepare("SELECT MAX(observed_at_ms) AS observed_at_ms FROM leverup_position_fee_snapshots WHERE position_hash = ?")
+    .bind(position.positionHash).first();
+  if (latest?.observed_at_ms && Date.now() - Number(latest.observed_at_ms) < minIntervalMs) {
+    return { stored: false, reason: "SNAPSHOT_INTERVAL_NOT_REACHED" };
+  }
   await db.prepare(`INSERT OR REPLACE INTO leverup_position_fee_snapshots (
     position_hash, observed_at_ms, pair_base, symbol, is_long, margin_token,
     open_fee_raw, execution_fee_raw, funding_fee_raw, holding_fee_raw,
@@ -366,6 +371,7 @@ export async function persistPositionFeeSnapshot(db, position, sourceBlock = nul
       position.accruedHoldingFeeRaw, Number(position.earliestCloseTime),
       sourceBlock == null ? null : String(sourceBlock),
     ).run();
+  return { stored: true };
 }
 
 export async function persistSettlementReconciliation(db, settlement, source = {}) {
@@ -430,6 +436,15 @@ export function assertMinimumLeverage({
     throw new Error("REQUESTED_LEVERAGE_EXCEEDS_MARKET_MAX");
   }
   return { requestedLeverage: requested, tierMaxLeverage: Number(tier.maxLeverage), tier };
+}
+
+export function calculateNotionalFromMarginMon({ marginMon, leverage, monUsdPrice, collateralRatio }) {
+  const margin = Number(marginMon), lev = Number(leverage), price = Number(monUsdPrice), ratio = Number(collateralRatio);
+  if (![margin, lev, price, ratio].every(Number.isFinite) ||
+      margin <= 0 || lev < MIN_EXECUTION_LEVERAGE || price <= 0 || ratio <= 0 || ratio > 1) {
+    throw new Error("NOTIONAL_SIZING_INPUTS_INVALID_OR_UNVERIFIED");
+  }
+  return margin * lev * price * ratio;
 }
 
 export function calculateMinimumCollateralMon({

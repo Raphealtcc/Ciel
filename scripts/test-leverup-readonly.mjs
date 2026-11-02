@@ -9,6 +9,7 @@ import {
   reconcileClosedPosition,
   estimateProtocolCosts,
   selectInferredLeverage,
+  calculateNotionalFromMarginMon,
 } from "../src/leverup-readonly.js";
 
 const tiers = [
@@ -16,6 +17,8 @@ const tiers = [
   { notionalUsdRaw: "100000000000000000000", tier: 1, maxLeverage: 50, initialLostPRaw: "0", liqLostPRaw: "0" },
 ];
 assert.equal(MIN_EXECUTION_LEVERAGE, 50);
+assert.ok(Math.abs(calculateNotionalFromMarginMon({ marginMon: 22, leverage: 50, monUsdPrice: 0.026, collateralRatio: 0.7 }) - 20.02) < 1e-9);
+assert.ok(Math.abs(calculateNotionalFromMarginMon({ marginMon: 11, leverage: 100, monUsdPrice: 0.026, collateralRatio: 0.7 }) - 20.02) < 1e-9);
 assert.equal(selectInferredLeverage(100, 50, 100), 50);
 assert.equal(selectInferredLeverage(75, 100, 100), 75);
 assert.throws(() => selectInferredLeverage(25, 100, 100), /INFERENCE_BELOW_50X/);
