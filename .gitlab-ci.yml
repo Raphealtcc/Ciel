@@ -93,3 +93,20 @@ verify-cloudflare-bun-bootstrap:
     - node --check reconstructed/patched-worker.js
   rules:
     - if: '$CI_COMMIT_BRANCH || $CI_PIPELINE_SOURCE == "merge_request_event"'
+
+build-cloudflare-release-candidate:
+  image: node:22-alpine
+  stage: verify
+  needs: [verify-ciel-recovery]
+  script:
+    - npm install --ignore-scripts
+    - npm run build
+    - npx wrangler deploy --dry-run --outdir dist --config wrangler.jsonc
+    - node --input-type=module -e 'import fs from "node:fs"; const files=fs.readdirSync("dist").filter((f)=>f.endsWith(".js")); if(files.length!==1) throw new Error("Expected exactly one bundled Worker JS file in dist, found "+files.join(",")); const file="dist/"+files[0]; const data=fs.readFileSync(file); console.log("WORKER_BUNDLE_FILE="+file+" BYTES="+data.length); console.log("WORKER_BUNDLE_B64_BEGIN"); process.stdout.write(data.toString("base64")); console.log("\\nWORKER_BUNDLE_B64_END");'
+  artifacts:
+    when: always
+    paths: [dist/, reconstructed/patched-worker.js]
+    expire_in: 1 day
+  allow_failure: false
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "feature/leverup-1ct-autotrader"'
