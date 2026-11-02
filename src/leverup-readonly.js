@@ -2,6 +2,7 @@ import {
   createPublicClient,
   defineChain,
   http,
+  hexToString,
 } from "viem";
 import { LEVERUP_1CT } from "./leverup-1ct.js";
 
@@ -92,15 +93,8 @@ function asString(hex, tupleBase, fieldWordIndex) {
   const length = asSafeNumber(hex, start);
   const byteStart = 2 + (start + 32) * 2;
   const byteEnd = byteStart + length * 2;
-  return BufferlessHex.decode(hex.slice(byteStart, byteEnd));
+  return hexToString("0x" + hex.slice(byteStart, byteEnd));
 }
-const BufferlessHex = {
-  decode(hex) {
-    let out = "";
-    for (let i = 0; i < hex.length; i += 2) out += String.fromCharCode(parseInt(hex.slice(i, i + 2), 16));
-    try { return decodeURIComponent(escape(out)); } catch { return out; }
-  },
-};
 
 export function decodePairView(result) {
   if (!result || result === "0x") throw new Error("getPairByBaseV4 returned empty data");
@@ -150,7 +144,7 @@ export function decodePairView(result) {
     name, base, pairType, status, leverageMargins, feeConfig, slippageConfig,
     maxLongOiUsdRaw: asWord(result, tupleBase + 5 * 32).toString(),
     maxShortOiUsdRaw: asWord(result, tupleBase + 6 * 32).toString(),
-    fundingFeePerSecondPRaw: asWord(result, tupleBase + 7 * 32).toString(),
+    fundingFeeConfigRaw: asWord(result, tupleBase + 7 * 32).toString(),
     minFundingFeeRRaw: asWord(result, tupleBase + 8 * 32).toString(),
     maxFundingFeeRRaw: asWord(result, tupleBase + 9 * 32).toString(),
     longHoldingFeeRateRaw: asWord(result, tupleBase + 17 * 32).toString(),
@@ -231,10 +225,37 @@ export async function fetchTradeHistory(traderAddress, { fetchImpl = fetch, page
   return data;
 }
 
-export async function fetchAntiDdosConfig({ fetchImpl = fetch } = {}) {
+export async function fetchAllPositionsPaginated(traderAddress, { fetchImpl = fetch, size = 100, maxPages = 100 } = {}) {
+  const all = [];
+  let totalPages = 1;
+  for (let page = 0; page < Math.min(totalPages, maxPages); page++) {
+    const result = await fetchAllPositions(traderAddress, { fetchImpl, page, size });
+    all.push(...result.content);
+    totalPages = Number(result.totalPages || 1);
+  }
+  if (totalPages > maxPages) throw new Error("POSITION_HISTORY_PAGE_LIMIT_EXCEEDED");
+  return all;
+}
+
+export async function fetchAllTradeHistoryPaginated(traderAddress, { fetchImpl = fetch, size = 100, maxPages = 100 } = {}) {
+  const all = [];
+  let totalPages = 1;
+  for (let page = 0; page < Math.min(totalPages, maxPages); page++) {
+    const result = await fetchTradeHistory(traderAddress, { fetchImpl, page, size });
+    all.push(...result.content);
+    totalPages = Number(result.totalPages || 1);
+  }
+  if (totalPages > maxPages) throw new Error("TRADE_HISTORY_PAGE_LIMIT_EXCEEDED");
+  return all;
+}
+
+let antiDdosCache = null;
+export async function fetchAntiDdosConfig({ fetchImpl = fetch, forceRefresh = false } = {}) {
+  if (!forceRefresh && antiDdosCache && Date.now() < antiDdosCache.validUntil) return antiDdosCache;
   const data = await fetchJson(LEVERUP_1CT.baseUrl + "/v2/trading/anti-ddos-config", {}, fetchImpl);
   if (!Array.isArray(data)) throw new Error("1CT anti-DDOS config must be an array");
-  return { fetchedAt: Date.now(), validUntil: Date.now() + 60_000, config: data };
+  antiDdosCache = { fetchedAt: Date.now(), validUntil: Date.now() + 60_000, config: data };
+  return antiDdosCache;
 }
 
 export async function readPairByBaseV4(pairBase, { rpcUrl = "https://rpc.monad.xyz", fetchImpl = fetch } = {}) {
@@ -345,9 +366,36 @@ export function assertMarginBudget({
   return { availableMarginMon: available, requiredMinimumMon: required, requiredWithBufferMon: requiredWithBuffer };
 }
 
+export function estimateProtocolCosts({ notionalUsd, isLong, expectedHoldSeconds, pairView, marketInfo }) {
+  const notional = Number(notionalUsd), seconds = Number(expectedHoldSeconds);
+  if (!Number.isFinite(notional) || notional <= 0 || !Number.isFinite(seconds) || seconds < 0) throw new Error("COST_ESTIMATE_INPUTS_INVALID");
+  const fees = pairView?.feeConfig;
+  if (!fees || typeof fees.openFeeP !== "number" || typeof fees.closeFeeP !== "number") throw new Error("LIVE_PROTOCOL_FEE_CONFIG_MISSING");
+  const openFeeUsd = fees.enabled === false ? 0 : notional * fees.openFeeP / 10_000;
+  const closeFeeUsd = fees.enabled === false ? 0 : notional * fees.closeFeeP / 10_000;
+  const holdingRateRaw = isLong ? pairView.longHoldingFeeRateRaw : pairView.shortHoldingFeeRateRaw;
+  if (holdingRateRaw == null) throw new Error("LIVE_HOLDING_FEE_RATE_MISSING");
+  const holdingFeeUsd = notional * seconds * Number(holdingRateRaw) / 1e12;
+  if (marketInfo?.fundingFeeRate == null) throw new Error("LIVE_FUNDING_RATE_MISSING");
+  const signedRate = Number(marketInfo.fundingFeeRate) / 1e18;
+  const fundingFeeUsd = (isLong ? -1 : 1) * signedRate * notional * seconds;
+  return {
+    notionalUsd: notional, expectedHoldSeconds: seconds, openFeeUsd, closeFeeUsd,
+    holdingFeeUsd, fundingFeeUsd,
+    estimatedNetCostsUsd: openFeeUsd + closeFeeUsd + holdingFeeUsd - fundingFeeUsd,
+    assumptions: [
+      "Open/close fee base is position notional; pair percentages use 1e4.",
+      "Holding fee is notional × elapsed seconds × the side-specific rate (1e12).",
+      "Funding is projected using the current signed per-second rate; OI changes can reprice it.",
+      "Close notional is assumed equal to entry notional; actual settlement overrides this estimate.",
+    ],
+  };
+}
+
 export function buildLeverUpPreflight({
-  market, pairView, oraclePriceRaw, monUsdPriceRaw, minimumNotionalRaw,
-  requestedLeverage, availableMarginMon, collateralRatio, reserveMon = 0,
+  market, pairView, marketInfo, oraclePriceRaw, monUsdPriceRaw, minimumNotionalRaw,
+  requestedLeverage, intendedNotionalUsd, isLong, expectedHoldSeconds,
+  availableMarginMon, collateralRatio, reserveMon = 0,
   safetyBufferPct = 5, now = Date.now(),
 }) {
   if (!market || market.status !== "AVAILABLE") throw new Error("MARKET_NOT_AVAILABLE");
@@ -358,11 +406,16 @@ export function buildLeverUpPreflight({
   if (minimumNotionalRaw == null || BigInt(minimumNotionalRaw) <= 0n) throw new Error("GLOBAL_MIN_NOTIONAL_MISSING");
   if (market.minHoldingSeconds == null) throw new Error("MIN_HOLDING_REQUIREMENT_MISSING");
 
-  const notionalUsd = Number(minimumNotionalRaw) / 1e18;
+  const minimumNotionalUsd = Number(minimumNotionalRaw) / 1e18;
+  const notionalUsd = Number(intendedNotionalUsd ?? minimumNotionalUsd);
+  if (!Number.isFinite(notionalUsd) || notionalUsd < minimumNotionalUsd) throw new Error("INTENDED_NOTIONAL_BELOW_VENUE_MINIMUM");
   const marketMaxLeverage = Math.max(...pairView.leverageMargins.map((x) => Number(x.maxLeverage)));
   const leverage = assertMinimumLeverage({
     requestedLeverage, marketMaxLeverage,
-    leverageMargins: pairView.leverageMargins, notionalUsd: BigInt(minimumNotionalRaw),
+    leverageMargins: pairView.leverageMargins, notionalUsd: BigInt(Math.round(notionalUsd * 1e18)),
+  });
+  const estimatedCosts = estimateProtocolCosts({
+    notionalUsd, isLong: Boolean(isLong), expectedHoldSeconds: Number(expectedHoldSeconds), pairView, marketInfo,
   });
   const minimumCollateralMon = calculateMinimumCollateralMon({
     minimumNotionalUsd: notionalUsd,
@@ -390,12 +443,17 @@ export function buildLeverUpPreflight({
     marginBudget: margin,
     protocolFeeConfig: pairView.feeConfig,
     slippageConfig: pairView.slippageConfig,
-    fundingFeePerSecondPRaw: pairView.fundingFeePerSecondPRaw,
+    fundingFeeConfigRaw: pairView.fundingFeeConfigRaw,
     longHoldingFeeRateRaw: pairView.longHoldingFeeRateRaw,
     shortHoldingFeeRateRaw: pairView.shortHoldingFeeRateRaw,
-    estimatedCarryCosts: null,
-    estimatedProtocolFees: null,
-    estimationNote: "Raw live rates are captured. Holding/funding and fee-base formulas are not estimated here; use actual position accruals and closed settlement records to validate them.",
+    marketInfo,
+    estimatedProtocolCosts: estimatedCosts,
+    estimatedCarryCosts: {
+      holdingFeeUsd: estimatedCosts.holdingFeeUsd,
+      fundingFeeUsd: estimatedCosts.fundingFeeUsd,
+      netCarryCostUsd: estimatedCosts.holdingFeeUsd - estimatedCosts.fundingFeeUsd,
+    },
+    estimationNote: "Projection uses live pair rates and the current funding rate. Reconcile it against getPositionsV4 and final closeInfo; actual settlement is authoritative.",
   };
 }
 

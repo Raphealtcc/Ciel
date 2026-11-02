@@ -7,6 +7,7 @@ import {
   buildLeverUpPreflight,
   normalizePositionAccrual,
   reconcileClosedPosition,
+  estimateProtocolCosts,
 } from "../src/leverup-readonly.js";
 
 const tiers = [
@@ -30,7 +31,9 @@ assert.doesNotThrow(() => assertMarginBudget({ availableMarginMon: 30, requiredM
 
 const preflight = buildLeverUpPreflight({
   market: { symbol: "BTC", pairName: "BTC/USD", base: "0x1111111111111111111111111111111111111111", status: "AVAILABLE", minHoldingSeconds: 0 },
-  pairView: { leverageMargins: tiers, feeConfig: { openFeeP: 3, closeFeeP: 3 }, slippageConfig: { enabled: true } },
+  pairView: { leverageMargins: tiers, feeConfig: { openFeeP: 3, closeFeeP: 3, enabled: true }, slippageConfig: { enabled: true }, longHoldingFeeRateRaw: "1000000", shortHoldingFeeRateRaw: "1000000" },
+  marketInfo: { fundingFeeRate: "1000000000000000" },
+  intendedNotionalUsd: 20, isLong: true, expectedHoldSeconds: 3600,
   oraclePriceRaw: "100000000000000000000000",
   monUsdPriceRaw: "19038000000000000",
   minimumNotionalRaw: "20000000000000000000",
@@ -41,7 +44,7 @@ const preflight = buildLeverUpPreflight({
 });
 assert.equal(preflight.requestedLeverage, 100);
 assert.equal(preflight.minimumNotionalUsd, 20);
-assert.equal(preflight.estimatedCarryCosts, null);
+assert.ok(preflight.estimatedCarryCosts);
 assert.throws(() => buildLeverUpPreflight({
   market: { status: "AVAILABLE", minHoldingSeconds: 0 },
   pairView: { leverageMargins: tiers },
@@ -69,6 +72,15 @@ const settlement = reconcileClosedPosition({
 assert.equal(settlement.fundingSinceLastSnapshotRaw, "-300000000000");
 assert.equal(settlement.holdingSinceLastSnapshotRaw, "200000000000");
 assert.equal(settlement.totalTradingFeesRaw, "600000000000000");
-assert.equal(settlement.netPnlAfterFeesRaw, "3800000000000000");
+assert.equal(settlement.netPnlAfterFeesRaw, "4397800000000000");
 
-console.log("PASS: 50x floor, dynamic tier gate, collateral minimum, fail-closed preflight, live fee reads, and closed-settlement reconciliation.");
+const estimate = estimateProtocolCosts({
+  notionalUsd: 1000, isLong: true, expectedHoldSeconds: 3600,
+  pairView: { feeConfig: { enabled: true, openFeeP: 3, closeFeeP: 3 }, longHoldingFeeRateRaw: "1000000" },
+  marketInfo: { fundingFeeRate: "1000000000000000" },
+});
+assert.equal(estimate.openFeeUsd, 0.3);
+assert.equal(estimate.closeFeeUsd, 0.3);
+assert.ok(estimate.holdingFeeUsd > 0);
+assert.ok(estimate.fundingFeeUsd < 0);
+console.log("PASS: 50x floor, dynamic tier gate, collateral minimum, cost estimates, live accrual reads, and settlement reconciliation.");
