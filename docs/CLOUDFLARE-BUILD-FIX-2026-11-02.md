@@ -10,15 +10,16 @@ Cloudflare Workers Builds ran `npx wrangler deploy` without a build step. The Wr
 - The staging `wrangler.jsonc` points to `reconstructed/patched-worker.js`, the file produced by the build.
 - GitLab CI runs the same `npm run build` command.
 
-## Required Workers Builds setting
+## GitLab-side bootstrap fix
 
-Workers Builds has a separate dashboard build-command setting and does **not** honor custom build commands from Wrangler configuration files. In the Worker dashboard, Settings → Builds, set:
+The root package now defines `postinstall: npm run build`. Cloudflare's existing build log shows it runs `bun install`; Bun executes the root project's `postinstall` script during installation. That runs the exact reconstruction/patch/test sequence and creates `reconstructed/patched-worker.js` before the existing deploy command runs. This removes the need to change the Cloudflare dashboard build command for the missing-entrypoint problem.
 
-- Build command: `npm run build`
-- Deploy command: `npx wrangler deploy`
-- Root directory: repository root (`/`)
-- Production branch: `main`
+GitLab CI also runs a Bun 1.4.4 bootstrap job that performs a real `bun install`, then asserts that the generated entrypoint exists and parses. This is deliberately the same Bun version shown in the Cloudflare build log.
 
-Save the build setting before retrying. Do not retry deployment until the staging D1/KV IDs and matching Worker name have been provisioned. The repository's Wrangler config intentionally contains placeholder IDs and a `ciel-paper-staging` name so it cannot accidentally deploy to the original source account.
+Do not add a separate dashboard Build command while relying on this postinstall hook; that would run the full build twice. If Workers Builds is later configured to skip install lifecycle scripts, use `npm run build` as the dashboard Build command instead.
+
+## Deployment safety
+
+The staging `wrangler.jsonc` points to `reconstructed/patched-worker.js`, the file produced by the build. The config intentionally targets a separate `ciel-paper-staging` Worker and contains placeholder D1/KV IDs. Once the missing-entrypoint issue is fixed, Wrangler should stop at the placeholder resource configuration until the new D1/KV resources and matching Worker name are provisioned. That is intentional; it prevents accidental deployment to the original source account.
 
 No Cloudflare account settings or production resources were changed during this GitLab-side repair.

@@ -9,7 +9,8 @@
     "check:paper": "npm run reassemble && npm run patch:paper && node --check reconstructed/patched-worker.js && node scripts/test-paper-tier-fix.mjs && npm run check:staging-config",
     "check:staging-config": "node scripts/check-staging-config.mjs",
     "verify:leverup": "npm run check:paper && node scripts/verify-leverup-market-tiers.mjs",
-    "build": "npm run check:paper"
+    "build": "npm run check:paper",
+    "postinstall": "npm run build"
   },
   "devDependencies": {
     "wrangler": "^4.0.0"

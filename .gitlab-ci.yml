@@ -66,3 +66,15 @@ live-readonly-smoke:
     - node scripts/smoke-live-worker.mjs
   rules:
     - if: '$CI_COMMIT_BRANCH == "audit/paper-trading-fix" || $CI_PIPELINE_SOURCE == "merge_request_event"'
+
+verify-cloudflare-bun-bootstrap:
+  image: node:22-alpine
+  stage: verify
+  script:
+    - npm install --global bun@1.4.4
+    - test "$(bun --version)" = "1.4.4"
+    - bun install
+    - test -s reconstructed/patched-worker.js
+    - node --check reconstructed/patched-worker.js
+  rules:
+    - if: '$CI_COMMIT_BRANCH || $CI_PIPELINE_SOURCE == "merge_request_event"'
