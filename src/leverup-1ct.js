@@ -172,12 +172,22 @@ export function selectFeeToken(action, feeConfig, accountStateByToken, additiona
 
 export function assertLiveExecutionAllowed({
   enabled, killSwitchActive, agentAuthorized, traderAddress, signerPrivateKey,
+  preflight, now = Date.now(), maxPreflightAgeMs = 30_000,
 }) {
   if (enabled !== true) throw new Error("LIVE_EXECUTION_DISABLED");
   if (killSwitchActive === true) throw new Error("LIVE_EXECUTION_KILL_SWITCH_ACTIVE");
   if (agentAuthorized !== true) throw new Error("LEVERUP_AGENT_NOT_VERIFIED_AUTHORIZED");
   if (!traderAddress) throw new Error("LEVERUP_TRADER_ADDRESS_MISSING");
   if (!signerPrivateKey) throw new Error("LEVERUP_AGENT_SIGNING_KEY_MISSING");
+  if (!preflight || preflight.preflightPassed !== true) throw new Error("LEVERUP_PREFLIGHT_NOT_PASSED");
+  if (Number(preflight.requestedLeverage) < 50 || Number(preflight.maxLeverageForNotional) < 50) {
+    throw new Error("LEVERUP_MINIMUM_50X_NOT_MET");
+  }
+  if (!preflight.pairBase || preflight.status !== "AVAILABLE") throw new Error("LEVERUP_PREFLIGHT_MARKET_INVALID");
+  const checkedAt = Number(preflight.checkedAt);
+  if (!Number.isFinite(checkedAt) || checkedAt > now + 5_000 || now - checkedAt > maxPreflightAgeMs) {
+    throw new Error("LEVERUP_PREFLIGHT_STALE");
+  }
 }
 
 export async function signAndSubmitIntent(options) {

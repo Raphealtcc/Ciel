@@ -428,6 +428,7 @@ export function buildLeverUpPreflight({
   });
   return {
     checkedAt: now,
+    preflightPassed: true,
     chainId: 143,
     pair: market.pairName,
     pairBase: market.base.toLowerCase(),

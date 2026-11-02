@@ -97,4 +97,34 @@ await assert.rejects(() => signAndSubmitIntent({
 }), /LIVE_EXECUTION_KILL_SWITCH_ACTIVE/);
 assert.equal(networkTouched, false, "kill switch must prevent submission");
 
-console.log("PASS: 1CT ABI encoding, trader-prefixed dynamic offsets, EIP-712 domain, fee-token selection, and hard-off/kill-switch guards.");
+await assert.rejects(() => signAndSubmitIntent({
+  enabled: true,
+  killSwitchActive: false,
+  agentAuthorized: true,
+  traderAddress: trader,
+  signerPrivateKey: `0x${"01".repeat(32)}`,
+  action: OneClickAction.MARKET_CLOSE,
+  nonce: "1785312000123",
+  deadline: Math.floor(Date.now() / 1000) + 300,
+  actionValues: [hash, 0],
+  preflight: { preflightPassed: true, requestedLeverage: 25, maxLeverageForNotional: 100, pairBase, status: "AVAILABLE", checkedAt: Date.now() },
+  fetchImpl: async () => { networkTouched = true; throw new Error("must not be called"); },
+}), /LEVERUP_MINIMUM_50X_NOT_MET/);
+assert.equal(networkTouched, false, "50x floor must block before signing or network access");
+
+await assert.rejects(() => signAndSubmitIntent({
+  enabled: true,
+  killSwitchActive: false,
+  agentAuthorized: true,
+  traderAddress: trader,
+  signerPrivateKey: `0x${"01".repeat(32)}`,
+  action: OneClickAction.MARKET_CLOSE,
+  nonce: "1785312000123",
+  deadline: Math.floor(Date.now() / 1000) + 300,
+  actionValues: [hash, 0],
+  preflight: { preflightPassed: true, requestedLeverage: 50, maxLeverageForNotional: 50, pairBase, status: "AVAILABLE", checkedAt: Date.now() - 31_000 },
+  fetchImpl: async () => { networkTouched = true; throw new Error("must not be called"); },
+}), /LEVERUP_PREFLIGHT_STALE/);
+assert.equal(networkTouched, false, "stale preflight must block before signing or network access");
+
+console.log("PASS: 1CT ABI encoding, dynamic offsets, EIP-712, fee-token selection, hard-off, kill-switch, fresh preflight and 50x execution floor.");
