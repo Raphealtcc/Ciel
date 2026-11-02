@@ -171,22 +171,34 @@ export function selectFeeToken(action, feeConfig, accountStateByToken, additiona
 }
 
 export function assertLiveExecutionAllowed({
-  enabled, killSwitchActive, agentAuthorized, traderAddress, signerPrivateKey,
-  preflight, now = Date.now(), maxPreflightAgeMs = 30_000,
+  enabled, killSwitchActive, agentAuthorization, agentAddress, traderAddress,
+  signerPrivateKey, action, preflight, now = Date.now(), maxPreflightAgeMs = 30_000,
 }) {
   if (enabled !== true) throw new Error("LIVE_EXECUTION_DISABLED");
   if (killSwitchActive === true) throw new Error("LIVE_EXECUTION_KILL_SWITCH_ACTIVE");
-  if (agentAuthorized !== true) throw new Error("LEVERUP_AGENT_NOT_VERIFIED_AUTHORIZED");
-  if (!traderAddress) throw new Error("LEVERUP_TRADER_ADDRESS_MISSING");
+  if (!/^0x[0-9a-fA-F]{40}$/.test(traderAddress || "")) throw new Error("LEVERUP_TRADER_ADDRESS_MISSING_OR_INVALID");
+  if (!/^0x[0-9a-fA-F]{40}$/.test(agentAddress || "")) throw new Error("LEVERUP_AGENT_ADDRESS_MISSING_OR_INVALID");
   if (!signerPrivateKey) throw new Error("LEVERUP_AGENT_SIGNING_KEY_MISSING");
-  if (!preflight || preflight.preflightPassed !== true) throw new Error("LEVERUP_PREFLIGHT_NOT_PASSED");
-  if (Number(preflight.requestedLeverage) < 50 || Number(preflight.maxLeverageForNotional) < 50) {
-    throw new Error("LEVERUP_MINIMUM_50X_NOT_MET");
+  if (!agentAuthorization?.authorized ||
+      String(agentAuthorization.agentAddress).toLowerCase() !== agentAddress.toLowerCase()) {
+    throw new Error("LEVERUP_AGENT_NOT_VERIFIED_AUTHORIZED");
   }
-  if (!preflight.pairBase || preflight.status !== "AVAILABLE") throw new Error("LEVERUP_PREFLIGHT_MARKET_INVALID");
-  const checkedAt = Number(preflight.checkedAt);
-  if (!Number.isFinite(checkedAt) || checkedAt > now + 5_000 || now - checkedAt > maxPreflightAgeMs) {
-    throw new Error("LEVERUP_PREFLIGHT_STALE");
+  const permissionByAction = { 0: "canMarketOpen", 1: "canMarketClose", 9: "canPartialClose" };
+  const requiredPermission = permissionByAction[Number(action)];
+  if (!requiredPermission) throw new Error("LEVERUP_ACTION_NOT_ALLOWED_BY_CIEL");
+  if (agentAuthorization[requiredPermission] !== true) throw new Error("LEVERUP_AGENT_ACTION_PERMISSION_MISSING");
+  // Exits remain available even if entry data is stale. Only new market opens
+  // require a fresh, passing 50x+ preflight.
+  if (Number(action) === 0) {
+    if (!preflight || preflight.preflightPassed !== true) throw new Error("LEVERUP_PREFLIGHT_NOT_PASSED");
+    if (Number(preflight.requestedLeverage) < 50 || Number(preflight.maxLeverageForNotional) < 50) {
+      throw new Error("LEVERUP_MINIMUM_50X_NOT_MET");
+    }
+    if (!preflight.pairBase || preflight.status !== "AVAILABLE") throw new Error("LEVERUP_PREFLIGHT_MARKET_INVALID");
+    const checkedAt = Number(preflight.checkedAt);
+    if (!Number.isFinite(checkedAt) || checkedAt > now + 5_000 || now - checkedAt > maxPreflightAgeMs) {
+      throw new Error("LEVERUP_PREFLIGHT_STALE");
+    }
   }
 }
 
@@ -205,6 +217,9 @@ export async function signAndSubmitIntent(options) {
     action, trader: traderAddress, nonce, deadline, actionValues, feeToken, antiDdosFee,
   });
   const signer = privateKeyToAccount(signerPrivateKey);
+  if (signer.address.toLowerCase() !== options.agentAddress.toLowerCase()) {
+    throw new Error("LEVERUP_SIGNER_KEY_DOES_NOT_MATCH_AUTHORIZED_AGENT");
+  }
   const signature = await signer.signTypedData(intent.typedData);
   const response = await fetchImpl(`${baseUrl}/v2/trading/submit-intent?blockchain=MONAD`, {
     method: "POST",

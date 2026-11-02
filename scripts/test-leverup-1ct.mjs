@@ -72,7 +72,8 @@ let networkTouched = false;
 await assert.rejects(() => signAndSubmitIntent({
   enabled: false,
   killSwitchActive: false,
-  agentAuthorized: true,
+  agentAuthorization: { authorized: true, agentAddress: "0x5555555555555555555555555555555555555555", canMarketOpen: true, canMarketClose: true, canPartialClose: true },
+  agentAddress: "0x5555555555555555555555555555555555555555",
   traderAddress: trader,
   signerPrivateKey: `0x${"01".repeat(32)}`,
   action: OneClickAction.MARKET_CLOSE,
@@ -126,5 +127,18 @@ await assert.rejects(() => signAndSubmitIntent({
   fetchImpl: async () => { networkTouched = true; throw new Error("must not be called"); },
 }), /LEVERUP_PREFLIGHT_STALE/);
 assert.equal(networkTouched, false, "stale preflight must block before signing or network access");
+
+await assert.rejects(() => signAndSubmitIntent({
+  enabled: true, killSwitchActive: false,
+  agentAuthorization: { authorized: true, agentAddress: "0x5555555555555555555555555555555555555555", canMarketOpen: false, canMarketClose: true, canPartialClose: true },
+  agentAddress: "0x5555555555555555555555555555555555555555",
+  traderAddress: trader, signerPrivateKey: `0x${"01".repeat(32)}`,
+  action: OneClickAction.MARKET_OPEN, nonce: "1785312000123",
+  deadline: Math.floor(Date.now() / 1000) + 300,
+  actionValues: [pairBase, true, tokenIn, lvToken, 11n * 10n ** 18n, 10000000000n, 2n * 10n ** 18n, 0n, 0n, 0, 0n],
+  preflight: { preflightPassed: true, requestedLeverage: 50, maxLeverageForNotional: 50, pairBase, status: "AVAILABLE", checkedAt: Date.now() },
+  fetchImpl: async () => { networkTouched = true; throw new Error("must not be called"); },
+}), /ACTION_PERMISSION_MISSING/);
+assert.equal(networkTouched, false, "missing open permission must block before network access");
 
 console.log("PASS: 1CT ABI encoding, dynamic offsets, EIP-712, fee-token selection, hard-off, kill-switch, fresh preflight and 50x execution floor.");
