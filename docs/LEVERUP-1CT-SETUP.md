@@ -3,7 +3,7 @@
 ## Current implementation status
 
 - `src/leverup-1ct.js`: EIP-712 signing and action-data encoding for LeverUp 1CT.
-- `src/leverup-readonly.js`: read-only market preflight, live pair/oracle reads, fee-token configuration, onchain position accruals, agent authorization/nonce reads, token balance/allowance reads, and settlement reconciliation.
+- `src/leverup-readonly.js`: read-only market preflight, live pair/oracle reads, fee-token configuration, onchain position accruals, token balance/allowance reads, and settlement reconciliation.
 - `migrations/0002_leverup_execution_ledger.sql`: additive D1 ledger tables for preflight snapshots, position fee snapshots, and closed-settlement reconciliations.
 - `scripts/test-leverup-1ct.mjs` and `scripts/test-leverup-readonly.mjs`: safety and accounting tests.
 - The LeverUp adapter is not yet wired into the CIEL signal/entry/exit loop. The functions are isolated and tested first. Do not interpret this as live execution being enabled.
@@ -35,7 +35,7 @@ Set these on the existing `ciel2` Worker only after confirming the wallet addres
 | `LEVERUP_MAX_TRADE_MARGIN_MON` | Plain text | Explicit per-trade margin ceiling; do not infer this from the 100 MON total allocation |
 | `LEVERUP_TOTAL_ALLOCATION_MON` | Plain text | `100` for the dedicated execution wallet allocation |
 
-The current Cloudflare `ciel2` settings have **no `LEVERUP_*` bindings or secrets**. Existing Telegram/Gemini secrets are unrelated and were not read or changed.
+The current Cloudflare `ciel2` settings have **no `LEVERUP_*` bindings or secrets**. Existing Telegram/Gemini secrets are unrelated and were not read or changed. The agent-authorization read ABI is not guessed; it must be verified against the deployed Diamond before the account can pass the live signing guard.
 
 ## Wallet and token setup
 
@@ -81,7 +81,7 @@ The venue minimum notional is read from the live contract, not hardcoded. Minimu
 ## Remaining implementation / activation sequence
 
 1. Confirm the exact trader wallet and agent public addresses.
-2. Read `getAgentAuth` and `getLastNonce`; verify the agent is authorized for only the required action bits.
+2. Verify the agent's onchain authorization and nonce using the exact deployed Diamond ABI. The current public docs do not expose enough ABI detail to safely hardcode this reader, so this check is deliberately not guessed. The signing guard requires a verified authorization object before it can submit.
 3. Read WMON and all enabled fee-token balances/allowances. No approvals are sent automatically.
 4. Verify the current WMON collateral ratio from the live LeverUp UI/API.
 5. Finish integrating preflight and account-state checks into the CIEL signal candidate loop.
