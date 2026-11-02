@@ -335,16 +335,24 @@ replaceExactlyOnce(
   "refresh intraday BUILDING_HISTORY cache hourly until five complete days exist"
 );
 
-replaceExactlyOnce(
-  '  snapshot() {\\n    const watchlist = this.watchlist();',
-  '  snapshot() {\\n    const now = Date.now();\\n    const watchlist = this.watchlist();',
-  "define snapshot time before calculating market readiness"
-);
-replaceExactlyOnce(
-  '    const available = markets.filter((market) => market.available).length;\\n    const now = Date.now();',
-  '    const available = markets.filter((market) => market.available).length;',
-  "remove the later duplicate snapshot clock declaration"
-);
+
+
+
+
+const snapshotStart = source.indexOf("  snapshot() {");
+const snapshotEnd = source.indexOf("  async onSocketMessage", snapshotStart);
+if (snapshotStart < 0 || snapshotEnd < 0) throw new Error("Could not locate the feed snapshot method.");
+let snapshotBlock = source.slice(snapshotStart, snapshotEnd);
+const newline = String.fromCharCode(10);
+const clockLine = "    const now = Date.now();";
+if (!snapshotBlock.includes(clockLine)) throw new Error("Snapshot clock declaration not found.");
+snapshotBlock = snapshotBlock.replace("  snapshot() {", "  snapshot() {" + newline + clockLine);
+const firstClock = snapshotBlock.indexOf(clockLine);
+const secondClock = snapshotBlock.indexOf(clockLine, firstClock + clockLine.length);
+if (secondClock < 0) throw new Error("Expected the original late snapshot clock declaration.");
+snapshotBlock = snapshotBlock.slice(0, secondClock) + snapshotBlock.slice(secondClock + clockLine.length + newline.length);
+source = source.slice(0, snapshotStart) + snapshotBlock + source.slice(snapshotEnd);
+console.log("Applied staging patch: move snapshot clock before market readiness calculations");
 
 await writeFile(output, source);
 console.log(`Wrote patched staging candidate: ${output}`);
