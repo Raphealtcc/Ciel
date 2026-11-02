@@ -25,6 +25,7 @@ once(
   `  lastCoreScalpCandleAt = 0;
   async writeCoreScalpCandles(now) {
     if (now - this.lastCoreScalpCandleAt < 55e3) return;
+    const isInitialRefresh = this.lastCoreScalpCandleAt === 0;
     this.lastCoreScalpCandleAt = now;
     const symbols = ["BTC", "ETH", "SOL"].filter((symbol) => Number(this.latest[symbol]) > 0);
     const statements = [];
@@ -46,7 +47,7 @@ once(
               Number(c.t) > 0 && closeAt <= now && [c.o,c.h,c.l,c.c].every((v) => Number.isFinite(Number(v)) && Number(v) > 0);
           }).sort((a,b) => Number(a.t)-Number(b.t));
           const latestClosed = candles[candles.length - 1];
-          for (const candle of candles) {
+          for (const candle of isInitialRefresh ? candles.slice(-45) : candles.slice(-1)) {
             const latest = candle === latestClosed;
             const sql = latest
               ? "INSERT OR REPLACE INTO market_candles (symbol,interval,open_ts_ms,close_ts_ms,open_price,high_price,low_price,close_price,volume,trade_count,updated_at_ms) VALUES (?,'1m',?,?,?,?,?,?,?,?,?)"
