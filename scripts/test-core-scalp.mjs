@@ -4,7 +4,7 @@ import vm from "node:vm";
 
 const source = await readFile("reconstructed/patched-worker.js", "utf8");
 assert.ok(source.includes('new Set(["BTC", "ETH", "SOL"])'));
-assert.ok(source.includes('interval:"1m"'));
+assert.ok(source.includes('interval: "1m"'));
 assert.ok(source.includes('mode:"CORE_PULLBACK_SCALP"'));
 assert.ok(source.includes('"5M_TREND_FILTER","1M_PULLBACK","1M_RECLAIM","VOLUME_CONFIRMATION"'));
 assert.ok(source.includes('minimumMarginForMarketLeverage(Number(LEVERUP_MARKET_MAX_LEVERAGE[sym])) === null'));
