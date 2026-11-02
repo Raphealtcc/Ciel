@@ -212,8 +212,12 @@ once(
 );
 
 once(
-  '      console.log("Ciel blocked " + candidate.symbol + ": Gemini " + reviewed.verdict + " \\u2014 " + reviewed.reason);\\n      return;\\n    }',
-  '      console.log("Ciel blocked " + candidate.symbol + ": review " + reviewed.verdict + " \\u2014 " + reviewed.reason);\\n      continue;\\n    }',
+  `      console.log("Ciel blocked " + candidate.symbol + ": Gemini " + reviewed.verdict + " \\u2014 " + reviewed.reason);
+      return;
+    }`,
+  `      console.log("Ciel blocked " + candidate.symbol + ": review " + reviewed.verdict + " \\u2014 " + reviewed.reason);
+      continue;
+    }`,
   "continue to the next candidate when one candidate is rejected or waits",
 );
 
