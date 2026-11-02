@@ -52,6 +52,25 @@ replaceExactlyOnce(
 );
 
 replaceExactlyOnce(
+  'const perpSymbols = universe.map((asset) => String(asset?.name || "").trim().toUpperCase()).filter((symbol) => watch.has(symbol) && Number(this.latest[symbol]) > 0);\n      const missingBooks = perpSymbols.filter((symbol) => now - (this.bookLastWrite[symbol] || 0) > 15e4);',
+  'const perpAssets = universe.map((asset) => ({ symbol: String(asset?.name || "").trim().toUpperCase(), coin: String(asset?.name || "").trim() })).filter(({ symbol }) => watch.has(symbol) && Number(this.latest[symbol]) > 0);\n      const missingBooks = perpAssets.filter(({ symbol }) => now - (this.bookLastWrite[symbol] || 0) > 15e4);',
+  "preserve original Hyperliquid coin casing for order-book fallback",
+);
+
+replaceExactlyOnce(
+  'missingBooks.slice(offset, offset + 4).map(async (symbol) => {',
+  'missingBooks.slice(offset, offset + 4).map(async ({ symbol, coin }) => {',
+  "keep canonical CIEL symbol separate from upstream Hyperliquid coin name",
+);
+
+replaceExactlyOnce(
+  'JSON.stringify({ type: "l2Book", coin: symbol })',
+  'JSON.stringify({ type: "l2Book", coin })',
+  "request REST order books with the original Hyperliquid coin name",
+);
+
+
+replaceExactlyOnce(
   'const collateral = PAPER_MARGIN_MON, leverage = PAPER_LEVERAGE;',
   'const marketMaxLeverage = Number(LEVERUP_MARKET_MAX_LEVERAGE[candidate.symbol]);\n    const collateral = minimumMarginForMarketLeverage(marketMaxLeverage);\n    const leverage = marketMaxLeverage >= 100 ? 100 : PAPER_LEVERAGE;',
   "store the same tier-specific margin and leverage in the advisor proposal",
