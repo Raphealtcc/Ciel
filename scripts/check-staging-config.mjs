@@ -12,7 +12,7 @@ assert.equal(config.name, "ciel2", "Cloudflare Workers Builds target name must m
 assert.equal(config.main, "reconstructed/patched-worker.js");
 assert.equal(config.compatibility_date, "2026-09-08");
 assert.equal(config.workers_dev, true);
-assert.equal(config.preview_urls, true);
+assert.equal(config.preview_urls, true);\nassert.equal(config.vars.TELEGRAM_WEBHOOK_URL, "https://ciel2.gatakehanami.workers.dev/telegram/webhook");\nassert.equal(config.vars.TELEGRAM_STAGING_BOT_ID, "");
 assert.deepEqual(config.triggers.crons, ["* * * * *"]);
 
 const d1 = config.d1_databases.find((item) => item.binding === "DB");

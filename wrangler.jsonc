@@ -14,7 +14,7 @@
     "ALERT_COOLDOWN_MINUTES": "15",
     "ALERT_WINDOW_MINUTES": "5",
     "GEMINI_MODEL": "gemini-3.5-flash-lite",
-    "MOVE_ALERT_PCT": "2.0",
+    "MOVE_ALERT_PCT": "2.0",\n    "TELEGRAM_WEBHOOK_URL": "https://ciel2.gatakehanami.workers.dev/telegram/webhook",\n    "TELEGRAM_STAGING_BOT_ID": "",
     "WATCH_SYMBOLS": "BTC,ETH,MON,BNB,XRP,HYPE,ONDO,KPEPE,QNT,ZEC,TRX,AAVE,ADA,CASHCAT,DOGE,LINK,LIT,PONS,PUMP,SEI,SOL,SUI,UNI,VIRTUAL,XMR"
   },
   "d1_databases": [{
