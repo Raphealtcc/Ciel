@@ -82,13 +82,15 @@ The current paper simulator does not enforce these minimum-hold restrictions. Th
 
 The staging patch:
 - changes BTC and ETH from the incorrect 1001x map value to the verified 100x;
-- allows 50x markets at the configured 22 MON paper margin;
-- allows 100x markets at the configured 11 MON paper margin;
+- gives fresh staging paper ledgers a 100 MON budget (the existing source ledger is not overwritten);
+- retains observed 11 MON (100x) and 22 MON (50x) venue floors, then lets Gemini choose a larger margin only inside hard available-balance and risk limits;
+- caps stop-risk at 5 MON per trade and 10 MON across all open paper trades for a 100 MON starter balance;
+- at a 0.4% stop, allows 11–12.5 MON at 100x and 22–25 MON at 50x; AI-unavailable/technical-only fallback uses the venue floor;
 - simulates markets with maximum leverage >=100x at 100x, never at 1001x;
 - keeps 25x/5x/3x markets out of automatic paper entry until their collateral and minimum-hold behavior is modeled;
 - does not change production Worker version 505.
 
-The 22/11 MON paper values are the user's observed current illustrative tiers, not a dynamic CR oracle. The paper engine is still a gross Hyperliquid-mid simulation. It does not simulate LeverUp Pyth fills, current MON CR, per-pair slippage, open/close fees, funding/holding fees, collateral haircuts, gaps or liquidation. The Telegram copy now makes the Hyperliquid-vs-LeverUp execution difference explicit.
+The 22/11 MON floors are user-observed operating floors, not a dynamic CR oracle. The current code does not fetch LeverUp's live MON collateral ratio, so it must still be checked in the live order panel before any real order. The paper engine remains gross and Hyperliquid-mid based; it does not simulate LeverUp Pyth fills, current MON CR, per-pair slippage, open/close fees, funding/holding fees, collateral haircuts, gaps or liquidation. The Telegram copy makes the Hyperliquid-vs-LeverUp execution difference explicit.
 
 ## Reproduction
 

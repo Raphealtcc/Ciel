@@ -65,7 +65,7 @@ The new paper ledger will start fresh. It will not inherit the source account's 
 
 - Resolve the feed coverage gap: current Hyperliquid feed returns 25 watchlist entries but only 24 have prices; QNT is missing a price and order book. KPEPE has a price but is also missing an order book. The live feed reports 23/25 books. The five sampled core books (BTC, ETH, MON, ONDO, ADA) were fresh on the latest 14-route smoke test.
 - Confirm current MON collateral ratio in LeverUp's order panel. At the latest Hyperliquid MON reference of $0.019038, 22 MON at 50x and 11 MON at 100x each imply about $20.94 notional at 100% CR; they clear a $20 minimum only if CR is at least about 95.5%. CR is dynamic and was not read from the live order panel.
-- Keep 25x/5x/3x paper tiers disabled until minimum-hold and collateral rules are simulated. Current verified 25x and 5x markets have 180-second minimum-hold restrictions; 5x/3x are also beyond a 60 MON paper balance at current prices.
+- Keep 25x/5x/3x paper tiers disabled until minimum-hold and collateral rules are simulated. Current verified 25x and 5x markets have 180-second minimum-hold restrictions; 5x/3x remain beyond the 100 MON staging budget at current prices.
 - Test DO paper-ledger persistence across restart on staging, not on the production DO.
 - Test Telegram callback buttons using the separate staging bot.
 - Monitor D1 write usage on staging; exact source-account daily usage telemetry was not exposed.
