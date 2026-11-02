@@ -292,6 +292,12 @@ replaceExactlyOnce(
   "enforce paper risk caps inside the ledger transaction"
 );
 
+replaceExactlyOnce(
+  'const webhookUrl = new URL("/telegram/webhook", url.origin).toString();',
+  'const expectedBotId = (env.TELEGRAM_STAGING_BOT_ID || "").trim();\n        if (!expectedBotId || url.hostname !== "ciel2.gatakehanami.workers.dev") return json2({ error: "Staging bot identity and staging host must be configured." }, 403);\n        const identityResponse = await fetch("https://api.telegram.org/bot" + botToken + "/getMe", { signal: AbortSignal.timeout(8e3) });\n        const identityPayload = await identityResponse.json().catch(() => ({}));\n        if (!identityResponse.ok || identityPayload.ok !== true || String(identityPayload.result?.id || "") !== expectedBotId) return json2({ error: "Telegram bot identity does not match TELEGRAM_STAGING_BOT_ID; webhook registration refused." }, 403);\n        const webhookUrl = new URL("/telegram/webhook", url.origin).toString();',
+  "protect manual webhook registration with the staging bot identity check"
+);
+
 await writeFile(output, source);
 console.log(`Wrote patched staging candidate: ${output}`);
 console.log("Recovered source fragments and exact-bundle reconstruction remain unchanged.");

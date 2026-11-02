@@ -228,6 +228,7 @@ assert.ok(source.includes("free balance is below the eligible market's minimum m
 assert.ok(source.includes("const collateral = choosePaperMargin(reviewed.verdict === \"APPROVE\" ? reviewed.paperMarginMon : null, sizingLimits);"));
 assert.ok(source.includes("PAPER_STARTING_BALANCE_MON = 100"));
 assert.ok(source.includes("TELEGRAM_STAGING_BOT_ID"));
+assert.ok(source.includes("bot identity does not match TELEGRAM_STAGING_BOT_ID"));
 assert.ok(source.includes("https://ciel2.gatakehanami.workers.dev/telegram/webhook"));
 assert.ok(source.includes("/api/paper"));
 assert.ok(source.includes("/api/diagnostics"));
