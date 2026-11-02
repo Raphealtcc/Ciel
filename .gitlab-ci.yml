@@ -65,7 +65,7 @@ staging-readonly-smoke:
   script:
     - node scripts/smoke-live-worker.mjs
   rules:
-    - if: '$CI_COMMIT_BRANCH == "audit/paper-trading-fix" || $CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "audit/paper-trading-fix" || $CI_PIPELINE_SOURCE == "merge_request_event"'
 
 verify-cloudflare-bun-bootstrap:
   image: node:22-alpine
