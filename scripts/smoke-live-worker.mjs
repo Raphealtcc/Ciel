@@ -38,6 +38,6 @@ for (const [path, name] of routes) {
   if (name === "root" && body.mode !== "read-only-advisory") throw new Error("Unexpected root mode: " + JSON.stringify(body).slice(0, 300));
   if (name === "markets" && !Array.isArray(body.markets)) throw new Error("Markets endpoint did not return a markets array");
   if (name === "candles" && !Array.isArray(body.candles)) throw new Error("Candles endpoint did not return a candles array");
-  if (name === "orderbook" && !body.orderbook && !body.book && !body.bids && !body.data) throw new Error("Orderbook endpoint returned no recognizable book payload");
+  if (name === "orderbook" && (!body.snapshot || typeof body.snapshot !== "object")) throw new Error("Orderbook endpoint returned no snapshot payload");
 }
 console.log("PASS: live read-only Worker smoke-tested " + results.length + " GET routes; no POSTs or state-changing endpoints were called.");
