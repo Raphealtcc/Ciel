@@ -376,6 +376,18 @@ replaceExactlyOnce(
   "compare the Telegram marker against the configured primary-account staging URL"
 );
 
+
+replaceExactlyOnce(
+  'if (target.protocol !== "https:" || target.pathname !== "/telegram/webhook") return;',
+  'if (target.protocol !== "https:" || target.pathname !== "/telegram/webhook" || ["ciel2.gatakehanami.workers.dev","ciel.leno3z4rrrri.workers.dev"].includes(target.hostname)) return;',
+  "block known connected-account and production hosts from Telegram webhook registration"
+);
+replaceExactlyOnce(
+  'if (!expectedBotId || target.protocol !== "https:" || target.pathname !== "/telegram/webhook" || url.origin !== target.origin) return json2({ error: "Staging bot identity and configured staging origin must match." }, 403);',
+  'if (!expectedBotId || target.protocol !== "https:" || target.pathname !== "/telegram/webhook" || ["ciel2.gatakehanami.workers.dev","ciel.leno3z4rrrri.workers.dev"].includes(target.hostname) || url.origin !== target.origin) return json2({ error: "Staging bot identity and configured staging origin must match." }, 403);',
+  "block known connected-account and production hosts from manual Telegram webhook registration"
+);
+
 await writeFile(output, source);
 console.log(`Wrote patched staging candidate: ${output}`);
 console.log("Recovered source fragments and exact-bundle reconstruction remain unchanged.");

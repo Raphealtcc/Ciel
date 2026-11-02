@@ -9,7 +9,7 @@
 - Added a one-time, idempotent four-day native 5m candle bootstrap for BTC/ETH/MON using bounded D1 batches. It seeds intraday sample rows and hourly summaries without writing every live tick to D1.
 - Enforced 5% per-trade and 10% combined stop-risk caps inside the paper-ledger transaction.
 - Expanded staging smoke coverage for paper status, D1 schema, QNT monitor-only handling, 15m candle history and intraday history.
-- Main-branch CI runs the staging-only smoke test; the script refuses any host other than ciel2.gatakehanami.workers.dev.
+- The staging smoke job is manual until CIEL_STAGING_BASE_URL is set to the primary account staging hostname. It refuses the connected-account hostname and the connected production Worker.
 
 ## External configuration still required
 
