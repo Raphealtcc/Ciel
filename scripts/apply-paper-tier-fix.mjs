@@ -305,8 +305,8 @@ replaceExactlyOnce(
   "require a verified staging Telegram bot before sending any message"
 );
 replaceExactlyOnce(
-  '  if (!token || !chatId) {\\n    throw new Error("TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID is not configured");\\n  }',
-  '  if (!token || !chatId) {\\n    throw new Error("TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID is not configured");\\n  }\\n  await ensureStagingTelegramIdentity(env);',
+  '  if (!text.trim()) throw new Error("Telegram text is empty");',
+  '  await ensureStagingTelegramIdentity(env);\\n  if (!text.trim()) throw new Error("Telegram text is empty");',
   "guard outbound Telegram sends with the staging bot identity"
 );
 replaceExactlyOnce(
