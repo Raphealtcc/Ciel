@@ -440,6 +440,20 @@ export function selectLeverageTier(leverageMargins, notionalUsd) {
   return tiers.find((tier) => notional <= BigInt(tier.notionalUsdRaw)) || null;
 }
 
+export function selectInferredLeverage(inferredLeverage, tierMaxLeverage, marketMaxLeverage) {
+  const inferred = Number(inferredLeverage);
+  const tierMax = Number(tierMaxLeverage);
+  const marketMax = Number(marketMaxLeverage);
+  if (!Number.isFinite(inferred) || inferred < MIN_EXECUTION_LEVERAGE) {
+    throw new Error("INFERENCE_BELOW_50X: skip the trade instead of forcing leverage upward");
+  }
+  if (!Number.isFinite(tierMax) || tierMax < MIN_EXECUTION_LEVERAGE ||
+      !Number.isFinite(marketMax) || marketMax < MIN_EXECUTION_LEVERAGE) {
+    throw new Error("MARKET_MAX_LEVERAGE_BELOW_50X");
+  }
+  return Math.min(inferred, tierMax, marketMax);
+}
+
 export function assertMinimumLeverage({
   requestedLeverage, marketMaxLeverage, leverageMargins, notionalUsd,
 }) {
@@ -540,8 +554,11 @@ export function buildLeverUpPreflight({
   const notionalUsd = Number(intendedNotionalUsd ?? minimumNotionalUsd);
   if (!Number.isFinite(notionalUsd) || notionalUsd < minimumNotionalUsd) throw new Error("INTENDED_NOTIONAL_BELOW_VENUE_MINIMUM");
   const marketMaxLeverage = Math.max(...pairView.leverageMargins.map((x) => Number(x.maxLeverage)));
+  const tier = selectLeverageTier(pairView.leverageMargins, BigInt(Math.round(notionalUsd * 1e18)));
+  if (!tier) throw new Error("NO_LEVERAGE_TIER_FOR_NOTIONAL");
+  const selectedLeverage = selectInferredLeverage(requestedLeverage, tier.maxLeverage, marketMaxLeverage);
   const leverage = assertMinimumLeverage({
-    requestedLeverage, marketMaxLeverage,
+    requestedLeverage: selectedLeverage, marketMaxLeverage,
     leverageMargins: pairView.leverageMargins, notionalUsd: BigInt(Math.round(notionalUsd * 1e18)),
   });
   const estimatedCosts = estimateProtocolCosts({
@@ -564,6 +581,7 @@ export function buildLeverUpPreflight({
     pairBase: market.base.toLowerCase(),
     status: market.status,
     maxLeverageForNotional: leverage.tierMaxLeverage,
+    inferredLeverage: Number(requestedLeverage),
     requestedLeverage: leverage.requestedLeverage,
     minHoldingSeconds: Number(market.minHoldingSeconds),
     oraclePriceUsd: Number(oraclePriceRaw) / 1e18,

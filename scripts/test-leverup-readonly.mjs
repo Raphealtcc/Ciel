@@ -8,6 +8,7 @@ import {
   normalizePositionAccrual,
   reconcileClosedPosition,
   estimateProtocolCosts,
+  selectInferredLeverage,
 } from "../src/leverup-readonly.js";
 
 const tiers = [
@@ -15,6 +16,10 @@ const tiers = [
   { notionalUsdRaw: "100000000000000000000", tier: 1, maxLeverage: 50, initialLostPRaw: "0", liqLostPRaw: "0" },
 ];
 assert.equal(MIN_EXECUTION_LEVERAGE, 50);
+assert.equal(selectInferredLeverage(100, 50, 100), 50);
+assert.equal(selectInferredLeverage(75, 100, 100), 75);
+assert.throws(() => selectInferredLeverage(25, 100, 100), /INFERENCE_BELOW_50X/);
+assert.throws(() => selectInferredLeverage(100, 25, 100), /MARKET_MAX_LEVERAGE_BELOW_50X/);
 assert.equal(assertMinimumLeverage({ requestedLeverage: 100, marketMaxLeverage: 100, leverageMargins: tiers, notionalUsd: 20n * 10n ** 18n }).tierMaxLeverage, 100);
 assert.equal(assertMinimumLeverage({ requestedLeverage: 50, marketMaxLeverage: 50, leverageMargins: tiers, notionalUsd: 21n * 10n ** 18n }).tierMaxLeverage, 50);
 assert.throws(() => assertMinimumLeverage({ requestedLeverage: 49, marketMaxLeverage: 100, leverageMargins: tiers, notionalUsd: 20n * 10n ** 18n }), /BELOW_50X/);
