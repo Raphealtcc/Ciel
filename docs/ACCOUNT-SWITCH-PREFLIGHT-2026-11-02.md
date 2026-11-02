@@ -54,12 +54,12 @@ The template is designed for a clean, separate deployment. It points to reconstr
 - New KV namespace.
 - New SQLite-backed Durable Object namespaces for HyperliquidFeed and TradingEngine.
 - New secrets entered directly in Cloudflare's secret UI; never paste secrets into ChatGPT or commit them to GitLab.
-- Fresh paper ledger, defaulting to 60 MON.
+- Fresh paper ledger, defaulting to 100 MON in the current staging patch; source production remains at 60 MON.
 - Paper-only/advisory-only operation. No LeverUp order credentials or execution path.
 - Separate Telegram bot for staging notifications and commands.
 - No source-account resource IDs copied into the staging template.
 
-The new paper ledger will start fresh. It will not inherit the source account's current 60 MON balance, open AAVE position, closed-trade history or realised P&L.
+The new paper ledger will start fresh at 100 MON. It will not inherit the source account's current 60 MON balance, open AAVE position, closed-trade history or realised P&L.
 
 ## Remaining staging gates
 
