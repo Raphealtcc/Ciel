@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS leverup_preflight_snapshots (
   block_number TEXT,
   requested_leverage INTEGER NOT NULL CHECK (requested_leverage >= 50),
   market_max_leverage INTEGER NOT NULL CHECK (market_max_leverage >= 50),
+  tier_max_leverage INTEGER NOT NULL CHECK (tier_max_leverage >= 50),
   notional_usd_raw TEXT NOT NULL,
   oracle_price_raw TEXT NOT NULL,
   mon_usd_price_raw TEXT NOT NULL,
