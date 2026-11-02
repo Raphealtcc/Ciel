@@ -40,14 +40,14 @@ replaceExactlyOnce(
 );
 
 replaceExactlyOnce(
-  'if (!paperStorage || paperCash + 1e-9 < PAPER_MARGIN_MON) {',
-  'if (!paperStorage || paperCash + 1e-9 < 11) {',
-  "permit paper scanner when the 11 MON tier is affordable",
+  'if (!paperStorage || paperCash + 1e-9 < PAPER_MARGIN_MON) {\n    console.log("Ciel has no free 22 MON paper margin; no new recommendation will be issued until a paper slot is free.");\n    return;\n  }',
+  'if (!paperStorage) console.log("Ciel paper storage unavailable; advisor recommendations will continue without automatic paper entries.");',
+  "keep advisor recommendations running when paper storage or margin is unavailable",
 );
 
 replaceExactlyOnce(
   'if (sym === "MON" || Number(LEVERUP_MARKET_MAX_LEVERAGE[sym]) !== 50 || openPaperSymbols.has(sym)) continue;',
-  'const marketMaxLeverage = Number(LEVERUP_MARKET_MAX_LEVERAGE[sym]);\n    const requiredPaperMargin = minimumMarginForMarketLeverage(marketMaxLeverage);\n    if (sym === "MON" || requiredPaperMargin === null || paperCash + 1e-9 < requiredPaperMargin || openPaperSymbols.has(sym)) continue;',
+  'const marketMaxLeverage = Number(LEVERUP_MARKET_MAX_LEVERAGE[sym]);\n    const requiredPaperMargin = minimumMarginForMarketLeverage(marketMaxLeverage);\n    if (sym === "MON" || requiredPaperMargin === null || openPaperSymbols.has(sym)) continue;',
   "scan markets using their eligible leverage/margin tier",
 );
 
