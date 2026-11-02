@@ -13,9 +13,9 @@ function once(before, after, label) {
 }
 
 once(
+  'var CANDLE_HISTORY_SYMBOLS = /* @__PURE__ */ new Set(["BTC", "ETH", "MON"]);',
   'var CANDLE_HISTORY_SYMBOLS = /* @__PURE__ */ new Set(["BTC", "ETH", "MON", "SOL"]);',
-  'var CANDLE_HISTORY_SYMBOLS = /* @__PURE__ */ new Set(["BTC", "ETH", "SOL"]);',
-  "persist five-minute candle history for SOL instead of MON",
+  "add SOL five-minute candle history while preserving MON",
 );
 
 // The minute stream is fetched by REST once per normal sample cycle. Only closed
