@@ -6,7 +6,7 @@
 - Skill: [reverse-engineer-anything](https://github.com/morluto/rea/blob/main/.agents/skills/reverse-engineer-anything/SKILL.md)
 - The skill routes JavaScript/Electron trees and ASARs to `analyze_javascript_application`.
 - It distinguishes observed artifact evidence from inference and explicit unknowns.
-- Installing the skill alone does not install or register the REA MCP server.
+- Installing the skill alone does not install or register the REA MCP server  .
 
 ## How it is being used here
 
