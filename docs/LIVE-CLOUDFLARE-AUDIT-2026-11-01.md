@@ -76,7 +76,7 @@ The staging `wrangler.jsonc` now omits stale variables and explicitly sets the a
 D1 database:
 - Name: `ciel`
 - ID: `fb55e85b-af9b-45b3-ba43-6c7f7996dfa8`
-- Size at latest query: 35,037,184 bytes.
+- Size at latest query: 35,086,336 bytes.
 - 16 application tables, plus internal SQLite/Cloudflare tables.
 - The repository contains a recovered schema, not a database-data backup.
 
@@ -115,9 +115,9 @@ Advisor position statuses:
 This means there are no currently `PROPOSED` or `OPEN` rows in the advisor-position table at the time of this query. Most recommendations expire rather than becoming manually tracked positions. This is a funnel/notification/callback issue to investigate; it is not the same thing as automatic paper trade performance.
 
 Recent stored market-data timestamps:
-- `market_samples`: `2026-11-01T23:47:58.243Z`
-- `market_candles`: `2026-11-01T23:45:00.000Z`
-- `market_context_snapshots`: `2026-11-01T23:43:56.460Z`
+- `market_samples`: `2026-11-02T00:31:22.110Z`
+- `market_candles`: `2026-11-02T00:25:00.000Z`
+- `market_context_snapshots`: `2026-11-02T00:16:15.552Z`
 - `market_book_snapshots`: `2026-10-28T22:59:25.064Z`
 - `market_alerts`: `2026-10-31T20:14:15.656Z`
 
@@ -163,12 +163,12 @@ But original `openPaperTrade()` rejected all markets except max leverage exactly
 The isolated patch on `audit/paper-trading-fix` now:
 - allows supported 50x and >=100x market tiers;
 - uses 22 MON for 50x and 11 MON for >=100x;
-- simulates >=100x markets at a conservative 100x baseline, never at 1000x/1001x automatically;
-- makes scanner cash gating tier-aware;
+- simulates markets with max leverage >=100x at a conservative 100x baseline; BTC/ETH are corrected from the recovered 1001x value to the verified 100x;
+- removes the paper-cash early return that previously stopped all advisor recommendations when paper balance fell below 22 MON; each automatic paper entry now independently checks its tier margin and available balance;
 - stores the same tier-specific margin/leverage in the advisor proposal record;
 - updates the setup card, paper-open notification, `/help`, and `/profits` copy so displayed and actual paper tiers agree.
 
-The source map remains hardcoded in `recovered-src/symbols.js.part-001`. It is not authoritative live LeverUp metadata. Current max leverage and minimum collateral per market still require verification from LeverUp's actual market/order metadata before using the patch as an execution model.
+The source map remains hardcoded as forensic source, but a live verification script now checks all 25 watchlist entries against LeverUp pair API + Monad Diamond `getPairByBaseV4` (23 pool markets) or Hyperliquid public metadata (2 markets). It found only two source-map mismatches (BTC/ETH 1001x vs 100x); the staging map has zero mismatches. The $20 global minimum notional is verified. Exact MON collateral amounts still depend on live MON CR and order-panel rounding; see `docs/LEVERUP-MARKET-TIER-AUDIT-2026-11-02.md`.
 
 The byte-exact recovered fragments remain unchanged. `scripts/apply-paper-tier-fix.mjs` writes only `reconstructed/patched-worker.js`.
 
@@ -250,3 +250,12 @@ The webhook registration marker and callback code are present, but no actual Tel
 ## 12. CI status anomaly
 
 The latest jobs individually report success for exact-bundle recovery and behavior tests, LeverUp market metadata verification, REA analysis, and the 10-route live smoke test. GitLab's pipeline-level API status nevertheless reports `failed` while its job list shows every job as successful and no failed/cancelled jobs or bridges. This inconsistency remains unexplained. Do not call the pipeline green or merge based on the job statuses alone; inspect the GitLab pipeline UI.
+
+
+### Additional checks completed 2026-11-02
+
+- Live HTTP smoke test: all 10 GET routes passed (root, health, markets, candles, orderbook, positions, signals, research, intraday, alerts).
+- Live D1 schema comparison: 16 application tables and 14 indexes exactly match `migrations/0000_recovered_live_schema.sql`; no missing/extra names or DDL differences.
+- Telegram: KV auto-registration marker exists. Source code writes it only after successful `setWebhook` and `getWebhookInfo` verification of `message` and `callback_query`; the webhook handler validates the Telegram secret header and chat ID. This is last-known registration proof, not a live button-click test.
+- Current D1 row counts and latest timestamps are recorded in the handoff. All audit queries were read-only and returned `rows_written=0`.
+- The latest pipeline's individual jobs all show success, but GitLab's top-level pipeline status reports `failed` with no failed/cancelled jobs or bridges listed. This anomaly remains unresolved; do not call the pipeline green.
