@@ -6,6 +6,12 @@ const input = path.join(root, "reconstructed", "worker.js");
 const output = path.join(root, "reconstructed", "patched-worker.js");
 let source = await readFile(input, "utf8");
 
+replaceExactlyOnce(
+  "BTC: 1001, ETH: 1001, MON: 25, BNB: 50, XRP: 100,",
+  "BTC: 100, ETH: 100, MON: 25, BNB: 50, XRP: 100,",
+  "correct BTC/ETH max leverage from 1001 to verified 100",
+);
+
 function replaceExactlyOnce(before, after, label) {
   const count = source.split(before).length - 1;
   if (count !== 1) {
