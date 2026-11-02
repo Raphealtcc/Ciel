@@ -7,6 +7,12 @@
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": true,
   "preview_urls": true,
+  "observability": {
+    "logs": {
+      "enabled": true,
+      "invocation_logs": true
+    }
+  },
   "triggers": { "crons": ["* * * * *"] },
   "vars": {
     "ADVISORY_MIN_CONFIDENCE": "0.72",
