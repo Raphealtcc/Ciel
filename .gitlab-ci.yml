@@ -67,3 +67,14 @@ live-readonly-smoke:
   allow_failure: true
   rules:
     - if: '$CI_COMMIT_BRANCH == "audit/paper-trading-fix"'
+
+live-readonly-smoke:
+  image: node:22-alpine
+  stage: verify
+  needs: []
+  script:
+    - node scripts/smoke-live-worker.mjs
+  when: manual
+  allow_failure: true
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "audit/paper-trading-fix"'
