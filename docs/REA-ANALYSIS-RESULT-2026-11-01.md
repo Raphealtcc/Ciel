@@ -38,6 +38,6 @@ The exact reconstructed Worker is 209,745 characters with SHA-256 `24e6452b4a285
 
 REA supplied an additional structural inventory of the shipped artifact and a semantic graph. It did not replace source-level inspection of Cloudflare Worker request handling, the live Cloudflare resource inventory, or runtime tests.
 
-A separate REA pass on the tier-patched staging candidate is being added to the GitLab CI workflow. Its results must be kept separate from this recovered-production-bundle report.
+A separate REA pass on the tier-patched staging candidate has completed. See `docs/REA-PATCHED-ANALYSIS-2026-11-02.md`; it must remain separate from this recovered-production-bundle report.
 
 The full REA JSON report and concise summary are available in the GitLab job artifacts for 30 days. The report is intentionally not committed as an 11 MB repository file.
