@@ -6,6 +6,8 @@ verify-ciel-recovery:
   script:
     - node --check scripts/reassemble-recovered-worker.mjs
     - node --check scripts/apply-paper-tier-fix.mjs
+    - node --check scripts/apply-core-scalp-fix.mjs
+    - node --check scripts/test-core-scalp.mjs
     - node --check scripts/test-paper-tier-fix.mjs
     - node --check scripts/check-staging-config.mjs
     - node --check scripts/summarize-rea.mjs
