@@ -93,7 +93,39 @@ function decodePairView(result) {
       liqLostPRaw: asWord(result, entry + 128).toString()
     });
   }
-  return { name, base, pairType, status, leverageMargins };
+  const slippageBase = tupleBase + asNumber(result, tupleBase + 13 * 32);
+  const feeBase = tupleBase + asNumber(result, tupleBase + 16 * 32);
+  const slippageConfig = {
+    name: asString(result, slippageBase, 0),
+    onePercentDepthAboveUsdRaw: asWord(result, slippageBase + 32).toString(),
+    onePercentDepthBelowUsdRaw: asWord(result, slippageBase + 64).toString(),
+    slippageLongP: asNumber(result, slippageBase + 96),
+    slippageShortP: asNumber(result, slippageBase + 128),
+    index: asNumber(result, slippageBase + 160),
+    slippageType: asNumber(result, slippageBase + 192),
+    enabled: asNumber(result, slippageBase + 224) !== 0,
+    longThresholdUsdRaw: asWord(result, slippageBase + 256).toString(),
+    shortThresholdUsdRaw: asWord(result, slippageBase + 288).toString()
+  };
+  const feeConfig = {
+    name: asString(result, feeBase, 0),
+    index: asNumber(result, feeBase + 32),
+    openFeeP: asNumber(result, feeBase + 64),
+    closeFeeP: asNumber(result, feeBase + 96),
+    enabled: asNumber(result, feeBase + 128) !== 0,
+    shareP: asNumber(result, feeBase + 160),
+    minCloseFeeP: asNumber(result, feeBase + 192)
+  };
+  return {
+    name, base, pairType, status, leverageMargins, slippageConfig, feeConfig,
+    maxLongOiUsdRaw: asWord(result, tupleBase + 5 * 32).toString(),
+    maxShortOiUsdRaw: asWord(result, tupleBase + 6 * 32).toString(),
+    fundingFeePerBlockPRaw: asWord(result, tupleBase + 7 * 32).toString(),
+    minFundingFeeRRaw: asWord(result, tupleBase + 8 * 32).toString(),
+    maxFundingFeeRRaw: asWord(result, tupleBase + 9 * 32).toString(),
+    longHoldingFeeRateRaw: asWord(result, tupleBase + 17 * 32).toString(),
+    shortHoldingFeeRateRaw: asWord(result, tupleBase + 18 * 32).toString()
+  };
 }
 
 async function mapLimit(items, limit, fn) {
@@ -194,6 +226,15 @@ const markets = await mapLimit(selected.filter((x) => x.pair), 4, async ({ symbo
       sourceMapMatches: maxLeverage === 0 ? null : maxLeverage === sourceMapMaxLeverage,
       stagingMapMatches: maxLeverage === 0 ? null : maxLeverage === stagingMapMaxLeverage,
       leverageMargins: decoded.leverageMargins,
+      slippageConfig: decoded.slippageConfig,
+      feeConfig: decoded.feeConfig,
+      maxLongOiUsdRaw: decoded.maxLongOiUsdRaw,
+      maxShortOiUsdRaw: decoded.maxShortOiUsdRaw,
+      fundingFeePerBlockPRaw: decoded.fundingFeePerBlockPRaw,
+      minFundingFeeRRaw: decoded.minFundingFeeRRaw,
+      maxFundingFeeRRaw: decoded.maxFundingFeeRRaw,
+      longHoldingFeeRateRaw: decoded.longHoldingFeeRateRaw,
+      shortHoldingFeeRateRaw: decoded.shortHoldingFeeRateRaw,
       error: maxLeverage === 0 ? "Pair exists in REST API but no onchain leverage-margin tiers were returned" : null
     };
   } catch (error) {
