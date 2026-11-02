@@ -228,7 +228,7 @@ This makes the current production coverage gap precise: KPEPE's book is fixable 
 
 - All 14 GET routes returned HTTP 200 with valid JSON. No POST or state-changing route was called.
 - `/health`: `ok=true`, `connected=true`, `websocketConnected=true`, `fresh=true`, `degraded=false`; latest tick was about 2 seconds old.
-- Feed diagnostics also showed 1,179 reconnect attempts and last close code 1006 (abnormal closure). The feed was open/fresh at the check, but the reconnect count is notable transport churn and should be monitored rather than dismissed.
+- Feed diagnostics showed 1,179 cumulative reconnect attempts and last close code 1006 (abnormal closure). This was not 1,179 consecutive failures: a close occurred about 15.3 seconds before the latest `lastOpenAt`, the connection had recovered, and `lastError` was null. Monitor the cumulative count and recovery cadence, but do not mistake it for the current connection being down.
 - `/api/markets`: 25 configured markets, 24 priced; QNT had no price. 23/25 order books were present; KPEPE and QNT were missing books.
 - BTC, ETH, MON, ONDO and ADA order books were fresh in this sample.
 - Hyperliquid MON/USD mid reference: $0.019033; this is not LeverUp's Pyth collateral oracle or a live MON collateral-ratio quote.
@@ -236,7 +236,7 @@ This makes the current production coverage gap precise: KPEPE's book is fixable 
 - `/api/positions`: 50 entries. `/api/signals`: 0 entries at the exact smoke-test time.
 - `/api/research`: CIEL Statistical Ensemble v1 with 25 recent research items.
 
-The QNT and KPEPE gaps remain signal-quality blockers. Do not treat a 25-symbol configured watchlist as 25 fully supported markets. The current code has a REST recovery path for disconnected WebSockets, but the latest successful smoke captured an open WebSocket; it did not force a disconnect or prove the fallback under a real outage.
+A separate public Hyperliquid L2 probe confirmed all 25/25 watchlist book requests succeed when the original upstream coin names are used. The two aliases are KPEPE → `kPEPE` and QNT → `xyz:QNT`. The staging patch now preserves upstream coin casing for the REST fallback and refreshes books before the two-minute context cadence expires. QNT still has no derivatives context in either the default or `xyz` metadata universe, so it remains excluded from advisor-ready signals. The QNT and KPEPE gaps remain signal-quality blockers. Do not treat a 25-symbol configured watchlist as 25 fully supported markets. The current code has a REST recovery path for disconnected WebSockets, but the latest successful smoke captured an open WebSocket; it did not force a disconnect or prove the fallback under a real outage.
 
 
 ## 17. Confirmed WebSocket recovery and complete public book coverage (00:55 UTC)
