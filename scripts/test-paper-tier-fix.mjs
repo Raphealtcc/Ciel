@@ -230,7 +230,7 @@ assert.ok(source.includes("await runAdvisorCycle(this.env, this.latest, maintena
 
 
 assert.ok(source.includes('if (!paperStorage) console.log("Ciel paper storage unavailable; advisor recommendations will continue without automatic paper entries.");'));
-assert.ok(!source.includes("paperCash + 1e-9 < requiredPaperMargin"));
+assert.ok(source.includes("paperCash + 1e-9 < requiredPaperMargin"));
 assert.ok(!source.includes("no new recommendation will be issued until a paper slot is free"));
 
 assert.ok(source.includes('const leverage = marketMaxLeverage >= 100 ? 100 : PAPER_LEVERAGE;'));
