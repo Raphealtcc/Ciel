@@ -19,7 +19,8 @@ const openData = buildActionData(OneClickAction.MARKET_OPEN, trader, [
   2n * 10n ** 18n, 0n, 0n, 0, 0n,
 ]);
 assert.equal(openData.length, 2 + 11 * 64, "market-open actionData must contain exactly eleven ABI words after trader is stripped");
-assert.ok(openData.startsWith(pairBase.toLowerCase()), "stripped actionData must begin with pairBase");
+assert.equal(openData.slice(2 + 24, 2 + 64), pairBase.slice(2).toLowerCase(),
+  "stripped actionData must begin with the correctly padded pairBase word");
 
 const closeData = buildActionData(OneClickAction.MARKET_CLOSE, trader, [hash, 0]);
 assert.equal(closeData.length, 2 + 2 * 64);
@@ -58,7 +59,6 @@ assert.throws(() => selectFeeToken(0, fees, {
   [tokenIn.toLowerCase()]: { balance: 999n, allowance: 1000n },
 }, [{ token: tokenIn, amount: 500n }]), /No enabled execution-fee token/);
 
-let signerTouched = false;
 let networkTouched = false;
 await assert.rejects(() => signAndSubmitIntent({
   enabled: false,
@@ -72,7 +72,6 @@ await assert.rejects(() => signAndSubmitIntent({
   actionValues: [hash, 0],
   fetchImpl: async () => { networkTouched = true; throw new Error("must not be called"); },
 }), /LIVE_EXECUTION_DISABLED/);
-assert.equal(signerTouched, false);
 assert.equal(networkTouched, false, "disabled live mode must never call LeverUp");
 
 await assert.rejects(() => signAndSubmitIntent({
