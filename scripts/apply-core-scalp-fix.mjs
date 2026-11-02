@@ -287,13 +287,6 @@ once(
   "allow the extended trend candidate when its scalp counterpart is blocked",
 );
 
-once(
-  'const bounceLine = s.mode === "RANGE_SCALP"\\n    ? "Range entry confirmation:',
-  'const bounceLine = s.mode === "CORE_PULLBACK_SCALP"\\n    ? "Entry confirmation: closed 5m EMA trend plus 1m pullback/reclaim and volume confirmation."\\n    : s.mode === "RANGE_SCALP"\\n    ? "Range entry confirmation:',
-  "explain the candle-based pullback entry rather than showing unrelated bounce logic",
-);
-
-
 const legacyModeLabel = 'trade.mode === "RANGE_SCALP" ? "RANGE SCALP" : trade.mode === "TREND_HOLD" ? "TREND HOLD" : "LEGACY"';
 const legacyModeCount = source.split(legacyModeLabel).length - 1;
 if (legacyModeCount !== 2) throw new Error("Expected two paper summary mode labels, found " + legacyModeCount);
