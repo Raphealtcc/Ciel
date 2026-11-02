@@ -47,9 +47,9 @@ Use a separate Gemini API key for staging if possible. Reusing all seven product
 
 ## Staging target
 
-The template is designed for a clean, separate deployment:
+The template is designed for a clean, separate deployment. It points to reconstructed/patched-worker.js, so run npm run check:paper before npx wrangler deploy --config wrangler.jsonc:
 
-- New Worker named ciel in the second Cloudflare account.
+- New Worker named ciel-paper-staging in the second Cloudflare account.
 - New D1 database; apply the recovered schema migrations.
 - New KV namespace.
 - New SQLite-backed Durable Object namespaces for HyperliquidFeed and TradingEngine.
