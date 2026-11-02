@@ -194,6 +194,10 @@ assert.ok(!source.includes("automatic 50x paper-trading balance and P&L"));
 assert.ok(source.includes('String(p.leverage) + "x notional estimate at 100% collateral ratio ≈ "'));
 assert.ok(source.includes("free balance is below the eligible market's minimum margin"));
 assert.ok(source.includes("const collateral = minimumMarginForMarketLeverage(marketMaxLeverage);"));
+assert.ok(source.includes("const perpAssets = universe.map((asset) => ({ symbol: String(asset?.name || \"\").trim().toUpperCase(), coin: String(asset?.name || \"\").trim() }))"));
+assert.ok(source.includes("missingBooks.slice(offset, offset + 4).map(async ({ symbol, coin }) => {"));
+assert.ok(source.includes('JSON.stringify({ type: "l2Book", coin })'));
+
 assert.ok(source.includes('if (!paperStorage) console.log("Ciel paper storage unavailable; advisor recommendations will continue without automatic paper entries.");'));
 assert.ok(!source.includes("paperCash + 1e-9 < requiredPaperMargin"));
 assert.ok(!source.includes("no new recommendation will be issued until a paper slot is free"));
