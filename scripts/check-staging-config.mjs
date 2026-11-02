@@ -8,9 +8,11 @@ const config = JSON.parse(json);
 const expectedD1 = "a41e95fe-58cc-443a-839e-5ee0525e9fcf";
 const expectedKv = "6e1fa505914c4d3b87b5b49c9d54f6fe";
 
-assert.equal(config.name, "ciel-paper-staging");
+assert.equal(config.name, "ciel2", "Cloudflare Workers Builds target name must match the staging Worker");
 assert.equal(config.main, "reconstructed/patched-worker.js");
 assert.equal(config.compatibility_date, "2026-09-08");
+assert.equal(config.workers_dev, true);
+assert.equal(config.preview_urls, true);
 assert.deepEqual(config.triggers.crons, ["* * * * *"]);
 
 const d1 = config.d1_databases.find((item) => item.binding === "DB");
@@ -41,4 +43,4 @@ const bindings = new Set(config.durable_objects.bindings.map((item) => item.name
 assert.ok(bindings.has("HYPERLIQUID_FEED"));
 assert.ok(bindings.has("TRADING_ENGINE"));
 
-console.log("PASS: staging deploy and Worker Preview configs use the supplied isolated D1/KV IDs and fresh SQLite-backed Durable Object migrations.");
+console.log("PASS: ciel2 staging Worker and Preview use only the supplied isolated D1/KV IDs, matching Worker name/settings, and fresh SQLite-backed Durable Object migrations.");

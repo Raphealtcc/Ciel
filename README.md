@@ -19,7 +19,7 @@ Hyperliquid market monitoring, technical setup detection, local statistical fore
 - `scripts/`: exact bundle reconstruction, isolated staging patch, behavioral tests and REA summary helper.
 - `migrations/0000_recovered_live_schema.sql`: recovered live D1 schema; this is not a data backup.
 - `docs/`: architecture, runtime snapshot, REA findings, live Cloudflare audit and account handoff.
-- `wrangler.jsonc`: new-account staging template only. It contains explicit placeholder D1/KV IDs and uses SQLite-backed Durable Object migrations. It does not point to the source account.
+- `wrangler.jsonc`: isolated `ciel2` staging config using the user-supplied staging D1/KV IDs and SQLite-backed Durable Object migrations. It does not point to source resources.
 
 ## Verify
 
@@ -65,4 +65,4 @@ The latest 14-route GitLab smoke test reached the live Worker. Health was connec
 Do not connect the second Cloudflare account until the account-switch preflight is reviewed. The source secrets and Durable Object paper ledger are not exportable through the available API. The new staging Worker must use new D1/KV/DO resources and a separate Telegram bot.
 
 
-The staging Worker name in the template is `ciel-paper-staging`. Run `npm run check:paper` to reconstruct and syntax-check the patched bundle before deploying with `npx wrangler deploy --config wrangler.jsonc`. The staging config uses placeholders for fresh account resources and must not be deployed until they are replaced and validated.
+The staging Worker is `ciel2`; its D1/KV bindings are the confirmed isolated staging resources. Workers Builds must build `audit/paper-trading-fix` from the repository root. The build's Wrangler binding summary must show the staging IDs before deployment is allowed. Run `npm run check:paper` to reconstruct, patch and test the candidate before deploying with `npx wrangler deploy --config wrangler.jsonc`.

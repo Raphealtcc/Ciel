@@ -1,11 +1,12 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
-  // Separate-account staging configuration. IDs supplied by the user.
-  "name": "ciel-paper-staging",
+  // Isolated staging Worker. These IDs are the staging resources supplied by the user.
+  "name": "ciel2",
   "main": "reconstructed/patched-worker.js",
   "compatibility_date": "2026-09-08",
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": true,
+  "preview_urls": true,
   "triggers": { "crons": ["* * * * *"] },
   "vars": {
     "ADVISORY_MIN_CONFIDENCE": "0.72",
@@ -27,7 +28,7 @@
   }],
   "previews": {
     // Preview settings do not inherit top-level vars or bindings.
-    // Branch Previews intentionally share the isolated staging D1/KV dataset.
+    // Branch previews intentionally share the isolated staging D1/KV dataset.
     "vars": {
       "ADVISORY_MIN_CONFIDENCE": "0.72",
       "ADVISORY_TREND_REVIEW_COOLDOWN_MINUTES": "30",

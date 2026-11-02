@@ -237,6 +237,12 @@ replaceExactlyOnce(
   "show the AI-selected or minimum-fallback margin on the setup card",
 );
 
+replaceExactlyOnce(
+  '      lastMessageAt: this.lastMessageAt || null,\\n      lastPongAt: this.lastPongAt || null,\\n      lastPingAt: this.lastPingAt || null,\\n      lastMessageAt: this.lastMessageAt || null,',
+  '      lastMessageAt: this.lastMessageAt || null,\\n      lastPongAt: this.lastPongAt || null,\\n      lastPingAt: this.lastPingAt || null,',
+  "remove duplicate lastMessageAt property from the staging bundle without altering recovered evidence",
+);
+
 await writeFile(output, source);
 console.log(`Wrote patched staging candidate: ${output}`);
 console.log("Recovered source fragments and exact-bundle reconstruction remain unchanged.");
