@@ -270,5 +270,36 @@ once(
   "retain correct hold duration in all fallback paths",
 );
 
+
+once(
+  'if (!paperStorage || paperCash + 1e-9 < PAPER_MARGIN_MON) {',
+  'if (!paperStorage || paperCash + 1e-9 < 11) {',
+  "permit the 11 MON verified minimum tier while still checking each candidate's own floor",
+);
+
+once(
+  '    if (processedCandidateSymbols.has(candidate.symbol)) continue;\\n    processedCandidateSymbols.add(candidate.symbol);\\n    const isScalpMode = candidate.mode === "RANGE_SCALP" || candidate.mode === "CORE_PULLBACK_SCALP";\\n    if (isScalpMode && eventIntel?.marketImpact === "BROAD_RISK_OFF") continue;',
+  '    if (processedCandidateSymbols.has(candidate.symbol)) continue;\\n    const isScalpMode = candidate.mode === "RANGE_SCALP" || candidate.mode === "CORE_PULLBACK_SCALP";\\n    if (isScalpMode && eventIntel?.marketImpact === "BROAD_RISK_OFF") continue;\\n    processedCandidateSymbols.add(candidate.symbol);',
+  "allow a valid extended trend candidate if the same-symbol scalp is blocked by broad risk-off",
+);
+
+once(
+  'localRangeReview ? "Market review (LOCAL DETERMINISTIC / GEMINI SKIPPED): " + r.reason : "Gemini " + r.verdict + ": " + r.reason,',
+  'localCoreScalpReview || localRangeReview ? "Market review (LOCAL DETERMINISTIC / GEMINI SKIPPED): " + r.reason : "Gemini " + r.verdict + ": " + r.reason,',
+  "show local deterministic review instead of falsely labelling a core scalp as Gemini WAIT",
+);
+
+once(
+  'localRangeReview\\n      ? "Review basis: local regime, CCI, 3-minute rejection, statistical forecast and live derivatives/order-book safeguards. Gemini is deliberately skipped for this short-duration scalp to preserve API quota."',
+  '(localCoreScalpReview || localRangeReview)\\n      ? "Review basis: closed 1m/5m candle setup, statistical forecast and live derivatives/order-book safeguards. Gemini is deliberately skipped for this short-duration scalp to preserve API quota."',
+  "show the actual local scalp evidence basis",
+);
+
+once(
+  'const bounceLine = s.mode === "RANGE_SCALP"\\n    ? "Range entry confirmation:',
+  'const bounceLine = s.mode === "CORE_PULLBACK_SCALP"\\n    ? "Entry confirmation: closed 5m EMA trend plus 1m pullback/reclaim and volume confirmation."\\n    : s.mode === "RANGE_SCALP"\\n    ? "Range entry confirmation:',
+  "explain the candle-based pullback entry rather than showing unrelated bounce logic",
+);
+
 await writeFile(file, source);
 console.log("Wrote core BTC/ETH/SOL pullback scalp candidate to reconstructed/patched-worker.js");
