@@ -50,6 +50,24 @@ const POSITION_V4_ABI = [{
   }],
 }];
 
+const AGENT_AUTH_ABI = [{
+  type: "function", name: "getAgentAuth", stateMutability: "view",
+  inputs: [{ name: "trader", type: "address" }, { name: "agent", type: "address" }],
+  outputs: [{ type: "tuple", name: "", components: [
+    { name: "agent", type: "address" }, { name: "name", type: "bytes32" },
+    { name: "permissions", type: "uint256" }, { name: "authorizedAt", type: "uint32" },
+  ] }],
+}];
+const LAST_NONCE_ABI = [{
+  type: "function", name: "getLastNonce", stateMutability: "view",
+  inputs: [{ name: "trader", type: "address" }, { name: "signer", type: "address" }],
+  outputs: [{ name: "", type: "uint64" }],
+}];
+const ERC20_READ_ABI = [
+  { type: "function", name: "balanceOf", stateMutability: "view", inputs: [{ name: "account", type: "address" }], outputs: [{ name: "", type: "uint256" }] },
+  { type: "function", name: "allowance", stateMutability: "view", inputs: [{ name: "owner", type: "address" }, { name: "spender", type: "address" }], outputs: [{ name: "", type: "uint256" }] },
+];
+
 const MARKET_INFO_V2_ABI = [{
   type: "function",
   name: "getMarketInfoV2",
@@ -258,13 +276,13 @@ export async function fetchAntiDdosConfig({ fetchImpl = fetch, forceRefresh = fa
   return antiDdosCache;
 }
 
-export async function readPairByBaseV4(pairBase, { rpcUrl = "https://rpc.monad.xyz", fetchImpl = fetch } = {}) {
+export async function readPairByBaseV4(pairBase, { rpcUrl = "https://rpc.monad.xyz", fetchImpl = fetch, blockTag = "latest" } = {}) {
   if (!/^0x[0-9a-fA-F]{40}$/.test(pairBase || "")) throw new Error("Invalid pairBase");
   const encodedAddress = pairBase.toLowerCase().slice(2).padStart(64, "0");
   const response = await fetchImpl(rpcUrl, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_call", params: [{ to: LEVERUP_1CT.diamond, data: PAIR_BY_BASE_SELECTOR + encodedAddress }, "latest"] }),
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_call", params: [{ to: LEVERUP_1CT.diamond, data: PAIR_BY_BASE_SELECTOR + encodedAddress }, blockTag] }),
     signal: AbortSignal.timeout(12_000),
   });
   const data = await response.json();
@@ -272,11 +290,11 @@ export async function readPairByBaseV4(pairBase, { rpcUrl = "https://rpc.monad.x
   return decodePairView(data.result);
 }
 
-export async function readGlobalMinimumNotional({ rpcUrl = "https://rpc.monad.xyz", fetchImpl = fetch } = {}) {
+export async function readGlobalMinimumNotional({ rpcUrl = "https://rpc.monad.xyz", fetchImpl = fetch, blockTag = "latest" } = {}) {
   const response = await fetchImpl(rpcUrl, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ jsonrpc: "2.0", id: 2, method: "eth_call", params: [{ to: LEVERUP_1CT.diamond, data: MIN_NOTIONAL_SELECTOR }, "latest"] }),
+    body: JSON.stringify({ jsonrpc: "2.0", id: 2, method: "eth_call", params: [{ to: LEVERUP_1CT.diamond, data: MIN_NOTIONAL_SELECTOR }, blockTag] }),
     signal: AbortSignal.timeout(12_000),
   });
   const data = await response.json();
@@ -284,22 +302,131 @@ export async function readGlobalMinimumNotional({ rpcUrl = "https://rpc.monad.xy
   return asWord(data.result, 32);
 }
 
-export async function readMarketInfoV2(pairBase, { publicClient = createLeverUpPublicClient() } = {}) {
+export async function readMarketInfoV2(pairBase, { publicClient = createLeverUpPublicClient(), blockNumber } = {}) {
   return publicClient.readContract({
     address: LEVERUP_1CT.diamond,
     abi: MARKET_INFO_V2_ABI,
     functionName: "getMarketInfoV2",
     args: [pairBase],
+    ...(blockNumber == null ? {} : { blockNumber }),
   });
 }
 
-export async function readPositionsV4(traderAddress, pairBase, { publicClient = createLeverUpPublicClient() } = {}) {
+export async function readPositionsV4(traderAddress, pairBase, { publicClient = createLeverUpPublicClient(), blockNumber } = {}) {
   return publicClient.readContract({
     address: LEVERUP_1CT.diamond,
     abi: POSITION_V4_ABI,
     functionName: "getPositionsV4",
     args: [traderAddress, pairBase],
+    ...(blockNumber == null ? {} : { blockNumber }),
   });
+}
+
+export function hasAgentPermission(permissions, action) {
+  const mask = BigInt(permissions);
+  if (mask === (2n ** 256n - 1n)) return true;
+  return (mask & (1n << BigInt(action))) !== 0n;
+}
+
+export async function readAgentAuthorization(traderAddress, agentAddress, { publicClient = createLeverUpPublicClient() } = {}) {
+  const auth = await publicClient.readContract({
+    address: LEVERUP_1CT.diamond, abi: AGENT_AUTH_ABI,
+    functionName: "getAgentAuth", args: [traderAddress, agentAddress],
+  });
+  const authorizedAgent = auth.agent ?? auth[0];
+  const permissions = BigInt(auth.permissions ?? auth[2] ?? 0n);
+  const authorized = String(authorizedAgent).toLowerCase() === String(agentAddress).toLowerCase();
+  return {
+    authorized,
+    agentAddress: authorizedAgent,
+    permissions: permissions.toString(),
+    authorizedAt: Number(auth.authorizedAt ?? auth[3] ?? 0),
+    canMarketOpen: authorized && hasAgentPermission(permissions, 0),
+    canMarketClose: authorized && hasAgentPermission(permissions, 1),
+    canPartialClose: authorized && hasAgentPermission(permissions, 9),
+  };
+}
+
+export async function readLastAgentNonce(traderAddress, agentAddress, { publicClient = createLeverUpPublicClient() } = {}) {
+  return publicClient.readContract({
+    address: LEVERUP_1CT.diamond, abi: LAST_NONCE_ABI,
+    functionName: "getLastNonce", args: [traderAddress, agentAddress],
+  });
+}
+
+export async function readTokenBalancesAndAllowances(traderAddress, tokenAddresses, {
+  diamond = LEVERUP_1CT.diamond, publicClient = createLeverUpPublicClient(),
+} = {}) {
+  const tokens = [...new Set((tokenAddresses || []).filter(Boolean).map((x) => String(x).toLowerCase()))];
+  const states = await Promise.all(tokens.map(async (token) => {
+    const [balance, allowance] = await Promise.all([
+      publicClient.readContract({ address: token, abi: ERC20_READ_ABI, functionName: "balanceOf", args: [traderAddress] }),
+      publicClient.readContract({ address: token, abi: ERC20_READ_ABI, functionName: "allowance", args: [traderAddress, diamond] }),
+    ]);
+    return [token, { balance: BigInt(balance), allowance: BigInt(allowance) }];
+  }));
+  return Object.fromEntries(states);
+}
+
+export async function persistLeverUpPreflight(db, signalId, preflight, {
+  decision = "PASS", rejectionReason = null, blockNumber = null,
+} = {}) {
+  if (!db?.prepare || !signalId || !preflight) throw new Error("PREFLIGHT_PERSISTENCE_INPUT_INVALID");
+  const id = crypto.randomUUID();
+  await db.prepare(`INSERT INTO leverup_preflight_snapshots (
+    id, signal_id, symbol, pair_base, checked_at_ms, block_number,
+    requested_leverage, market_max_leverage, notional_usd_raw, oracle_price_raw,
+    mon_usd_price_raw, collateral_ratio, minimum_collateral_mon, available_margin_mon,
+    fee_config_json, slippage_config_json, funding_rate_raw, holding_rate_long_raw,
+    holding_rate_short_raw, decision, rejection_reason
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    .bind(
+      id, String(signalId), preflight.pair, preflight.pairBase, preflight.checkedAt,
+      blockNumber == null ? null : String(blockNumber), preflight.requestedLeverage,
+      preflight.maxLeverageForNotional, String(preflight.notionalUsdRaw),
+      String(preflight.oraclePriceRaw), String(preflight.monUsdPriceRaw),
+      preflight.collateralRatio, preflight.minimumCollateralMon,
+      preflight.marginBudget.availableMarginMon, JSON.stringify(preflight.protocolFeeConfig),
+      JSON.stringify(preflight.slippageConfig), String(preflight.marketInfo?.fundingFeeRate ?? ""),
+      String(preflight.longHoldingFeeRateRaw), String(preflight.shortHoldingFeeRateRaw),
+      decision, rejectionReason,
+    ).run();
+  return id;
+}
+
+export async function persistPositionFeeSnapshot(db, position, sourceBlock = null) {
+  if (!db?.prepare || !position?.positionHash) throw new Error("POSITION_SNAPSHOT_PERSISTENCE_INPUT_INVALID");
+  await db.prepare(`INSERT OR REPLACE INTO leverup_position_fee_snapshots (
+    position_hash, observed_at_ms, pair_base, symbol, is_long, margin_token,
+    open_fee_raw, execution_fee_raw, funding_fee_raw, holding_fee_raw,
+    accrued_funding_fee_raw, accrued_holding_fee_raw, earliest_close_time, source_block
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    .bind(
+      position.positionHash, position.observedAt || Date.now(), position.pairBase,
+      position.pair, position.isLong ? 1 : 0, position.marginToken,
+      position.openFeeRaw, position.executionFeeRaw, position.fundingFeeRaw,
+      position.holdingFeeRaw, position.accruedFundingFeeRaw,
+      position.accruedHoldingFeeRaw, Number(position.earliestCloseTime),
+      sourceBlock == null ? null : String(sourceBlock),
+    ).run();
+}
+
+export async function persistSettlementReconciliation(db, settlement, source = {}) {
+  if (!db?.prepare || !settlement?.positionHash) throw new Error("SETTLEMENT_PERSISTENCE_INPUT_INVALID");
+  await db.prepare(`INSERT OR REPLACE INTO leverup_settlement_reconciliations (
+    position_hash, symbol, close_time, close_price_raw, gross_pnl_raw,
+    open_fee_raw, close_fee_raw, funding_fee_raw, holding_fee_raw,
+    total_net_costs_raw, net_pnl_after_fees_raw, funding_since_last_snapshot_raw,
+    holding_since_last_snapshot_raw, reconciled_at_ms, source_json
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    .bind(
+      settlement.positionHash, settlement.pair, settlement.closeTime,
+      settlement.closePriceRaw, settlement.grossPnlRaw, settlement.openFeeRaw,
+      settlement.closeFeeRaw, settlement.fundingFeeRaw, settlement.holdingFeeRaw,
+      settlement.totalNetCostsRaw, settlement.netPnlAfterFeesRaw,
+      settlement.fundingSinceLastSnapshotRaw, settlement.holdingSinceLastSnapshotRaw,
+      settlement.reconciledAt, JSON.stringify(source),
+    ).run();
 }
 
 export function selectLeverageTier(leverageMargins, notionalUsd) {
@@ -439,6 +566,9 @@ export function buildLeverUpPreflight({
     oraclePriceUsd: Number(oraclePriceRaw) / 1e18,
     monUsdPrice: Number(monUsdPriceRaw) / 1e18,
     minimumNotionalUsd: notionalUsd,
+    notionalUsdRaw: String(Math.round(notionalUsd * 1e18)),
+    oraclePriceRaw: String(oraclePriceRaw),
+    monUsdPriceRaw: String(monUsdPriceRaw),
     collateralRatio,
     minimumCollateralMon,
     marginBudget: margin,
@@ -534,16 +664,19 @@ export async function readLeverUpAccountSnapshot({
   if (!pairBase) throw new Error("LEVERUP_PAIR_BASE_MISSING");
   const monMarket = pairs.find((item) => item.symbol === "MON" || item.pairName === "MON/USD");
   if (!monMarket?.base) throw new Error("MON_COLLATERAL_PRICE_PAIR_MISSING");
+  const blockNumber = await publicClient.getBlockNumber();
+  const blockTag = "0x" + blockNumber.toString(16);
   const [prices, pairView, minimumNotionalRaw, marketInfo, indexedPositions, onchainPositions] = await Promise.all([
     fetchLatestOraclePrices([pairBase, monMarket.base], { fetchImpl }),
-    readPairByBaseV4(pairBase, { rpcUrl, fetchImpl }),
-    readGlobalMinimumNotional({ rpcUrl, fetchImpl }),
-    readMarketInfoV2(pairBase, { publicClient }),
+    readPairByBaseV4(pairBase, { rpcUrl, fetchImpl, blockTag }),
+    readGlobalMinimumNotional({ rpcUrl, fetchImpl, blockTag }),
+    readMarketInfoV2(pairBase, { publicClient, blockNumber }),
     traderAddress ? fetchOpenPositions(traderAddress, { fetchImpl }) : Promise.resolve([]),
-    traderAddress ? readPositionsV4(traderAddress, pairBase, { publicClient }) : Promise.resolve([]),
+    traderAddress ? readPositionsV4(traderAddress, pairBase, { publicClient, blockNumber }) : Promise.resolve([]),
   ]);
   return {
     checkedAt: Date.now(),
+    blockNumber: blockNumber.toString(),
     market,
     pairView,
     oraclePriceRaw: prices[pairBase.toLowerCase()].toString(),
