@@ -172,7 +172,8 @@ once(
 );
 
 once(
-  '    const signal = analyse(sym, hist.get(sym) || [], now);\\n    if (signal && signal.confidence >= setting(env.ADVISORY_MIN_CONFIDENCE, 0.72, 0.5, 0.95)) candidates.push(signal);',
+  `    const signal = analyse(sym, hist.get(sym) || [], now);
+    if (signal && signal.confidence >= setting(env.ADVISORY_MIN_CONFIDENCE, 0.72, 0.5, 0.95)) candidates.push(signal);`,
   `    const signal = analyse(sym, hist.get(sym) || [], now);
     const isCore = ["BTC","ETH","SOL"].includes(sym);
     if (signal && signal.confidence >= setting(env.ADVISORY_MIN_CONFIDENCE, 0.72, 0.5, 0.95) && (!isCore || signal.mode === "TREND_HOLD")) candidates.push(signal);
