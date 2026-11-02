@@ -282,7 +282,8 @@ once(
 
 once(
   '    if (isScalpMode && eventIntel?.marketImpact === "BROAD_RISK_OFF") continue;',
-  '    if (isScalpMode && eventIntel?.marketImpact === "BROAD_RISK_OFF") continue;\\n    processedCandidateSymbols.add(candidate.symbol);',
+  `    if (isScalpMode && eventIntel?.marketImpact === "BROAD_RISK_OFF") continue;
+    processedCandidateSymbols.add(candidate.symbol);`,
   "allow the extended trend candidate when its scalp counterpart is blocked",
 );
 
