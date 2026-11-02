@@ -73,8 +73,10 @@ const settlement = reconcileClosedPosition({
     holdingFee: "700000000000", pnl: "5000000000000000",
     closePrice: "101000000000000000000000", closeTime: 1790000100,
   },
-}, live);
+}, live, { estimatedProtocolCosts: { estimatedNetCostsUsd: 0.001 } }, { marginTokenDecimals: 18, marginTokenPriceUsd: 0.02 });
 assert.equal(settlement.fundingSinceLastSnapshotRaw, "-300000000000");
+assert.ok(settlement.actualNetCostsUsd > 0);
+assert.ok(settlement.estimatedActualVarianceUsd !== null);
 assert.equal(settlement.holdingSinceLastSnapshotRaw, "200000000000");
 assert.equal(settlement.totalTradingFeesRaw, "600000000000000");
 assert.equal(settlement.netPnlAfterFeesRaw, "4397800000000000");

@@ -337,8 +337,8 @@ export async function persistLeverUpPreflight(db, signalId, preflight, {
     requested_leverage, market_max_leverage, notional_usd_raw, oracle_price_raw,
     mon_usd_price_raw, collateral_ratio, minimum_collateral_mon, available_margin_mon,
     fee_config_json, slippage_config_json, funding_rate_raw, holding_rate_long_raw,
-    holding_rate_short_raw, decision, rejection_reason
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    holding_rate_short_raw, estimated_costs_json, decision, rejection_reason
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
     .bind(
       id, String(signalId), preflight.pair, preflight.pairBase, preflight.checkedAt,
       blockNumber == null ? null : String(blockNumber), preflight.requestedLeverage,
@@ -348,7 +348,7 @@ export async function persistLeverUpPreflight(db, signalId, preflight, {
       preflight.marginBudget.availableMarginMon, JSON.stringify(preflight.protocolFeeConfig),
       JSON.stringify(preflight.slippageConfig), String(preflight.marketInfo?.fundingFeeRate ?? ""),
       String(preflight.longHoldingFeeRateRaw), String(preflight.shortHoldingFeeRateRaw),
-      decision, rejectionReason,
+      JSON.stringify(preflight.estimatedProtocolCosts ?? null), decision, rejectionReason,
     ).run();
   return id;
 }
@@ -585,7 +585,9 @@ export function normalizePositionAccrual(position) {
   };
 }
 
-export function reconcileClosedPosition(closedPosition, lastLiveSnapshot = null) {
+export function reconcileClosedPosition(closedPosition, lastLiveSnapshot = null, estimate = null, {
+  marginTokenDecimals = 18, marginTokenPriceUsd = null,
+} = {}) {
   if (closedPosition?.status !== "CLOSED" || !closedPosition.closeInfo) {
     throw new Error("POSITION_NOT_SETTLED");
   }
@@ -602,6 +604,14 @@ export function reconcileClosedPosition(closedPosition, lastLiveSnapshot = null)
   const totalTradingFees = openFee + closeFee;
   const netCarryCost = holdingFee - fundingFee;
   const totalNetCosts = totalTradingFees + netCarryCost;
+  const price = marginTokenPriceUsd == null ? null : Number(marginTokenPriceUsd);
+  const decimals = Number(marginTokenDecimals);
+  const actualNetCostsUsd = Number.isFinite(price) && price > 0 && Number.isInteger(decimals) && decimals >= 0
+    ? Number(totalNetCosts) / (10 ** decimals) * price : null;
+  const estimatedNetCostsUsd = estimate?.estimatedProtocolCosts?.estimatedNetCostsUsd
+    ?? estimate?.estimatedNetCostsUsd ?? null;
+  const estimatedActualVarianceUsd = actualNetCostsUsd == null || estimatedNetCostsUsd == null
+    ? null : actualNetCostsUsd - Number(estimatedNetCostsUsd);
   return {
     positionHash: closedPosition.positionHash,
     pair: closedPosition.pair,
@@ -617,6 +627,11 @@ export function reconcileClosedPosition(closedPosition, lastLiveSnapshot = null)
     netCarryCostRaw: netCarryCost.toString(),
     totalNetCostsRaw: totalNetCosts.toString(),
     netPnlAfterFeesRaw: (pnl - totalNetCosts).toString(),
+    actualNetCostsUsd,
+    estimatedNetCostsUsd,
+    estimatedActualVarianceUsd,
+    marginTokenPriceUsd: price,
+    marginTokenDecimals: decimals,
     lastObservedFundingFeeRaw: lastLiveSnapshot?.fundingFeeRaw ?? null,
     lastObservedHoldingFeeRaw: lastLiveSnapshot?.holdingFeeRaw ?? null,
     fundingSinceLastSnapshotRaw: lastLiveSnapshot

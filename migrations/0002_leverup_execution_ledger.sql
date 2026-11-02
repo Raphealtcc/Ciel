@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS leverup_preflight_snapshots (
   funding_rate_raw TEXT,
   holding_rate_long_raw TEXT,
   holding_rate_short_raw TEXT,
+  estimated_costs_json TEXT NOT NULL,
   decision TEXT NOT NULL CHECK (decision IN ('PASS','REJECT')),
   rejection_reason TEXT
 );
