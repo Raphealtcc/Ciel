@@ -18,6 +18,7 @@ const routes = [
 ];
 
 const results = [];
+const failures = [];
 for (const [path, name] of routes) {
   const response = await fetch(new URL(path, BASE), {
     method: "GET",
@@ -48,11 +49,11 @@ for (const [path, name] of routes) {
   console.log(JSON.stringify(result));
   if (!response.ok) throw new Error(name + " returned HTTP " + response.status + ": " + text.slice(0, 300));
   if (!body || typeof body !== "object") throw new Error(name + " did not return JSON");
-  if (name === "health" && (body.ok !== true || body.connected !== true || body.fresh !== true)) throw new Error("Health endpoint is not connected and fresh: " + JSON.stringify(body).slice(0, 500));
+  if (name === "health" && (body.ok !== true || body.connected !== true || body.fresh !== true)) failures.push("Health endpoint is not connected and fresh: " + JSON.stringify(body).slice(0, 500));
   if (name === "root" && body.mode !== "read-only-advisory") throw new Error("Unexpected root mode: " + JSON.stringify(body).slice(0, 300));
   if (name === "markets" && !Array.isArray(body.markets)) throw new Error("Markets endpoint did not return a markets array");
   if (name === "candles" && !Array.isArray(body.candles)) throw new Error("Candles endpoint did not return a candles array");
-  if (name.startsWith("orderbook-") && !Object.hasOwn(body, "snapshot")) throw new Error("Orderbook endpoint did not return its documented snapshot field");
-  if (name.startsWith("orderbook-") && typeof body.stale !== "boolean") throw new Error("Orderbook endpoint did not return its documented stale flag");
+  if (name.startsWith("orderbook-") && !Object.hasOwn(body, "snapshot")) failures.push("Orderbook endpoint did not return its documented snapshot field");
+  if (name.startsWith("orderbook-") && typeof body.stale !== "boolean") failures.push("Orderbook endpoint did not return its documented stale flag");
 }
 console.log("PASS: live read-only Worker smoke-tested " + results.length + " GET routes; no POSTs or state-changing endpoints were called.");
