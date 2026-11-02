@@ -146,3 +146,12 @@ The recovered Worker was reassembled to exactly 209,745 characters. Its SHA-256 
 The 2026-11-02 read-only account inventory is documented in `HANDOFF-2026-11-02.md`. It confirms 234 advisor position rows (225 expired, 4 closing, 2 closed, 3 cancelled) and 944 AI audit rows (113 APPROVE, 41 REJECT, 790 WAIT). The two supplied ONDO/ADA proposal IDs are present as expired manual-tracking proposals; their automatic paper entries are separate DO state.
 
 The source account has one CIEL feed DO object and zero objects in the retired TradingEngine namespace. The protected DO internal paper ledger cannot be read via the available Cloudflare SQL API. D1 `paper_executions` is empty because it is not the current perp paper ledger.
+
+
+## Hyperliquid symbol and book identity diagnostics (2026-11-02)
+
+The public Hyperliquid checks resolved the missing-book causes:
+- KPEPE is named `kPEPE` in default `allMids` and `metaAndAssetCtxs`. The metadata universe contains the asset and context. `l2Book` works for exact coin `kPEPE` (bid 0.004892 / ask 0.004894 at the check) but returns HTTP 500 for uppercase `KPEPE`. Production normalizes the market symbol to uppercase and then requests the book using that uppercase value, so its REST fallback misses this book. The staging patch now preserves the original upstream coin name while keeping canonical uppercase CIEL symbols.
+- QNT is absent from default `allMids` and from `metaAndAssetCtxs` for both default and `xyz`. The `allMids` request for DEX `xyz` does return `xyz:QNT` (34.186 at the check), and `l2Book` works for `xyz:QNT` (bid 34.111 / ask 34.261). But no derivatives context was returned for QNT in either metadata universe. The production Worker does not request the xyz DEX price or map this alias. QNT therefore remains excluded from advisor-ready market coverage until a valid funding/OI/mark/oracle context source is found; price/book alone is insufficient.
+
+This makes the current production coverage gap precise: KPEPE's book is fixable with a case-preserving coin name (patched for staging); QNT is a separate DEX alias plus missing derivatives-context problem (not silently patched into a complete signal).
