@@ -18,7 +18,7 @@ assert.ok(mapMatch, "Could not extract the market leverage map from the patched 
 const sentMessages = [];
 const context = vm.createContext({
   LEVERUP_MARKET_MAX_LEVERAGE: vm.runInNewContext("(" + mapMatch[1] + ")"),
-  PAPER_STARTING_BALANCE_MON: 60,
+  PAPER_STARTING_BALANCE_MON: 100,
   PAPER_ACCOUNT_KEY: "ciel:paper:account:v1",
   PAPER_LEVERAGE: 50,
   MAX_AGE: 120_000,
@@ -39,15 +39,15 @@ const definitions = [
 ].join("\n");
 
 vm.runInContext(
-  definitions + "\nglobalThis.paperTests = { minimumMarginForMarketLeverage, openPaperTrade, paperTradePnl, managePaperTrades, getPaperSummary };",
+  definitions + "\nglobalThis.paperTests = { minimumMarginForMarketLeverage, paperMarginLimits, choosePaperMargin, openPaperTrade, paperTradePnl, managePaperTrades, getPaperSummary };",
   context,
 );
-const { minimumMarginForMarketLeverage, openPaperTrade, paperTradePnl, managePaperTrades, getPaperSummary } = context.paperTests;
+const { minimumMarginForMarketLeverage, paperMarginLimits, choosePaperMargin, openPaperTrade, paperTradePnl, managePaperTrades, getPaperSummary } = context.paperTests;
 
-function makeStorage(initialBalance = 60, trades = []) {
+function makeStorage(initialBalance = 100, trades = []) {
   const data = new Map([["ciel:paper:account:v1", {
     version: 1,
-    startingBalanceMon: 60,
+    startingBalanceMon: 100,
     availableBalanceMon: initialBalance,
     realizedPnlMon: 0,
     realizedPnlUsd: 0,
@@ -80,6 +80,20 @@ assert.equal(minimumMarginForMarketLeverage(100), 11);
 assert.equal(minimumMarginForMarketLeverage(1001), 11);
 assert.equal(minimumMarginForMarketLeverage(25), null);
 assert.equal(minimumMarginForMarketLeverage(5), null);
+
+const limits50 = paperMarginLimits(22, 100, 100, 50, 0.4, 0);
+assert.equal(limits50.feasible, true);
+assert.equal(limits50.minMarginMon, 22);
+assert.equal(limits50.maxMarginMon, 25);
+assert.equal(choosePaperMargin(24.5, limits50), 24.5);
+assert.equal(choosePaperMargin(100, limits50), 25);
+const limits100 = paperMarginLimits(11, 100, 100, 100, 0.4, 0);
+assert.equal(limits100.feasible, true);
+assert.equal(limits100.maxMarginMon, 12.5);
+assert.equal(choosePaperMargin(12.2, limits100), 12.2);
+assert.equal(choosePaperMargin(1, limits100), 11);
+assert.equal(choosePaperMargin(null, limits100), 11);
+assert.equal(paperMarginLimits(22, 100, 100, 50, 0.4, 5.7).feasible, false);
 assert.equal(context.LEVERUP_MARKET_MAX_LEVERAGE.BTC, 100);
 assert.equal(context.LEVERUP_MARKET_MAX_LEVERAGE.ETH, 100);
 assert.equal(minimumMarginForMarketLeverage(context.LEVERUP_MARKET_MAX_LEVERAGE.QNT), null);
@@ -97,14 +111,22 @@ const opened50 = await openPaperTrade(fifty, params("BNB", "test-50"));
 assert.equal(opened50.opened, true);
 assert.equal(opened50.trade.marginMon, 22);
 assert.equal(opened50.trade.leverage, 50);
-assert.equal(opened50.availableBalanceMon, 38);
+assert.equal(opened50.availableBalanceMon, 78);
+
+const aiSized = await openPaperTrade(makeStorage(), params("BNB", "ai-sized", { marginMon: 24.5, leverage: 50 }));
+assert.equal(aiSized.opened, true);
+assert.equal(aiSized.trade.marginMon, 24.5);
+assert.equal(aiSized.availableBalanceMon, 75.5);
+const belowVenueMinimum = await openPaperTrade(makeStorage(), params("BNB", "below-minimum", { marginMon: 21.99, leverage: 50 }));
+assert.equal(belowVenueMinimum.opened, false);
+assert.match(belowVenueMinimum.reason, /minimum of 22 MON/i);
 
 const hundred = makeStorage();
 const opened100 = await openPaperTrade(hundred, params("XRP", "test-100"));
 assert.equal(opened100.opened, true);
 assert.equal(opened100.trade.marginMon, 11);
 assert.equal(opened100.trade.leverage, 100);
-assert.equal(opened100.availableBalanceMon, 49);
+assert.equal(opened100.availableBalanceMon, 89);
 
 const thousandMarket = makeStorage();
 const openedBtc = await openPaperTrade(thousandMarket, params("BTC", "test-btc-100"));
@@ -121,12 +143,12 @@ const insufficient = await openPaperTrade(makeStorage(21.99), params("BNB", "ins
 assert.equal(insufficient.opened, false);
 assert.match(insufficient.reason, /22 MON/i);
 
-const duplicateSignalStorage = makeStorage(38, [{ signalId: "same", symbol: "BNB", status: "CLOSED" }]);
+const duplicateSignalStorage = makeStorage(78, [{ signalId: "same", symbol: "BNB", status: "CLOSED" }]);
 const duplicateSignal = await openPaperTrade(duplicateSignalStorage, params("BNB", "same"));
 assert.equal(duplicateSignal.opened, false);
 assert.equal(duplicateSignal.duplicate, true);
 
-const duplicateMarketStorage = makeStorage(38, [{ signalId: "older", symbol: "BNB", status: "OPEN" }]);
+const duplicateMarketStorage = makeStorage(78, [{ signalId: "older", symbol: "BNB", status: "OPEN" }]);
 const duplicateMarket = await openPaperTrade(duplicateMarketStorage, params("BNB", "new"));
 assert.equal(duplicateMarket.opened, false);
 assert.match(duplicateMarket.reason, /already open/i);
@@ -140,7 +162,7 @@ const stopped = await stopStorage.get("ciel:paper:account:v1");
 assert.equal(stopped.trades[0].status, "CLOSED");
 assert.equal(stopped.trades[0].closeReason, "STOP_LOSS");
 assert.ok(Math.abs(stopped.realizedPnlMon - (-4.4)) < 1e-9);
-assert.ok(Math.abs(stopped.availableBalanceMon - 55.6) < 1e-9);
+assert.ok(Math.abs(stopped.availableBalanceMon - 95.6) < 1e-9);
 
 // A take-profit close returns reserved margin plus gross P&L to free balance.
 const targetStorage = makeStorage();
@@ -150,7 +172,7 @@ await managePaperTrades(targetStorage, { MON: 0.2, BNB: 100.81 }, targetNow, tar
 const targeted = await targetStorage.get("ciel:paper:account:v1");
 assert.equal(targeted.trades[0].closeReason, "TAKE_PROFIT");
 assert.ok(Math.abs(targeted.realizedPnlMon - 8.8) < 1e-9);
-assert.ok(Math.abs(targeted.availableBalanceMon - 68.8) < 1e-9);
+assert.ok(Math.abs(targeted.availableBalanceMon - 108.8) < 1e-9);
 
 // A position is closed at its maximum hold when the feed is fresh.
 const holdStorage = makeStorage();
@@ -193,7 +215,10 @@ assert.ok(source.includes("automatic leverage-tiered paper-trading balance and P
 assert.ok(!source.includes("automatic 50x paper-trading balance and P&L"));
 assert.ok(source.includes('String(p.leverage) + "x notional estimate at 100% collateral ratio ≈ "'));
 assert.ok(source.includes("free balance is below the eligible market's minimum margin"));
-assert.ok(source.includes("const collateral = minimumMarginForMarketLeverage(marketMaxLeverage);"));
+assert.ok(source.includes("const collateral = choosePaperMargin(reviewed.verdict === \"APPROVE\" ? reviewed.paperMarginMon : null, sizingLimits);"));
+assert.ok(source.includes("PAPER_STARTING_BALANCE_MON = 100"));
+assert.ok(source.includes("paperMarginMon"));
+assert.ok(source.includes("const marginSizingSource = reviewed.verdict === \"APPROVE\""));
 assert.ok(source.includes("const perpAssets = universe.map((asset) => ({ symbol: String(asset?.name || \"\").trim().toUpperCase(), coin: String(asset?.name || \"\").trim() }))"));
 assert.ok(source.includes("missingBooks.slice(offset, offset + 4).map(async ({ symbol, coin }) => {"));
 assert.ok(source.includes('JSON.stringify({ type: "l2Book", coin })'));
@@ -213,4 +238,4 @@ assert.ok(source.includes("Paper results use Hyperliquid mids, not LeverUp Pyth/
 assert.equal(context.LEVERUP_MARKET_MAX_LEVERAGE.CASHCAT, 3);
 assert.equal(context.LEVERUP_MARKET_MAX_LEVERAGE.PONS, 3);
 
-console.log("PASS: 50x/100x+ tier entry, 22/11 MON margins, P&L math, stop/target/max-hold/profit-protection closes, /profits equity reconciliation, entry guards, and tier-consistent Telegram copy.");
+console.log("PASS: 100 MON budget, 11/22 MON venue floors, AI-selected margins, 5%/10% risk clamps, tiered paper entries, P&L, all paper exits, /profits reconciliation and Telegram copy.");
