@@ -109,7 +109,7 @@ await assert.rejects(() => signAndSubmitIntent({
   nonce: "1785312000123",
   deadline: Math.floor(Date.now() / 1000) + 300,
   actionValues: [pairBase, true, tokenIn, lvToken, 11n * 10n ** 18n, 10000000000n, 2n * 10n ** 18n, 0n, 0n, 0, 0n],
-  preflight: { preflightPassed: true, requestedLeverage: 25, maxLeverageForNotional: 100, pairBase, status: "AVAILABLE", checkedAt: Date.now() },
+  preflight: { preflightPassed: true, requestedLeverage: 25, marketMaxLeverage: 100, maxLeverageForNotional: 100, pairBase, status: "AVAILABLE", checkedAt: Date.now() },
   fetchImpl: async () => { networkTouched = true; throw new Error("must not be called"); },
 }), /LEVERUP_MINIMUM_50X_NOT_MET/);
 assert.equal(networkTouched, false, "50x floor must block before signing or network access");
@@ -125,7 +125,7 @@ await assert.rejects(() => signAndSubmitIntent({
   nonce: "1785312000123",
   deadline: Math.floor(Date.now() / 1000) + 300,
   actionValues: [pairBase, true, tokenIn, lvToken, 11n * 10n ** 18n, 10000000000n, 2n * 10n ** 18n, 0n, 0n, 0, 0n],
-  preflight: { preflightPassed: true, requestedLeverage: 50, maxLeverageForNotional: 50, pairBase, status: "AVAILABLE", checkedAt: Date.now() - 31_000 },
+  preflight: { preflightPassed: true, requestedLeverage: 50, marketMaxLeverage: 100, maxLeverageForNotional: 50, pairBase, status: "AVAILABLE", checkedAt: Date.now() - 31_000 },
   fetchImpl: async () => { networkTouched = true; throw new Error("must not be called"); },
 }), /LEVERUP_PREFLIGHT_STALE/);
 assert.equal(networkTouched, false, "stale preflight must block before signing or network access");
@@ -138,7 +138,7 @@ await assert.rejects(() => signAndSubmitIntent({
   action: OneClickAction.MARKET_OPEN, nonce: "1785312000123",
   deadline: Math.floor(Date.now() / 1000) + 300,
   actionValues: [pairBase, true, tokenIn, lvToken, 11n * 10n ** 18n, 10000000000n, 2n * 10n ** 18n, 0n, 0n, 0, 0n],
-  preflight: { preflightPassed: true, requestedLeverage: 50, maxLeverageForNotional: 50, pairBase, status: "AVAILABLE", checkedAt: Date.now() },
+  preflight: { preflightPassed: true, requestedLeverage: 50, marketMaxLeverage: 100, maxLeverageForNotional: 50, pairBase, status: "AVAILABLE", checkedAt: Date.now() },
   fetchImpl: async () => { networkTouched = true; throw new Error("must not be called"); },
 }), /AGENT_ACTION_PERMISSION_MISSING/);
 assert.equal(networkTouched, false, "missing open permission must block before network access");

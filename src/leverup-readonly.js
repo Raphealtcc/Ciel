@@ -3,8 +3,10 @@ import {
   defineChain,
   http,
   hexToString,
+  parseUnits,
+  formatUnits,
 } from "viem";
-import { LEVERUP_1CT } from "./leverup-1ct.js";
+import { LEVERUP_1CT, OneClickAction, selectFeeToken } from "./leverup-1ct.js";
 
 export const LEVERUP_API = "https://service.leverup.xyz";
 export const MIN_EXECUTION_LEVERAGE = 50;
@@ -423,15 +425,15 @@ export async function persistLeverUpPreflight(db, signalId, preflight, {
   const id = crypto.randomUUID();
   await db.prepare(`INSERT INTO leverup_preflight_snapshots (
     id, signal_id, symbol, pair_base, checked_at_ms, block_number,
-    requested_leverage, market_max_leverage, notional_usd_raw, oracle_price_raw,
+    requested_leverage, market_max_leverage, tier_max_leverage, notional_usd_raw, oracle_price_raw,
     mon_usd_price_raw, collateral_ratio, minimum_collateral_mon, available_margin_mon,
     fee_config_json, slippage_config_json, funding_rate_raw, holding_rate_long_raw,
     holding_rate_short_raw, estimated_costs_json, decision, rejection_reason
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
     .bind(
       id, String(signalId), preflight.pair, preflight.pairBase, preflight.checkedAt,
       blockNumber == null ? null : String(blockNumber), preflight.requestedLeverage,
-      preflight.maxLeverageForNotional, String(preflight.notionalUsdRaw),
+      preflight.marketMaxLeverage, preflight.maxLeverageForNotional, String(preflight.notionalUsdRaw),
       String(preflight.oraclePriceRaw), String(preflight.monUsdPriceRaw),
       preflight.collateralRatio, preflight.minimumCollateralMon,
       preflight.marginBudget.availableMarginMon, JSON.stringify(preflight.protocolFeeConfig),
@@ -570,13 +572,16 @@ export function assertMarginBudget({
   return { availableMarginMon: available, requiredMinimumMon: required, requiredWithBufferMon: requiredWithBuffer };
 }
 
-export function estimateProtocolCosts({ notionalUsd, isLong, expectedHoldSeconds, pairView, marketInfo }) {
+export function estimateProtocolCosts({ notionalUsd, isLong, expectedHoldSeconds, pairView, marketInfo, tokenIn = LEVERUP_TOKENS.WMON }) {
   const notional = Number(notionalUsd), seconds = Number(expectedHoldSeconds);
   if (!Number.isFinite(notional) || notional <= 0 || !Number.isFinite(seconds) || seconds < 0) throw new Error("COST_ESTIMATE_INPUTS_INVALID");
   const fees = pairView?.feeConfig;
   if (!fees || typeof fees.openFeeP !== "number" || typeof fees.closeFeeP !== "number") throw new Error("LIVE_PROTOCOL_FEE_CONFIG_MISSING");
-  const openFeeUsd = fees.enabled === false ? 0 : notional * fees.openFeeP / 10_000;
-  const closeFeeUsd = fees.enabled === false ? 0 : notional * fees.closeFeeP / 10_000;
+  if (Number(fees.minCloseFeeP || 0) > 0) throw new Error("MIN_CLOSE_FEE_FORMULA_NOT_VERIFIED");
+  const usesLvToken = [LEVERUP_TOKENS.LVMON, LEVERUP_TOKENS.LVUSD].some((x) => x.toLowerCase() === String(tokenIn).toLowerCase());
+  const discount = usesLvToken ? Number(fees.lvTokenDiscountP || 0) / 100_000 : 0;
+  const openFeeUsd = fees.enabled === false ? 0 : notional * fees.openFeeP / 10_000 * (1 - discount);
+  const closeFeeUsd = fees.enabled === false ? 0 : notional * fees.closeFeeP / 10_000 * (1 - discount);
   const holdingRateRaw = isLong ? pairView.longHoldingFeeRateRaw : pairView.shortHoldingFeeRateRaw;
   if (holdingRateRaw == null) throw new Error("LIVE_HOLDING_FEE_RATE_MISSING");
   const holdingFeeUsd = notional * seconds * Number(holdingRateRaw) / 1e12;
@@ -598,7 +603,7 @@ export function estimateProtocolCosts({ notionalUsd, isLong, expectedHoldSeconds
 
 export function buildLeverUpPreflight({
   market, pairView, marketInfo, oraclePriceRaw, monUsdPriceRaw, minimumNotionalRaw,
-  requestedLeverage, intendedNotionalUsd, isLong, expectedHoldSeconds,
+  requestedLeverage, intendedNotionalUsd, isLong, expectedHoldSeconds, tokenIn = LEVERUP_TOKENS.WMON,
   availableMarginMon, collateralRatio, reserveMon = 0,
   safetyBufferPct = 5, now = Date.now(),
 }) {
@@ -633,7 +638,7 @@ export function buildLeverUpPreflight({
     leverageMargins: pairView.leverageMargins, notionalUsd: BigInt(Math.round(notionalUsd * 1e18)),
   });
   const estimatedCosts = estimateProtocolCosts({
-    notionalUsd, isLong: Boolean(isLong), expectedHoldSeconds: Number(expectedHoldSeconds), pairView, marketInfo,
+    notionalUsd, isLong, expectedHoldSeconds: Number(expectedHoldSeconds), pairView, marketInfo, tokenIn,
   });
   const minimumCollateralMon = calculateMinimumCollateralMon({
     minimumNotionalUsd: notionalUsd,
@@ -651,13 +656,15 @@ export function buildLeverUpPreflight({
     pair: market.pairName,
     pairBase: market.base.toLowerCase(),
     status: market.status,
+    marketMaxLeverage,
     maxLeverageForNotional: leverage.tierMaxLeverage,
     inferredLeverage: Number(requestedLeverage),
     requestedLeverage: leverage.requestedLeverage,
     minHoldingSeconds,
     oraclePriceUsd: Number(oraclePriceRaw) / 1e18,
     monUsdPrice: Number(monUsdPriceRaw) / 1e18,
-    minimumNotionalUsd: notionalUsd,
+    minimumNotionalUsd,
+    notionalUsd,
     notionalUsdRaw: String(Math.round(notionalUsd * 1e18)),
     oraclePriceRaw: String(oraclePriceRaw),
     monUsdPriceRaw: String(monUsdPriceRaw),
@@ -677,6 +684,156 @@ export function buildLeverUpPreflight({
       netCarryCostUsd: estimatedCosts.holdingFeeUsd - estimatedCosts.fundingFeeUsd,
     },
     estimationNote: "Projection uses live pair rates and the current funding rate. Reconcile it against getPositionsV4 and final closeInfo; actual settlement is authoritative.",
+  };
+}
+
+function ceilDiv(numerator, denominator) {
+  if (denominator <= 0n) throw new Error("DIVISOR_MUST_BE_POSITIVE");
+  return (numerator + denominator - 1n) / denominator;
+}
+
+function minBigInt(...values) {
+  return values.reduce((a, b) => a < b ? a : b);
+}
+
+export function buildMarketOpenPlan({
+  snapshot, desiredMarginMon, maxTradeMarginMon, inferredLeverage, side,
+  expectedHoldSeconds, reserveMon = 0, stopLossPriceRaw = 0n,
+  takeProfitPriceRaw = 0n, broker = 0, extraFeeRaw = 0n, now = Date.now(),
+}) {
+  if (!snapshot?.market || !snapshot?.pairView || !snapshot?.accountTokenStates || !snapshot?.antiDdosConfig) {
+    throw new Error("MARKET_OPEN_SNAPSHOT_INCOMPLETE");
+  }
+  if (side !== "LONG" && side !== "SHORT") throw new Error("TRADE_DIRECTION_INVALID");
+  const isLong = side === "LONG";
+  const tokenIn = LEVERUP_TOKENS.WMON;
+  const lvToken = LEVERUP_TOKENS.LVMON;
+  const marginRaw = parseUnits(String(desiredMarginMon), 18);
+  const maxTradeRaw = parseUnits(String(maxTradeMarginMon), 18);
+  const reserveRaw = parseUnits(String(reserveMon), 18);
+  const monPriceRaw = BigInt(snapshot.monUsdPriceRaw);
+  const pairPriceRaw = BigInt(snapshot.oraclePriceRaw);
+  const collateralRatioRaw = parseUnits(String(snapshot.collateralRatio), 18);
+  const minNotionalRaw = BigInt(snapshot.minimumNotionalRaw);
+  if (marginRaw <= 0n || maxTradeRaw <= 0n || reserveRaw < 0n) throw new Error("TRADE_MARGIN_INPUT_INVALID");
+  if (monPriceRaw <= 0n || pairPriceRaw <= 0n || collateralRatioRaw <= 0n || collateralRatioRaw > 10n ** 18n) {
+    throw new Error("LIVE_COLLATERAL_OR_ORACLE_DATA_INVALID");
+  }
+  const wmonState = snapshot.accountTokenStates[tokenIn.toLowerCase()];
+  if (!wmonState) throw new Error("WMON_ACCOUNT_STATE_MISSING");
+  const wmonBalanceRaw = BigInt(wmonState.balance);
+  const wmonAllowanceRaw = BigInt(wmonState.allowance);
+  const availableRaw = wmonBalanceRaw > reserveRaw ? wmonBalanceRaw - reserveRaw : 0n;
+  if (marginRaw > availableRaw) throw new Error("DESIRED_MARGIN_EXCEEDS_AVAILABLE_WMON");
+  const tiers = snapshot.pairView.leverageMargins;
+  const marketMaxLeverage = Math.max(...tiers.map((x) => Number(x.maxLeverage)));
+  const minTier = selectLeverageTier(tiers, minNotionalRaw);
+  if (!minTier) throw new Error("NO_TIER_FOR_GLOBAL_MINIMUM_NOTIONAL");
+  const leverage = selectInferredLeverage(inferredLeverage, minTier.maxLeverage, marketMaxLeverage);
+  const eligibleTiers = tiers.filter((tier) => Number(tier.maxLeverage) >= leverage);
+  if (!eligibleTiers.length) throw new Error("NO_TIER_SUPPORTS_INFERRED_LEVERAGE");
+  const maxNotionalRaw = eligibleTiers.reduce((max, tier) => {
+    const value = BigInt(tier.notionalUsdRaw);
+    return value > max ? value : max;
+  }, 0n);
+  const effectiveMonPriceRaw = monPriceRaw * collateralRatioRaw / (10n ** 18n);
+  const leverageDenominator = effectiveMonPriceRaw * BigInt(leverage);
+  const minMarginRaw = ceilDiv(minNotionalRaw * (10n ** 18n), leverageDenominator);
+  const maxMarginForTierRaw = maxNotionalRaw * (10n ** 18n) / leverageDenominator;
+  const marginUsedRaw = minBigInt(marginRaw, maxTradeRaw, availableRaw, maxMarginForTierRaw);
+  if (marginUsedRaw < minMarginRaw) {
+    throw new Error("INSUFFICIENT_MARGIN_FOR_50X_PLUS_TIER_MINIMUM");
+  }
+  let notionalRaw = marginUsedRaw * effectiveMonPriceRaw * BigInt(leverage) / (10n ** 18n);
+  if (notionalRaw < minNotionalRaw || notionalRaw > maxNotionalRaw) throw new Error("FINAL_NOTIONAL_OUTSIDE_LEVERAGE_TIER");
+  const tier = selectLeverageTier(tiers, notionalRaw);
+  if (!tier || Number(tier.maxLeverage) < leverage) throw new Error("FINAL_NOTIONAL_TIER_DOES_NOT_SUPPORT_LEVERAGE");
+  const marginMonUsed = formatUnits(marginUsedRaw, 18);
+  const notionalUsd = Number(notionalRaw) / 1e18;
+  const preflight = buildLeverUpPreflight({
+    market: snapshot.market,
+    pairView: snapshot.pairView,
+    marketInfo: snapshot.marketInfo,
+    oraclePriceRaw: snapshot.oraclePriceRaw,
+    monUsdPriceRaw: snapshot.monUsdPriceRaw,
+    minimumNotionalRaw: snapshot.minimumNotionalRaw,
+    requestedLeverage: leverage,
+    intendedNotionalUsd: notionalUsd,
+    isLong,
+    expectedHoldSeconds,
+    tokenIn,
+    availableMarginMon: Number(formatUnits(availableRaw, 18)),
+    collateralRatio: snapshot.collateralRatio,
+    reserveMon: 0,
+    safetyBufferPct: 0,
+    now,
+  });
+  const fees = snapshot.pairView.feeConfig;
+  if (!fees || typeof fees.openFeeP !== "number") throw new Error("LIVE_OPEN_FEE_CONFIG_MISSING");
+  const usesLvToken = [LEVERUP_TOKENS.LVMON, LEVERUP_TOKENS.LVUSD].some((x) => x.toLowerCase() === tokenIn.toLowerCase());
+  const discountP = usesLvToken ? BigInt(fees.lvTokenDiscountP || 0) : 0n;
+  const grossOpenFeeUsdRaw = fees.enabled === false ? 0n : notionalRaw * BigInt(fees.openFeeP) / 10_000n;
+  const openFeeUsdRaw = grossOpenFeeUsdRaw * (100_000n - discountP) / 100_000n;
+  const openFeeTokenInRaw = ceilDiv(openFeeUsdRaw * (10n ** 18n), monPriceRaw);
+  const amountInRaw = marginUsedRaw + openFeeTokenInRaw;
+  const extraFee = BigInt(extraFeeRaw);
+  const totalCollateralSpend = amountInRaw + extraFee;
+  if (amountInRaw > (2n ** 96n - 1n) || extraFee > (2n ** 96n - 1n)) throw new Error("ONECLICK_UINT96_OVERFLOW");
+  if (wmonBalanceRaw < totalCollateralSpend) throw new Error("WMON_BALANCE_INSUFFICIENT_FOR_MARGIN_AND_OPEN_FEE");
+  if (wmonAllowanceRaw < totalCollateralSpend) throw new Error("WMON_DIAMOND_ALLOWANCE_INSUFFICIENT");
+  const antiDdos = snapshot.antiDdosConfig;
+  if (!antiDdos.validUntil || now >= Number(antiDdos.validUntil)) throw new Error("ANTIDDOS_CONFIG_STALE");
+  const feeSelection = selectFeeToken(
+    OneClickAction.MARKET_OPEN,
+    antiDdos.config,
+    snapshot.accountTokenStates,
+    [{ token: tokenIn, amount: totalCollateralSpend }],
+  );
+  const qtyRaw = notionalRaw * (10n ** 10n) / pairPriceRaw;
+  if (qtyRaw <= 0n || qtyRaw > (2n ** 128n - 1n)) throw new Error("ONECLICK_QTY_OUT_OF_RANGE");
+  const slippage = snapshot.pairView.slippageConfig;
+  if (!slippage?.enabled) throw new Error("LIVE_SLIPPAGE_CONFIG_DISABLED_OR_MISSING");
+  const slippageP = BigInt(isLong ? slippage.slippageLongP : slippage.slippageShortP);
+  if (slippageP < 0n || slippageP > 10_000n) throw new Error("LIVE_SLIPPAGE_BOUND_INVALID");
+  const worstPriceRaw = isLong
+    ? pairPriceRaw * (10_000n + slippageP) / 10_000n
+    : pairPriceRaw * (10_000n - slippageP) / 10_000n;
+  const stopLoss = BigInt(stopLossPriceRaw);
+  const takeProfit = BigInt(takeProfitPriceRaw);
+  if (isLong && ((stopLoss > 0n && stopLoss >= pairPriceRaw) || (takeProfit > 0n && takeProfit <= pairPriceRaw))) {
+    throw new Error("LONG_TP_SL_DIRECTION_INVALID");
+  }
+  if (!isLong && ((stopLoss > 0n && stopLoss <= pairPriceRaw) || (takeProfit > 0n && takeProfit >= pairPriceRaw))) {
+    throw new Error("SHORT_TP_SL_DIRECTION_INVALID");
+  }
+  const actionValues = [
+    snapshot.pairView.base.toLowerCase(), isLong, tokenIn, lvToken, amountInRaw,
+    qtyRaw, worstPriceRaw, stopLoss, takeProfit, Number(broker), extraFee,
+  ];
+  const lastNonce = BigInt(snapshot.lastAgentNonce || "0");
+  const wallClockNonce = BigInt(now);
+  const nonce = (lastNonce + 1n) > wallClockNonce ? lastNonce + 1n : wallClockNonce;
+  return {
+    mode: "DRY_RUN_ONLY",
+    action: OneClickAction.MARKET_OPEN,
+    actionValues,
+    feeToken: feeSelection.feeToken,
+    antiDdosFee: feeSelection.antiDdosFee,
+    nonce: nonce.toString(),
+    deadline: Math.floor(now / 1000) + 300,
+    marginMonUsed,
+    notionalUsd,
+    selectedLeverage: leverage,
+    tierMaxLeverage: Number(tier.maxLeverage),
+    maxNotionalUsdForLeverage: Number(maxNotionalRaw) / 1e18,
+    amountInRaw: amountInRaw.toString(),
+    openFeeTokenInRaw: openFeeTokenInRaw.toString(),
+    qtyRaw: qtyRaw.toString(),
+    worstPriceRaw: worstPriceRaw.toString(),
+    preflight,
+    agentAuthorization: snapshot.agentAuthorization,
+    agentAddress: snapshot.agentAddress,
+    traderAddress: snapshot.traderAddress,
   };
 }
 

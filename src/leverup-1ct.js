@@ -191,7 +191,8 @@ export function assertLiveExecutionAllowed({
   // require a fresh, passing 50x+ preflight.
   if (Number(action) === 0) {
     if (!preflight || preflight.preflightPassed !== true) throw new Error("LEVERUP_PREFLIGHT_NOT_PASSED");
-    if (Number(preflight.requestedLeverage) < 50 || Number(preflight.maxLeverageForNotional) < 50) {
+    if (Number(preflight.requestedLeverage) < 50 || Number(preflight.marketMaxLeverage) < 50 ||
+        Number(preflight.maxLeverageForNotional) < 50) {
       throw new Error("LEVERUP_MINIMUM_50X_NOT_MET");
     }
     if (!preflight.pairBase || preflight.status !== "AVAILABLE") throw new Error("LEVERUP_PREFLIGHT_MARKET_INVALID");
