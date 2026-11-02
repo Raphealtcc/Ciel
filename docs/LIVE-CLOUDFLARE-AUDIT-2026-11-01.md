@@ -84,16 +84,16 @@ Application table row counts:
 
 | Table | Rows |
 |---|---:|
-| `advisor_ai_audit` | 936 |
-| `advisor_positions` | 233 |
+| `advisor_ai_audit` | 944 |
+| `advisor_positions` | 234 |
 | `live_executions` | 1 |
 | `live_positions` | 1 |
 | `market_alerts` | 67 |
 | `market_book_snapshots` | 6,634 |
-| `market_candle_hourly_stats` | 2,433 |
-| `market_candles` | 20,080 |
-| `market_context_snapshots` | 44,213 |
-| `market_samples` | 95,798 |
+| `market_candle_hourly_stats` | 2,456 |
+| `market_candles` | 20,104 |
+| `market_context_snapshots` | 44,261 |
+| `market_samples` | 96,095 |
 | `market_snapshots` | 63,226 |
 | `paper_executions` | 0 |
 | `positions` | 0 |
@@ -102,12 +102,12 @@ Application table row counts:
 | `trades` | 1 |
 
 Advisor AI audit verdict counts:
-- `APPROVE`: 112
+- `APPROVE`: 113
 - `REJECT`: 41
-- `WAIT`: 783
+- `WAIT`: 790
 
 Advisor position statuses:
-- `EXPIRED`: 224
+- `EXPIRED`: 225
 - `CLOSING`: 4
 - `CLOSED`: 2
 - `CANCELLED`: 3
@@ -229,3 +229,24 @@ A D1 full export was not initiated because Cloudflare warns that an in-progress 
 ## Final decision
 
 The source account is sufficiently inventoried to prepare a separate staging deployment without losing the code/configuration record. The source Worker remains unchanged. The paper-tier patch has passed deterministic behavior tests, but it is not production-ready until patched-bundle REA, fresh endpoint smoke tests, authoritative LeverUp metadata, DO restart/persistence tests and realistic execution modeling are complete.
+
+
+## 10. Fresh live HTTP, Telegram, schema and D1-write checks
+
+A manual GitLab CI read-only smoke test reached the public Worker. All 10 GET routes returned HTTP 200 and valid JSON: `/`, `/health`, `/api/markets`, `/api/candles`, `/api/orderbook`, `/api/positions`, `/api/signals`, `/api/research`, `/api/intraday`, and `/api/alerts`. `/health` returned `ok: true`. No POST or state-changing endpoint was called.
+
+The Telegram auto-registration marker exists in KV. Code inspection confirms the scheduled handler calls `ensureTelegramWebhook`; the marker is written only after successful `setWebhook` and `getWebhookInfo` verification of both `message` and `callback_query` updates. The webhook handler validates Telegram's secret header and the configured chat ID. This is last-known successful registration evidence, not a fresh Telegram API query or a live button-click test.
+
+The live D1 schema was compared with GitLab's recovered migration: 16 application tables and 14 indexes match exactly, with no missing/extra names or DDL differences. Internal `_cf_KV` is intentionally excluded. All D1 audit queries were read-only and reported zero rows written.
+
+The feed's write path keeps full one-minute analysis history in Durable Object storage; D1 receives benchmark samples each minute and wider-watchlist samples every six minutes, plus batched context/candle snapshots and slower hourly summaries. Per-tick order-book snapshots are no longer written to D1. Exact D1 daily usage totals remain unavailable from the exposed analytics endpoints.
+
+## 11. Current advisor activity
+
+Latest D1 counts: 944 AI decisions (113 APPROVE, 41 REJECT, 790 WAIT); 234 advisor positions (225 EXPIRED, 4 CLOSING, 2 CLOSED, 3 CANCELLED). 24/25 watchlist symbols have current sample history; QNT is missing. Recent WAIT reasons include missing fresh funding/OI or order-book evidence, insufficient depth, forecast magnitude below the stop-distance requirement, RSI exhaustion, and one Gemini-unavailable fallback. The two sample signal IDs remain expired and have no manual-entry/tracking timestamps.
+
+The webhook registration marker and callback code are present, but no actual Telegram button-click test was performed. Expired recommendations therefore cannot be attributed to a broken callback without further evidence.
+
+## 12. CI status anomaly
+
+The latest jobs individually report success for exact-bundle recovery and behavior tests, LeverUp market metadata verification, REA analysis, and the 10-route live smoke test. GitLab's pipeline-level API status nevertheless reports `failed` while its job list shows every job as successful and no failed/cancelled jobs or bridges. This inconsistency remains unexplained. Do not call the pipeline green or merge based on the job statuses alone; inspect the GitLab pipeline UI.
