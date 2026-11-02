@@ -1,16 +1,13 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
-  // NEW-ACCOUNT STAGING TEMPLATE ONLY.
-  // Do not use these placeholders as IDs. Create the target D1/KV resources first,
-  // then replace the IDs below. This config never points at the source account.
+  // Separate-account staging template. Replace resource placeholders only after
+  // creating the staging D1/KV resources in the connected staging account.
   "name": "ciel-paper-staging",
   "main": "reconstructed/patched-worker.js",
   "compatibility_date": "2026-09-08",
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": true,
-  "triggers": {
-    "crons": ["* * * * *"]
-  },
+  "triggers": { "crons": ["* * * * *"] },
   "vars": {
     "ADVISORY_MIN_CONFIDENCE": "0.72",
     "ADVISORY_TREND_REVIEW_COOLDOWN_MINUTES": "30",
@@ -20,30 +17,45 @@
     "MOVE_ALERT_PCT": "2.0",
     "WATCH_SYMBOLS": "BTC,ETH,MON,BNB,XRP,HYPE,ONDO,KPEPE,QNT,ZEC,TRX,AAVE,ADA,CASHCAT,DOGE,LINK,LIT,PONS,PUMP,SEI,SOL,SUI,UNI,VIRTUAL,XMR"
   },
-  "d1_databases": [
-    {
+  "d1_databases": [{
+    "binding": "DB",
+    "database_name": "ciel-paper-staging",
+    "database_id": "REPLACE_WITH_NEW_ACCOUNT_D1_DATABASE_ID"
+  }],
+  "kv_namespaces": [{
+    "binding": "CIEL_STATE",
+    "id": "REPLACE_WITH_NEW_ACCOUNT_KV_NAMESPACE_ID"
+  }],
+  "previews": {
+    // Preview settings do not inherit top-level vars or bindings.
+    // All branch Previews intentionally share the NEW-ACCOUNT staging D1/KV.
+    "vars": {
+      "ADVISORY_MIN_CONFIDENCE": "0.72",
+      "ADVISORY_TREND_REVIEW_COOLDOWN_MINUTES": "30",
+      "ALERT_COOLDOWN_MINUTES": "15",
+      "ALERT_WINDOW_MINUTES": "5",
+      "GEMINI_MODEL": "gemini-3.5-flash-lite",
+      "MOVE_ALERT_PCT": "2.0",
+      "WATCH_SYMBOLS": "BTC,ETH,MON,BNB,XRP,HYPE,ONDO,KPEPE,QNT,ZEC,TRX,AAVE,ADA,CASHCAT,DOGE,LINK,LIT,PONS,PUMP,SEI,SOL,SUI,UNI,VIRTUAL,XMR"
+    },
+    "d1_databases": [{
       "binding": "DB",
       "database_name": "ciel-paper-staging",
       "database_id": "REPLACE_WITH_NEW_ACCOUNT_D1_DATABASE_ID"
-    }
-  ],
-  "kv_namespaces": [
-    {
+    }],
+    "kv_namespaces": [{
       "binding": "CIEL_STATE",
       "id": "REPLACE_WITH_NEW_ACCOUNT_KV_NAMESPACE_ID"
-    }
-  ],
+    }]
+  },
   "durable_objects": {
     "bindings": [
       { "name": "HYPERLIQUID_FEED", "class_name": "HyperliquidFeed" },
       { "name": "TRADING_ENGINE", "class_name": "TradingEngine" }
     ]
   },
-  "migrations": [
-    {
-      // Fresh namespace creation: both source namespaces are SQLite-backed.
-      "tag": "v1",
-      "new_sqlite_classes": ["HyperliquidFeed", "TradingEngine"]
-    }
-  ]
+  "migrations": [{
+    "tag": "v1",
+    "new_sqlite_classes": ["HyperliquidFeed", "TradingEngine"]
+  }]
 }
