@@ -78,7 +78,7 @@ assert.doesNotThrow(() => assertMarginBudget({ availableMarginMon: 30, requiredM
 
 const preflight = buildLeverUpPreflight({
   market: { symbol: "BTC", pairName: "BTC/USD", base: "0x1111111111111111111111111111111111111111", status: "AVAILABLE", minHoldingSeconds: 0 },
-  pairView: { leverageMargins: tiers, feeConfig: { openFeeP: 3, closeFeeP: 3, enabled: true }, slippageConfig: { enabled: true }, longHoldingFeeRateRaw: "1000000", shortHoldingFeeRateRaw: "1000000" },
+  pairView: { leverageMargins: tiers, minHoldingSeconds: 0, feeConfig: { openFeeP: 3, closeFeeP: 3, enabled: true }, slippageConfig: { enabled: true }, longHoldingFeeRateRaw: "1000000", shortHoldingFeeRateRaw: "1000000" },
   marketInfo: { fundingFeeRate: "1000000000000000" },
   intendedNotionalUsd: 20, isLong: true, expectedHoldSeconds: 3600,
   oraclePriceRaw: "100000000000000000000000",
@@ -94,7 +94,7 @@ assert.equal(preflight.minimumNotionalUsd, 20);
 assert.ok(preflight.estimatedCarryCosts);
 assert.throws(() => buildLeverUpPreflight({
   market: { status: "AVAILABLE", minHoldingSeconds: 180, executionVenue: "POOL" },
-  pairView: { leverageMargins: tiers, feeConfig: { openFeeP: 3, closeFeeP: 3, enabled: true }, longHoldingFeeRateRaw: "1000000", shortHoldingFeeRateRaw: "1000000" },
+  pairView: { leverageMargins: tiers, minHoldingSeconds: 180, feeConfig: { openFeeP: 3, closeFeeP: 3, enabled: true }, longHoldingFeeRateRaw: "1000000", shortHoldingFeeRateRaw: "1000000" },
   marketInfo: { fundingFeeRate: "1000000000000000" },
   intendedNotionalUsd: 20, isLong: true, expectedHoldSeconds: 120,
   oraclePriceRaw: "1", monUsdPriceRaw: "1", minimumNotionalRaw: "20000000000000000000",
