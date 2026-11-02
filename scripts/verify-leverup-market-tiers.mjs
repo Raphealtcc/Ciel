@@ -49,6 +49,35 @@ async function hyperliquidMeta(dex) {
     body: JSON.stringify(dex ? { type: "meta", dex } : { type: "meta" })
   });
 }
+async function hyperliquidAllMids(dex) {
+  return fetchJson(HYPERLIQUID_INFO, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(dex ? { type: "allMids", dex } : { type: "allMids" })
+  });
+}
+
+async function hyperliquidBook(coin) {
+  try {
+    const payload = await fetchJson(HYPERLIQUID_INFO, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ type: "l2Book", coin })
+    });
+    const levels = payload?.levels;
+    const bid = Array.isArray(levels?.[0]) ? levels[0][0] : null;
+    const ask = Array.isArray(levels?.[1]) ? levels[1][0] : null;
+    return {
+      coin,
+      ok: Boolean(bid && ask),
+      bid: bid?.px ?? bid?.[0] ?? null,
+      ask: ask?.px ?? ask?.[0] ?? null,
+      time: payload?.time ?? null
+    };
+  } catch (error) {
+    return { coin, ok: false, error: String(error).slice(0, 240) };
+  }
+}
 
 function asWord(hex, byteOffset) {
   const start = 2 + byteOffset * 2;
@@ -251,6 +280,46 @@ const markets = await mapLimit(selected.filter((x) => x.pair), 4, async ({ symbo
   }
 });
 
+const hyperliquidFeedDiagnostics = {
+  allMidsDefault: null,
+  allMidsXyz: null,
+  qnt: {},
+  kpepe: {},
+  bookChecks: []
+};
+try {
+  const mids = await hyperliquidAllMids(null);
+  hyperliquidFeedDiagnostics.allMidsDefault = {
+    qntKey: Object.keys(mids || {}).filter((key) => key.toUpperCase().includes("QNT")),
+    kpepeKey: Object.keys(mids || {}).filter((key) => key.toUpperCase().includes("KPEPE"))
+  };
+  hyperliquidFeedDiagnostics.qnt.defaultMid = mids?.QNT ?? null;
+  hyperliquidFeedDiagnostics.kpepe.defaultMid = mids?.KPEPE ?? null;
+} catch (error) {
+  hyperliquidFeedDiagnostics.allMidsDefault = { error: String(error) };
+}
+try {
+  const mids = await hyperliquidAllMids("xyz");
+  hyperliquidFeedDiagnostics.allMidsXyz = {
+    qntKey: Object.keys(mids || {}).filter((key) => key.toUpperCase().includes("QNT")),
+    kpepeKey: Object.keys(mids || {}).filter((key) => key.toUpperCase().includes("KPEPE"))
+  };
+  hyperliquidFeedDiagnostics.qnt.xyzMid = mids?.QNT ?? mids?.["xyz:QNT"] ?? null;
+  hyperliquidFeedDiagnostics.kpepe.xyzMid = mids?.KPEPE ?? mids?.["xyz:KPEPE"] ?? null;
+} catch (error) {
+  hyperliquidFeedDiagnostics.allMidsXyz = { error: String(error) };
+}
+const qntXyzAsset = hyperliquidXyzMeta?.universe?.find((asset) => asset.name === "QNT") || null;
+const qntDefaultAsset = hyperliquidDefaultMeta?.universe?.find((asset) => asset.name === "QNT") || null;
+const kpepeXyzAsset = hyperliquidXyzMeta?.universe?.find((asset) => asset.name === "KPEPE") || null;
+const kpepeDefaultAsset = hyperliquidDefaultMeta?.universe?.find((asset) => asset.name === "KPEPE") || null;
+hyperliquidFeedDiagnostics.qnt.meta = { default: qntDefaultAsset, xyz: qntXyzAsset };
+hyperliquidFeedDiagnostics.kpepe.meta = { default: kpepeDefaultAsset, xyz: kpepeXyzAsset };
+hyperliquidFeedDiagnostics.bookChecks = await Promise.all([
+  hyperliquidBook("QNT"), hyperliquidBook("xyz:QNT"),
+  hyperliquidBook("KPEPE"), hyperliquidBook("xyz:KPEPE")
+]);
+
 const report = {
   checkedAt: new Date().toISOString(),
   chainId: "143",
@@ -260,6 +329,7 @@ const report = {
   pairApiTotal: pairsResponse.totalElements ?? allPairs.length,
   globalMinNotionalUsdRaw: minNotionalUsdRaw,
   globalMinNotionalUsd: Number(minNotionalUsdRaw) / 1e18,
+  hyperliquidFeedDiagnostics,
   watchlist: WATCHLIST,
   missingPairs: selected.filter((x) => !x.pair).map((x) => x.symbol),
   markets,
