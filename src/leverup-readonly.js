@@ -15,7 +15,6 @@ export const LEVERUP_TOKENS = Object.freeze({
   LVUSD: "0xFD44B35139Ae53FFF7d8F2A9869c503D987f00d1",
 });
 export const MIN_NOTIONAL_SELECTOR = "0x3569c2f7";
-export const PAIR_BY_BASE_SELECTOR = "0x9bd39764";
 
 const monad = defineChain({
   id: 143,
@@ -116,59 +115,105 @@ function asString(hex, tupleBase, fieldWordIndex) {
   return hexToString("0x" + hex.slice(byteStart, byteEnd));
 }
 
-export function decodePairView(result) {
-  if (!result || result === "0x") throw new Error("getPairByBaseV4 returned empty data");
-  const tupleBase = asSafeNumber(result, 0);
-  const name = asString(result, tupleBase, 0);
-  const base = asAddress(result, tupleBase + 32);
-  const pairType = asSafeNumber(result, tupleBase + 3 * 32);
-  const status = asSafeNumber(result, tupleBase + 4 * 32);
-  const leverageOffset = asSafeNumber(result, tupleBase + 10 * 32);
-  const leverageArrayBase = tupleBase + leverageOffset;
-  const leverageCount = asSafeNumber(result, leverageArrayBase);
-  const leverageMargins = [];
-  for (let i = 0; i < leverageCount; i++) {
-    const entry = leverageArrayBase + 32 + i * 5 * 32;
-    leverageMargins.push({
-      notionalUsdRaw: asWord(result, entry).toString(),
-      tier: asSafeNumber(result, entry + 32),
-      maxLeverage: asSafeNumber(result, entry + 64),
-      initialLostPRaw: asWord(result, entry + 96).toString(),
-      liqLostPRaw: asWord(result, entry + 128).toString(),
-    });
-  }
-  const slippageBase = tupleBase + asSafeNumber(result, tupleBase + 13 * 32);
-  const feeBase = tupleBase + asSafeNumber(result, tupleBase + 16 * 32);
-  const feeConfig = {
-    name: asString(result, feeBase, 0),
-    index: asSafeNumber(result, feeBase + 32),
-    openFeeP: asSafeNumber(result, feeBase + 64),
-    closeFeeP: asSafeNumber(result, feeBase + 96),
-    enabled: asSafeNumber(result, feeBase + 128) !== 0,
-    shareP: asSafeNumber(result, feeBase + 160),
-    minCloseFeeP: asSafeNumber(result, feeBase + 192),
-  };
-  const slippageConfig = {
-    name: asString(result, slippageBase, 0),
-    onePercentDepthAboveUsdRaw: asWord(result, slippageBase + 32).toString(),
-    onePercentDepthBelowUsdRaw: asWord(result, slippageBase + 64).toString(),
-    slippageLongP: asSafeNumber(result, slippageBase + 96),
-    slippageShortP: asSafeNumber(result, slippageBase + 128),
-    index: asSafeNumber(result, slippageBase + 160),
-    slippageType: asSafeNumber(result, slippageBase + 192),
-    enabled: asSafeNumber(result, slippageBase + 224) !== 0,
-    longThresholdUsdRaw: asWord(result, slippageBase + 256).toString(),
-    shortThresholdUsdRaw: asWord(result, slippageBase + 288).toString(),
-  };
+const PAIR_BY_BASE_V4_ABI = [{
+  type: "function", name: "getPairByBaseV4", stateMutability: "view",
+  inputs: [{ name: "base", type: "address" }],
+  outputs: [{ type: "tuple", name: "", components: [
+    { name: "name", type: "string" },
+    { name: "base", type: "address" },
+    { name: "basePosition", type: "uint16" },
+    { name: "pairType", type: "uint8" },
+    { name: "status", type: "uint8" },
+    { name: "maxLongOiUsd", type: "uint256" },
+    { name: "maxShortOiUsd", type: "uint256" },
+    { name: "fundingFeePerSecondP", type: "uint256" },
+    { name: "minFundingFeeR", type: "uint256" },
+    { name: "maxFundingFeeR", type: "uint256" },
+    { name: "leverageMargins", type: "tuple[]", components: [
+      { name: "notionalUsd", type: "uint256" },
+      { name: "tier", type: "uint16" },
+      { name: "maxLeverage", type: "uint16" },
+      { name: "initialLostP", type: "uint16" },
+      { name: "liqLostP", type: "uint16" },
+    ] },
+    { name: "slippageConfigIndex", type: "uint16" },
+    { name: "slippagePosition", type: "uint16" },
+    { name: "slippageConfig", type: "tuple", components: [
+      { name: "name", type: "string" },
+      { name: "onePercentDepthAboveUsd", type: "uint256" },
+      { name: "onePercentDepthBelowUsd", type: "uint256" },
+      { name: "slippageLongP", type: "uint16" },
+      { name: "slippageShortP", type: "uint16" },
+      { name: "index", type: "uint16" },
+      { name: "slippageType", type: "uint8" },
+      { name: "enable", type: "bool" },
+      { name: "longThresholdUsd", type: "uint256" },
+      { name: "shortThresholdUsd", type: "uint256" },
+    ] },
+    { name: "feeConfigIndex", type: "uint16" },
+    { name: "feePosition", type: "uint16" },
+    { name: "feeConfig", type: "tuple", components: [
+      { name: "name", type: "string" },
+      { name: "index", type: "uint16" },
+      { name: "openFeeP", type: "uint16" },
+      { name: "closeFeeP", type: "uint16" },
+      { name: "enable", type: "bool" },
+      { name: "shareP", type: "uint24" },
+      { name: "minCloseFeeP", type: "uint24" },
+      { name: "lvTokenDiscountP", type: "uint24" },
+    ] },
+    { name: "longHoldingFeeRate", type: "uint40" },
+    { name: "shortHoldingFeeRate", type: "uint40" },
+    { name: "holdingTimeThresholdSizeUSD", type: "uint256" },
+    { name: "minHoldingSeconds", type: "uint256" },
+  ] }],
+}];
+
+export function normalizePairView(pair) {
   return {
-    name, base, pairType, status, leverageMargins, feeConfig, slippageConfig,
-    maxLongOiUsdRaw: asWord(result, tupleBase + 5 * 32).toString(),
-    maxShortOiUsdRaw: asWord(result, tupleBase + 6 * 32).toString(),
-    fundingFeeConfigRaw: asWord(result, tupleBase + 7 * 32).toString(),
-    minFundingFeeRRaw: asWord(result, tupleBase + 8 * 32).toString(),
-    maxFundingFeeRRaw: asWord(result, tupleBase + 9 * 32).toString(),
-    longHoldingFeeRateRaw: asWord(result, tupleBase + 17 * 32).toString(),
-    shortHoldingFeeRateRaw: asWord(result, tupleBase + 18 * 32).toString(),
+    name: pair.name,
+    base: pair.base,
+    basePosition: Number(pair.basePosition),
+    pairType: Number(pair.pairType),
+    status: Number(pair.status),
+    maxLongOiUsdRaw: String(pair.maxLongOiUsd),
+    maxShortOiUsdRaw: String(pair.maxShortOiUsd),
+    fundingFeePerSecondPRaw: String(pair.fundingFeePerSecondP),
+    minFundingFeeRRaw: String(pair.minFundingFeeR),
+    maxFundingFeeRRaw: String(pair.maxFundingFeeR),
+    leverageMargins: pair.leverageMargins.map((tier) => ({
+      notionalUsdRaw: String(tier.notionalUsd),
+      tier: Number(tier.tier),
+      maxLeverage: Number(tier.maxLeverage),
+      initialLostPRaw: String(tier.initialLostP),
+      liqLostPRaw: String(tier.liqLostP),
+    })),
+    slippageConfig: {
+      name: pair.slippageConfig.name,
+      onePercentDepthAboveUsdRaw: String(pair.slippageConfig.onePercentDepthAboveUsd),
+      onePercentDepthBelowUsdRaw: String(pair.slippageConfig.onePercentDepthBelowUsd),
+      slippageLongP: Number(pair.slippageConfig.slippageLongP),
+      slippageShortP: Number(pair.slippageConfig.slippageShortP),
+      index: Number(pair.slippageConfig.index),
+      slippageType: Number(pair.slippageConfig.slippageType),
+      enabled: Boolean(pair.slippageConfig.enable),
+      longThresholdUsdRaw: String(pair.slippageConfig.longThresholdUsd),
+      shortThresholdUsdRaw: String(pair.slippageConfig.shortThresholdUsd),
+    },
+    feeConfig: {
+      name: pair.feeConfig.name,
+      index: Number(pair.feeConfig.index),
+      openFeeP: Number(pair.feeConfig.openFeeP),
+      closeFeeP: Number(pair.feeConfig.closeFeeP),
+      enabled: Boolean(pair.feeConfig.enable),
+      shareP: Number(pair.feeConfig.shareP),
+      minCloseFeeP: Number(pair.feeConfig.minCloseFeeP),
+      lvTokenDiscountP: Number(pair.feeConfig.lvTokenDiscountP),
+    },
+    longHoldingFeeRateRaw: String(pair.longHoldingFeeRate),
+    shortHoldingFeeRateRaw: String(pair.shortHoldingFeeRate),
+    holdingTimeThresholdSizeUSDRaw: String(pair.holdingTimeThresholdSizeUSD),
+    minHoldingSeconds: Number(pair.minHoldingSeconds),
   };
 }
 
@@ -278,18 +323,16 @@ export async function fetchAntiDdosConfig({ fetchImpl = fetch, forceRefresh = fa
   return antiDdosCache;
 }
 
-export async function readPairByBaseV4(pairBase, { rpcUrl = "https://rpc.monad.xyz", fetchImpl = fetch, blockTag = "latest" } = {}) {
+export async function readPairByBaseV4(pairBase, { publicClient = createLeverUpPublicClient(), blockNumber } = {}) {
   if (!/^0x[0-9a-fA-F]{40}$/.test(pairBase || "")) throw new Error("Invalid pairBase");
-  const encodedAddress = pairBase.toLowerCase().slice(2).padStart(64, "0");
-  const response = await fetchImpl(rpcUrl, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_call", params: [{ to: LEVERUP_1CT.diamond, data: PAIR_BY_BASE_SELECTOR + encodedAddress }, blockTag] }),
-    signal: AbortSignal.timeout(12_000),
+  const pair = await publicClient.readContract({
+    address: LEVERUP_1CT.diamond,
+    abi: PAIR_BY_BASE_V4_ABI,
+    functionName: "getPairByBaseV4",
+    args: [pairBase],
+    ...(blockNumber == null ? {} : { blockNumber }),
   });
-  const data = await response.json();
-  if (!response.ok || data.error || !data.result) throw new Error("getPairByBaseV4 failed: " + JSON.stringify(data.error || data).slice(0, 300));
-  return decodePairView(data.result);
+  return normalizePairView(pair);
 }
 
 export async function readGlobalMinimumNotional({ rpcUrl = "https://rpc.monad.xyz", fetchImpl = fetch, blockTag = "latest" } = {}) {
@@ -568,8 +611,12 @@ export function buildLeverUpPreflight({
   if (!oraclePriceRaw || BigInt(oraclePriceRaw) <= 0n) throw new Error("LEVERUP_ORACLE_PRICE_MISSING");
   if (!monUsdPriceRaw || BigInt(monUsdPriceRaw) <= 0n) throw new Error("LEVERUP_MON_ORACLE_PRICE_MISSING");
   if (minimumNotionalRaw == null || BigInt(minimumNotionalRaw) <= 0n) throw new Error("GLOBAL_MIN_NOTIONAL_MISSING");
-  if (market.minHoldingSeconds == null) throw new Error("MIN_HOLDING_REQUIREMENT_MISSING");
-  if (!Number.isFinite(Number(expectedHoldSeconds)) || Number(expectedHoldSeconds) < Number(market.minHoldingSeconds)) {
+  const minHoldingSeconds = Number(pairView.minHoldingSeconds);
+  if (!Number.isFinite(minHoldingSeconds) || minHoldingSeconds < 0) throw new Error("MIN_HOLDING_REQUIREMENT_MISSING");
+  if (market.minHoldingSeconds != null && Number(market.minHoldingSeconds) !== minHoldingSeconds) {
+    throw new Error("PAIR_MIN_HOLDING_DATA_MISMATCH");
+  }
+  if (!Number.isFinite(Number(expectedHoldSeconds)) || Number(expectedHoldSeconds) < minHoldingSeconds) {
     throw new Error("MIN_HOLDING_DURATION_NOT_MET");
   }
   if (typeof isLong !== "boolean") throw new Error("TRADE_DIRECTION_MISSING");
@@ -607,7 +654,7 @@ export function buildLeverUpPreflight({
     maxLeverageForNotional: leverage.tierMaxLeverage,
     inferredLeverage: Number(requestedLeverage),
     requestedLeverage: leverage.requestedLeverage,
-    minHoldingSeconds: Number(market.minHoldingSeconds),
+    minHoldingSeconds,
     oraclePriceUsd: Number(oraclePriceRaw) / 1e18,
     monUsdPrice: Number(monUsdPriceRaw) / 1e18,
     minimumNotionalUsd: notionalUsd,
@@ -729,7 +776,7 @@ export async function readLeverUpAccountSnapshot({
   const blockTag = "0x" + blockNumber.toString(16);
   const [prices, pairView, minimumNotionalRaw, marketInfo, indexedPositions, onchainPositions] = await Promise.all([
     fetchLatestOraclePrices([pairBase, monMarket.base], { fetchImpl }),
-    readPairByBaseV4(pairBase, { rpcUrl, fetchImpl, blockTag }),
+    readPairByBaseV4(pairBase, { publicClient, blockNumber }),
     readGlobalMinimumNotional({ rpcUrl, fetchImpl, blockTag }),
     readMarketInfoV2(pairBase, { publicClient, blockNumber }),
     traderAddress ? fetchOpenPositions(traderAddress, { fetchImpl }) : Promise.resolve([]),

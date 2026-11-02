@@ -13,6 +13,7 @@ import {
   hasAgentPermission,
   readAgentAuthorization,
   readLastAgentNonce,
+  normalizePairView,
 } from "../src/leverup-readonly.js";
 
 const tiers = [
@@ -20,6 +21,22 @@ const tiers = [
   { notionalUsdRaw: "100000000000000000000", tier: 1, maxLeverage: 50, initialLostPRaw: "0", liqLostPRaw: "0" },
 ];
 assert.equal(MIN_EXECUTION_LEVERAGE, 50);
+const pairView = normalizePairView({
+  name: "BTC/USD", base: "0x1111111111111111111111111111111111111111",
+  basePosition: 0, pairType: 0, status: 0, maxLongOiUsd: 1n, maxShortOiUsd: 2n,
+  fundingFeePerSecondP: 3n, minFundingFeeR: 4n, maxFundingFeeR: 5n,
+  leverageMargins: [{ notionalUsd: 20n * 10n ** 18n, tier: 0, maxLeverage: 100, initialLostP: 100, liqLostP: 200 }],
+  slippageConfigIndex: 1, slippagePosition: 1,
+  slippageConfig: { name: "Default", onePercentDepthAboveUsd: 10n, onePercentDepthBelowUsd: 11n, slippageLongP: 5, slippageShortP: 6, index: 1, slippageType: 0, enable: true, longThresholdUsd: 12n, shortThresholdUsd: 13n },
+  feeConfigIndex: 0, feePosition: 0,
+  feeConfig: { name: "Default", index: 0, openFeeP: 3, closeFeeP: 3, enable: true, shareP: 0, minCloseFeeP: 0, lvTokenDiscountP: 0 },
+  longHoldingFeeRate: 951n, shortHoldingFeeRate: 951n,
+  holdingTimeThresholdSizeUSD: 0n, minHoldingSeconds: 180n,
+});
+assert.equal(pairView.leverageMargins[0].maxLeverage, 100);
+assert.equal(pairView.feeConfig.openFeeP, 3);
+assert.equal(pairView.feeConfig.lvTokenDiscountP, 0);
+assert.equal(pairView.minHoldingSeconds, 180);
 const permissionMask = (1n << 0n) | (1n << 1n) | (1n << 9n);
 assert.equal(hasAgentPermission(permissionMask, 0), true);
 assert.equal(hasAgentPermission(permissionMask, 1), true);
