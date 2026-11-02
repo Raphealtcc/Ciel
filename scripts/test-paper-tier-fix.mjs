@@ -120,6 +120,16 @@ assert.equal(aiSized.availableBalanceMon, 75.5);
 const belowVenueMinimum = await openPaperTrade(makeStorage(), params("BNB", "below-minimum", { marginMon: 21.99, leverage: 50 }));
 assert.equal(belowVenueMinimum.opened, false);
 assert.match(belowVenueMinimum.reason, /minimum of 22 MON/i);
+const overRiskCap = await openPaperTrade(makeStorage(), params("BNB", "over-risk-cap", { marginMon: 25.1, leverage: 50 }));
+assert.equal(overRiskCap.opened, false);
+assert.match(overRiskCap.reason, /5% per-trade/i);
+const combinedRiskStorage = makeStorage(100, [
+  { signalId: "open-bnb", symbol: "BNB", status: "OPEN", marginMon: 22, leverage: 50, stopPct: 0.4 },
+  { signalId: "open-xrp", symbol: "XRP", status: "OPEN", marginMon: 11, leverage: 100, stopPct: 0.4 },
+]);
+const overPortfolioCap = await openPaperTrade(combinedRiskStorage, params("SOL", "over-portfolio-cap", { marginMon: 11, leverage: 100 }));
+assert.equal(overPortfolioCap.opened, false);
+assert.match(overPortfolioCap.reason, /10% combined portfolio cap/i);
 
 const hundred = makeStorage();
 const opened100 = await openPaperTrade(hundred, params("XRP", "test-100"));
@@ -217,6 +227,12 @@ assert.ok(source.includes('String(p.leverage) + "x notional estimate at 100% col
 assert.ok(source.includes("free balance is below the eligible market's minimum margin"));
 assert.ok(source.includes("const collateral = choosePaperMargin(reviewed.verdict === \"APPROVE\" ? reviewed.paperMarginMon : null, sizingLimits);"));
 assert.ok(source.includes("PAPER_STARTING_BALANCE_MON = 100"));
+assert.ok(source.includes("TELEGRAM_STAGING_BOT_ID"));
+assert.ok(source.includes("https://ciel2.gatakehanami.workers.dev/telegram/webhook"));
+assert.ok(source.includes("/api/paper"));
+assert.ok(source.includes("/api/diagnostics"));
+assert.ok(source.includes("xyz:QNT"));
+assert.ok(source.includes("historyBootstrapDone"));
 assert.ok(source.includes("paperMarginMon"));
 assert.ok(source.includes("const marginSizingSource = reviewed.verdict === \"APPROVE\""));
 assert.ok(source.includes("const perpAssets = universe.map((asset) => ({ symbol: String(asset?.name || \"\").trim().toUpperCase(), coin: String(asset?.name || \"\").trim() }))"));

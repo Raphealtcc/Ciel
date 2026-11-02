@@ -62,9 +62,9 @@ See `docs/HANDOFF-2026-11-02.md` before changing the connected Cloudflare accoun
 
 ## Current live coverage and account-switch warning
 
-The latest 14-route GitLab smoke test reached the live Worker. Health was connected/open/fresh; 25 markets were listed, 24 had prices and 23 had order books. QNT is missing price/book and KPEPE is missing a book. The sampled BTC, ETH, MON, ONDO and ADA books were fresh. Do not treat a healthy global feed flag as proof that every symbol has full market-quality data.
+The latest 14-route GitLab smoke test reached the live Worker. Health was connected/open/fresh; 25 markets were listed, 24 had prices and 23 had order books. QNT uses the verified xyz:QNT price/book alias but remains monitor-only because derivatives context is unavailable and its 5x tier is unsupported. The sampled BTC, ETH, MON, ONDO and ADA books were fresh. Do not treat a healthy global feed flag as proof that every symbol has full market-quality data.
 
 Do not connect the second Cloudflare account until the account-switch preflight is reviewed. The source secrets and Durable Object paper ledger are not exportable through the available API. The new staging Worker must use new D1/KV/DO resources and a separate Telegram bot.
 
 
-The staging Worker is `ciel2`; its D1/KV bindings are the confirmed isolated staging resources. Workers Builds must build `audit/paper-trading-fix` from the repository root. The build's Wrangler binding summary must show the staging IDs before deployment is allowed. Run `npm run check:paper` to reconstruct, patch and test the candidate before deploying with `npx wrangler deploy --config wrangler.jsonc`.
+The staging Worker is `ciel2`; its D1/KV bindings are the confirmed isolated staging resources. Workers Builds must build `main` from the repository root. The build's Wrangler binding summary must show the staging IDs before deployment is allowed. Run `npm run check:paper` to reconstruct, patch and test the candidate before deploying with `npx wrangler deploy --config wrangler.jsonc`.
