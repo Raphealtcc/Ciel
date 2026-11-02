@@ -131,10 +131,11 @@ const minNotionalUsdRaw = asWord(configResult, 32).toString();
 
 let hyperliquidXyzMeta = null;
 let hyperliquidDefaultMeta = null;
+const hyperliquidMetaErrors = [];
 const hyperliquidPairs = selected.filter((x) => x.pair?.executionVenue === "HYPERLIQUID");
 if (hyperliquidPairs.length) {
-  hyperliquidXyzMeta = await hyperliquidMeta("xyz");
-  hyperliquidDefaultMeta = await hyperliquidMeta(null);
+  try { hyperliquidXyzMeta = await hyperliquidMeta("xyz"); } catch (error) { hyperliquidMetaErrors.push("xyz DEX meta: " + String(error)); }
+  try { hyperliquidDefaultMeta = await hyperliquidMeta(null); } catch (error) { hyperliquidMetaErrors.push("default meta: " + String(error)); }
 }
 
 const markets = await mapLimit(selected.filter((x) => x.pair), 4, async ({ symbol, pair }) => {
@@ -212,6 +213,7 @@ const report = {
   missingPairs: selected.filter((x) => !x.pair).map((x) => x.symbol),
   markets,
   errors: markets.filter((x) => x.error).map((x) => ({ symbol: x.symbol, error: x.error })),
+  hyperliquidMetaErrors,
   staticMapMismatches: markets.filter((x) => x.mapMatches === false).map((x) => ({
     symbol: x.symbol,
     staticMapMaxLeverage: x.staticMapMaxLeverage,
