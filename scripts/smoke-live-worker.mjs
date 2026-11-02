@@ -23,18 +23,28 @@ for (const [path, name] of routes) {
   const text = await response.text();
   let body;
   try { body = text ? JSON.parse(text) : null; } catch { body = null; }
+  const details = {};
+  if (name === "health") Object.assign(details, { ok: body?.ok, connected: body?.connected, websocketConnected: body?.websocketConnected, fresh: body?.fresh, lastTickAt: body?.lastTickAt });
+  if (name === "markets") Object.assign(details, { connected: body?.connected, connectionState: body?.connectionState, marketCount: body?.markets?.length, monUsd: body?.markets?.find((m) => String(m.symbol).toUpperCase() === "MON")?.price ?? null });
+  if (name === "candles") Object.assign(details, { count: body?.count, source: body?.source });
+  if (name === "orderbook") Object.assign(details, { stale: body?.stale, snapshotKeys: body?.snapshot && typeof body.snapshot === "object" ? Object.keys(body.snapshot).slice(0, 8) : [] });
+  if (name === "positions" || name === "signals") Object.assign(details, { count: body?.count, monUsd: body?.monUsd, mode: body?.mode });
+  if (name === "research") Object.assign(details, { model: body?.model, recentResearchCount: body?.recentResearch?.length, geminiCooldownActive: body?.geminiAnalysis?.cooldown?.active ?? null });
+  if (name === "intraday") Object.assign(details, { sampledAt: body?.sampledAt, sampleDays: body?.analysis?.sampleDays ?? body?.analysis?.days ?? null });
+  if (name === "alerts") Object.assign(details, { count: body?.count });
   const result = {
     name,
     path,
     status: response.status,
     json: Boolean(body && typeof body === "object"),
     keys: body && typeof body === "object" ? Object.keys(body).slice(0, 12) : [],
+    details,
   };
   results.push(result);
   console.log(JSON.stringify(result));
   if (!response.ok) throw new Error(name + " returned HTTP " + response.status + ": " + text.slice(0, 300));
   if (!body || typeof body !== "object") throw new Error(name + " did not return JSON");
-  if (name === "health" && body.ok !== true) throw new Error("Health endpoint is not healthy: " + JSON.stringify(body).slice(0, 500));
+  if (name === "health" && (body.ok !== true || body.connected !== true || body.fresh !== true)) throw new Error("Health endpoint is not connected and fresh: " + JSON.stringify(body).slice(0, 500));
   if (name === "root" && body.mode !== "read-only-advisory") throw new Error("Unexpected root mode: " + JSON.stringify(body).slice(0, 300));
   if (name === "markets" && !Array.isArray(body.markets)) throw new Error("Markets endpoint did not return a markets array");
   if (name === "candles" && !Array.isArray(body.candles)) throw new Error("Candles endpoint did not return a candles array");
