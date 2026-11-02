@@ -188,9 +188,9 @@ once(
 );
 
 once(
-  '  for (const candidate of candidates) {\n    if (candidate.mode === "RANGE_SCALP" && eventIntel?.marketImpact === "BROAD_RISK_OFF") continue;\n    const cooldownMs = candidate.mode === "RANGE_SCALP" ? 10 * 6e4 : trendCooldownMs;',
-  '  const processedCandidateSymbols = new Set();\n  for (const candidate of candidates) {\n    if (processedCandidateSymbols.has(candidate.symbol)) continue;\n    processedCandidateSymbols.add(candidate.symbol);\n    const isScalpMode = candidate.mode === "RANGE_SCALP" || candidate.mode === "CORE_PULLBACK_SCALP";\n    if (isScalpMode && eventIntel?.marketImpact === "BROAD_RISK_OFF") continue;\n    const cooldownMs = isScalpMode ? 10 * 6e4 : trendCooldownMs;',
-  "prevent duplicate same-symbol paper proposals while preserving independent modes",
+  '  for (const candidate of candidates) {\\n    if (candidate.mode === "RANGE_SCALP" && eventIntel?.marketImpact === "BROAD_RISK_OFF") continue;\\n    const cooldownMs = candidate.mode === "RANGE_SCALP" ? 10 * 6e4 : trendCooldownMs;',
+  '  for (const candidate of candidates) {\\n    const isScalpMode = candidate.mode === "RANGE_SCALP" || candidate.mode === "CORE_PULLBACK_SCALP";\\n    if (isScalpMode && eventIntel?.marketImpact === "BROAD_RISK_OFF") continue;\\n    const cooldownMs = isScalpMode ? 10 * 6e4 : trendCooldownMs;',
+  "evaluate scalp and trend candidates independently without symbol reservation",
 );
 
 once(
