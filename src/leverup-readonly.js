@@ -8,6 +8,12 @@ import { LEVERUP_1CT } from "./leverup-1ct.js";
 
 export const LEVERUP_API = "https://service.leverup.xyz";
 export const MIN_EXECUTION_LEVERAGE = 50;
+export const LEVERUP_TOKENS = Object.freeze({
+  WMON: "0x3bd359C1119dA7Da1D913D1C4D2B7c461115433A",
+  LVMON: "0x91b81bfbe3A747230F0529Aa28d8b2Bc898E6D56",
+  USDC: "0x754704Bc059F8C67012fEd69BC8A327a5aafb603",
+  LVUSD: "0xFD44B35139Ae53FFF7d8F2A9869c503D987f00d1",
+});
 export const MIN_NOTIONAL_SELECTOR = "0x3569c2f7";
 export const PAIR_BY_BASE_SELECTOR = "0x9bd39764";
 
@@ -672,7 +678,7 @@ export function reconcileClosedPosition(closedPosition, lastLiveSnapshot = null)
 }
 
 export async function readLeverUpAccountSnapshot({
-  traderAddress, symbol, collateralRatio, rpcUrl = "https://rpc.monad.xyz",
+  traderAddress, agentAddress, symbol, collateralRatio, rpcUrl = "https://rpc.monad.xyz",
   fetchImpl = fetch, publicClient = createLeverUpPublicClient(rpcUrl),
 }) {
   const [pairs, antiDdos] = await Promise.all([
@@ -695,6 +701,17 @@ export async function readLeverUpAccountSnapshot({
     traderAddress ? fetchOpenPositions(traderAddress, { fetchImpl }) : Promise.resolve([]),
     traderAddress ? readPositionsV4(traderAddress, pairBase, { publicClient, blockNumber }) : Promise.resolve([]),
   ]);
+  const feeTokens = antiDdos.config.filter((item) => item.enabled && item.feeToken)
+    .map((item) => item.feeToken);
+  const accountTokenStates = traderAddress
+    ? await readTokenBalancesAndAllowances(traderAddress, [LEVERUP_TOKENS.WMON, LEVERUP_TOKENS.LVMON, ...feeTokens], { publicClient })
+    : {};
+  const agentAuthorization = traderAddress && agentAddress
+    ? await readAgentAuthorization(traderAddress, agentAddress, { publicClient })
+    : null;
+  const lastAgentNonce = traderAddress && agentAddress
+    ? await readLastAgentNonce(traderAddress, agentAddress, { publicClient })
+    : null;
   return {
     checkedAt: Date.now(),
     blockNumber: blockNumber.toString(),
@@ -711,6 +728,11 @@ export async function readLeverUpAccountSnapshot({
     },
     indexedPositions,
     onchainPositions: onchainPositions.map(normalizePositionAccrual),
+    accountTokenStates: Object.fromEntries(Object.entries(accountTokenStates).map(([token, state]) => [token, {
+      balance: state.balance.toString(), allowance: state.allowance.toString(),
+    }])),
+    agentAuthorization,
+    lastAgentNonce: lastAgentNonce == null ? null : String(lastAgentNonce),
     antiDdosConfig: antiDdos,
     collateralRatio: collateralRatio ?? null,
   };
