@@ -335,6 +335,17 @@ replaceExactlyOnce(
   "refresh intraday BUILDING_HISTORY cache hourly until five complete days exist"
 );
 
+replaceExactlyOnce(
+  '  snapshot() {\\n    const watchlist = this.watchlist();',
+  '  snapshot() {\\n    const now = Date.now();\\n    const watchlist = this.watchlist();',
+  "define snapshot time before calculating market readiness"
+);
+replaceExactlyOnce(
+  '    const available = markets.filter((market) => market.available).length;\\n    const now = Date.now();',
+  '    const available = markets.filter((market) => market.available).length;',
+  "remove the later duplicate snapshot clock declaration"
+);
+
 await writeFile(output, source);
 console.log(`Wrote patched staging candidate: ${output}`);
 console.log("Recovered source fragments and exact-bundle reconstruction remain unchanged.");
