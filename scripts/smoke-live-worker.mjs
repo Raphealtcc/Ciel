@@ -1,4 +1,8 @@
-const BASE = process.env.CIEL_LIVE_BASE_URL || "https://ciel.leno3z4rrrri.workers.dev";
+const BASE = process.env.CIEL_STAGING_BASE_URL || "https://ciel2.gatakehanami.workers.dev";
+const stagingHost = "ciel2.gatakehanami.workers.dev";
+if (new URL(BASE).hostname !== stagingHost) {
+  throw new Error("Refusing to smoke-test a non-staging host: " + new URL(BASE).hostname);
+}
 
 const routes = [
   ["/", "root"],
@@ -56,4 +60,5 @@ for (const [path, name] of routes) {
   if (name.startsWith("orderbook-") && !Object.hasOwn(body, "snapshot")) failures.push("Orderbook endpoint did not return its documented snapshot field");
   if (name.startsWith("orderbook-") && typeof body.stale !== "boolean") failures.push("Orderbook endpoint did not return its documented stale flag");
 }
-console.log("PASS: live read-only Worker smoke-tested " + results.length + " GET routes; no POSTs or state-changing endpoints were called.");
+console.log("PASS: staging read-only Worker smoke-tested " + results.length + " GET routes; no POSTs or state-changing endpoints were called.");
+if (failures.length) throw new Error(failures.join("\\n"));

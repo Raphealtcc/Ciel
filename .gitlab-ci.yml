@@ -58,7 +58,7 @@ analyze-ciel-with-rea:
         - wrangler.jsonc
         - .gitlab-ci.yml
 
-live-readonly-smoke:
+staging-readonly-smoke:
   image: node:22-alpine
   stage: verify
   needs: []
