@@ -212,8 +212,8 @@ once(
 );
 
 once(
-  '      console.log("Ciel blocked " + candidate.symbol + ": Gemini " + reviewed.verdict + " \u2014 " + reviewed.reason);\n      return;\n    }\n    const collateral = PAPER_MARGIN_MON, leverage = PAPER_LEVERAGE;',
-  '      console.log("Ciel blocked " + candidate.symbol + ": review " + reviewed.verdict + " \u2014 " + reviewed.reason);\n      continue;\n    }\n    const collateral = PAPER_MARGIN_MON, leverage = PAPER_LEVERAGE;',
+  '      console.log("Ciel blocked " + candidate.symbol + ": Gemini " + reviewed.verdict + " \\u2014 " + reviewed.reason);\\n      return;\\n    }',
+  '      console.log("Ciel blocked " + candidate.symbol + ": review " + reviewed.verdict + " \\u2014 " + reviewed.reason);\\n      continue;\\n    }',
   "continue to the next candidate when one candidate is rejected or waits",
 );
 
