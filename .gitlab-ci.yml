@@ -64,7 +64,5 @@ live-readonly-smoke:
   needs: []
   script:
     - node scripts/smoke-live-worker.mjs
-  when: manual
-  allow_failure: true
   rules:
     - if: '$CI_COMMIT_BRANCH == "audit/paper-trading-fix"'
