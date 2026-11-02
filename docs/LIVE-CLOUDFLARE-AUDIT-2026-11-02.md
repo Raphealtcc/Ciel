@@ -195,7 +195,7 @@ For MON collateral, the corresponding MON amount is:
 
 Therefore, 22 MON at 50x and 11 MON at 100x are plausible conservative rounded thresholds at the observed MON price/discount conditions, but they are not immutable on-chain constants. LeverUp's own AnyCollateral documentation states that collateral ratios vary by asset and can change; the live ratio shown in the order panel must be used at trade time. The current verifier confirms minimum notional and market leverage, but does not yet fetch the live MON collateral ratio. Do not label the exact 22/11 MON amounts fully verified until that final input is queried.
 
-The paper patch intentionally supports 50x with 22 MON and 100x+ with 11 MON, and declines low-leverage markets whose minimum collateral is beyond the available paper balance. It also uses a conservative 100x simulation baseline for markets whose verified maximum is 100x. The patch tests cover tier entry, 22/11 MON margins, P&L, stop/target/max-hold/profit-protection closes, `/profits` reconciliation, entry guards, and Telegram copy.
+The paper patch currently supports 50x with 22 MON and 100x+ with 11 MON only. It deliberately withholds 25x markets until their 180-second minimum-hold restriction is modeled; 5x and 3x markets exceed the 60 MON paper balance at the example MON price. The 10x and 2x amounts above are sizing calculations, not current watchlist maximum-leverage tiers. The patch also uses a conservative 100x simulation baseline for markets whose verified maximum is 100x. The patch tests cover tier entry, 22/11 MON margins, P&L, stop/target/max-hold/profit-protection closes, `/profits` reconciliation, entry guards, and Telegram copy.
 
 ## What is not cloned or verified yet
 
