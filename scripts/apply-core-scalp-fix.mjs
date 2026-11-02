@@ -188,8 +188,8 @@ once(
 );
 
 once(
-  '  for (const candidate of candidates) {\\n    if (candidate.mode === "RANGE_SCALP" && eventIntel?.marketImpact === "BROAD_RISK_OFF") continue;\\n    const cooldownMs = candidate.mode === "RANGE_SCALP" ? 10 * 6e4 : trendCooldownMs;',
-  '  for (const candidate of candidates) {\\n    const isScalpMode = candidate.mode === "RANGE_SCALP" || candidate.mode === "CORE_PULLBACK_SCALP";\\n    if (isScalpMode && eventIntel?.marketImpact === "BROAD_RISK_OFF") continue;\\n    const cooldownMs = isScalpMode ? 10 * 6e4 : trendCooldownMs;',
+  '  for (const candidate of candidates) {\n    if (candidate.mode === "RANGE_SCALP" && eventIntel?.marketImpact === "BROAD_RISK_OFF") continue;\n    const cooldownMs = candidate.mode === "RANGE_SCALP" ? 10 * 6e4 : trendCooldownMs;',
+  '  for (const candidate of candidates) {\n    const isScalpMode = candidate.mode === "RANGE_SCALP" || candidate.mode === "CORE_PULLBACK_SCALP";\n    if (isScalpMode && eventIntel?.marketImpact === "BROAD_RISK_OFF") continue;\n    const cooldownMs = isScalpMode ? 10 * 6e4 : trendCooldownMs;',
   "evaluate scalp and trend candidates independently without symbol reservation",
 );
 
@@ -289,8 +289,8 @@ once(
 
 
 once(
-  '  const processedCandidateSymbols = new Set();\\n  for (const candidate of candidates) {\\n    if (processedCandidateSymbols.has(candidate.symbol)) continue;\\n    const isScalpMode = candidate.mode === "RANGE_SCALP" || candidate.mode === "CORE_PULLBACK_SCALP";\\n    if (isScalpMode && eventIntel?.marketImpact === "BROAD_RISK_OFF") continue;\\n    processedCandidateSymbols.add(candidate.symbol);\\n    const cooldownMs = isScalpMode ? 10 * 6e4 : trendCooldownMs;',
-  '  for (const candidate of candidates) {\\n    const isScalpMode = candidate.mode === "RANGE_SCALP" || candidate.mode === "CORE_PULLBACK_SCALP";\\n    if (isScalpMode && eventIntel?.marketImpact === "BROAD_RISK_OFF") continue;\\n    const cooldownMs = isScalpMode ? 10 * 6e4 : trendCooldownMs;',
+  '  const processedCandidateSymbols = new Set();\n  for (const candidate of candidates) {\n    if (processedCandidateSymbols.has(candidate.symbol)) continue;\n    const isScalpMode = candidate.mode === "RANGE_SCALP" || candidate.mode === "CORE_PULLBACK_SCALP";\n    if (isScalpMode && eventIntel?.marketImpact === "BROAD_RISK_OFF") continue;\n    processedCandidateSymbols.add(candidate.symbol);\n    const cooldownMs = isScalpMode ? 10 * 6e4 : trendCooldownMs;',
+  '  for (const candidate of candidates) {\n    const isScalpMode = candidate.mode === "RANGE_SCALP" || candidate.mode === "CORE_PULLBACK_SCALP";\n    if (isScalpMode && eventIntel?.marketImpact === "BROAD_RISK_OFF") continue;\n    const cooldownMs = isScalpMode ? 10 * 6e4 : trendCooldownMs;',
   "evaluate each strategy candidate instead of reserving its symbol before checks",
 );
 
@@ -306,14 +306,14 @@ once(
 );
 
 once(
-  '    if (forecastChecks >= 6) break;\\n    forecastChecks++;',
-  '    if (forecastChecks >= 6 && !isScalpMode) continue;\\n    if (!isScalpMode) forecastChecks++;',
+  '    if (forecastChecks >= 6) break;\n    forecastChecks++;',
+  '    if (forecastChecks >= 6 && !isScalpMode) continue;\n    if (!isScalpMode) forecastChecks++;',
   "keep trend review budget from starving deterministic scalp candidates",
 );
 
 once(
-  '      console.log("Ciel blocked " + candidate.symbol + ": Gemini " + reviewed.verdict + " \\u2014 " + reviewed.reason);\\n      return;\\n    }\\n    const collateral = PAPER_MARGIN_MON, leverage = PAPER_LEVERAGE;',
-  '      console.log("Ciel blocked " + candidate.symbol + ": review " + reviewed.verdict + " \\u2014 " + reviewed.reason);\\n      continue;\\n    }\\n    const collateral = PAPER_MARGIN_MON, leverage = PAPER_LEVERAGE;',
+  '      console.log("Ciel blocked " + candidate.symbol + ": Gemini " + reviewed.verdict + " \u2014 " + reviewed.reason);\n      return;\n    }\n    const collateral = PAPER_MARGIN_MON, leverage = PAPER_LEVERAGE;',
+  '      console.log("Ciel blocked " + candidate.symbol + ": review " + reviewed.verdict + " \u2014 " + reviewed.reason);\n      continue;\n    }\n    const collateral = PAPER_MARGIN_MON, leverage = PAPER_LEVERAGE;',
   "continue to the next candidate when one candidate is rejected or waits",
 );
 
