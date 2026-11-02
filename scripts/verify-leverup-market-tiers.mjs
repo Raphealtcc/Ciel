@@ -56,6 +56,13 @@ async function hyperliquidAllMids(dex) {
     body: JSON.stringify(dex ? { type: "allMids", dex } : { type: "allMids" })
   });
 }
+async function hyperliquidMetaAndAssetCtxs(dex) {
+  return fetchJson(HYPERLIQUID_INFO, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(dex ? { type: "metaAndAssetCtxs", dex } : { type: "metaAndAssetCtxs" })
+  });
+}
 
 async function hyperliquidBook(coin) {
   try {
@@ -285,7 +292,8 @@ const hyperliquidFeedDiagnostics = {
   allMidsXyz: null,
   qnt: {},
   kpepe: {},
-  bookChecks: []
+  bookChecks: [],
+  metaAndAssetCtxs: {}
 };
 try {
   const mids = await hyperliquidAllMids(null);
@@ -317,8 +325,26 @@ hyperliquidFeedDiagnostics.qnt.meta = { default: qntDefaultAsset, xyz: qntXyzAss
 hyperliquidFeedDiagnostics.kpepe.meta = { default: kpepeDefaultAsset, xyz: kpepeXyzAsset };
 hyperliquidFeedDiagnostics.bookChecks = await Promise.all([
   hyperliquidBook("QNT"), hyperliquidBook("xyz:QNT"),
-  hyperliquidBook("KPEPE"), hyperliquidBook("xyz:KPEPE")
+  hyperliquidBook("KPEPE"), hyperliquidBook("kPEPE"), hyperliquidBook("xyz:KPEPE")
 ]);
+for (const dex of [null, "xyz"]) {
+  try {
+    const response = await hyperliquidMetaAndAssetCtxs(dex);
+    const meta = Array.isArray(response) ? response[0] : null;
+    const contexts = Array.isArray(response) ? response[1] : [];
+    const names = meta?.universe?.map((asset) => asset.name) || [];
+    hyperliquidFeedDiagnostics.metaAndAssetCtxs[dex || "default"] = {
+      qnt: names.includes("QNT"),
+      kpepe: names.includes("KPEPE") || names.includes("kPEPE"),
+      qntIndex: names.indexOf("QNT"),
+      kpepeIndex: Math.max(names.indexOf("KPEPE"), names.indexOf("kPEPE")),
+      universeCount: names.length,
+      contextCount: Array.isArray(contexts) ? contexts.length : null
+    };
+  } catch (error) {
+    hyperliquidFeedDiagnostics.metaAndAssetCtxs[dex || "default"] = { error: String(error).slice(0, 300) };
+  }
+}
 
 const report = {
   checkedAt: new Date().toISOString(),
