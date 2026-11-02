@@ -73,9 +73,9 @@ once(
 );
 
 once(
-  '    const refreshCandles = now - this.lastCandleSnapshotAt >= 5 * 60 * 1e3;',
-  '    if (now - this.lastCoreScalpCandleAt >= 55e3) background.push(this.writeCoreScalpCandles(now));\n    const refreshCandles = now - this.lastCandleSnapshotAt >= 5 * 60 * 1e3;',
-  "refresh 1m core candles without increasing the five-minute all-market snapshot cadence",
+  '    const background = [];',
+  '    const background = [];\n    if (now - this.lastCoreScalpCandleAt >= 55e3) background.push(this.writeCoreScalpCandles(now));',
+  "refresh 1m core candles only after the background task queue is initialized",
 );
 
 const analyzer = `function analyzeCorePullbackScalp(symbol, oneMinuteRows, fiveMinuteRows, now) {
