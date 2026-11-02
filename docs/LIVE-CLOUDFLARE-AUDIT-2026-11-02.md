@@ -211,7 +211,7 @@ The staging paper ledger now starts at 100 MON. Gemini chooses the margin for ea
 1. Keep the current `leno3z4rrrri` Cloudflare connection intact.
 2. Confirm the corrected audit-branch push pipeline finishes successfully.
 3. Extend the LeverUp verifier to read the live MON collateral ratio and MON/USD oracle/market price, then compute the exact minimum MON for each leverage tier with an explicit safety buffer.
-4. Preserve the source Durable Object paper-ledger limitation in the staging plan; staging starts with a fresh 60 MON paper balance.
+4. Preserve the source Durable Object paper-ledger limitation in the staging plan; staging starts with a fresh 100 MON paper balance in the current patch (the live source ledger remains 60 MON).
 5. Create a separate staging Worker with new D1/KV/SQLite DO namespaces and fresh Telegram credentials. Never overwrite the source bot webhook.
 6. Test complete paper trade lifecycles and restart persistence in staging before any production deployment.
 
