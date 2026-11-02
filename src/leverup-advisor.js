@@ -1,0 +1,174 @@
+import {
+  LEVERUP_TOKENS, readLeverUpAccountSnapshot, selectLeverageTier,
+  calculateMinimumCollateralMon, buildMarketOpenPlan, persistLeverUpPreflight,
+} from "./leverup-readonly.js";
+
+const WMON = LEVERUP_TOKENS.WMON.toLowerCase();
+const errorMessage = (error) => String(error?.message || error || "Unknown LeverUp preflight failure").slice(0, 220);
+const monAmount = (raw) => { try { return (Number(BigInt(raw || "0")) / 1e18).toFixed(4); } catch { return "unavailable"; } };
+const jsonSafe = (value) => JSON.parse(JSON.stringify(value, (_key, item) => typeof item === "bigint" ? item.toString() : item));
+
+function accountSummary(snapshot) {
+  const wmon = snapshot?.accountTokenStates?.[WMON], auth = snapshot?.agentAuthorization;
+  return {
+    wmonBalanceMon: wmon ? monAmount(wmon.balance) : "unavailable",
+    wmonAllowanceMon: wmon ? monAmount(wmon.allowance) : "unavailable",
+    agentAuthorized: Boolean(auth?.authorized), canMarketOpen: Boolean(auth?.canMarketOpen),
+    canMarketClose: Boolean(auth?.canMarketClose), canPartialClose: Boolean(auth?.canPartialClose),
+    openPositionCount: Array.isArray(snapshot?.indexedPositions) ? snapshot.indexedPositions.length : null,
+    blockNumber: snapshot?.blockNumber || null,
+  };
+}
+
+async function savePreflight(env, signalId, record) {
+  if (env?.CIEL_STATE?.put) await env.CIEL_STATE.put(
+    "ciel:leverup:preflight:v1:" + String(signalId),
+    JSON.stringify(jsonSafe(record)), { expirationTtl: 86400 },
+  ).catch((error) => console.error("LeverUp preflight KV persistence failed: " + errorMessage(error)));
+}
+
+export async function prepareLeverUpAdvisorPlan({
+  env, candidate, reviewed, signalId, now = Date.now(), technicalOnly = false, dependencies = {},
+}) {
+  const result = (status, reason, extra = {}) => ({
+    schemaVersion: 1, signalId: String(signalId || ""),
+    symbol: String(candidate?.symbol || "").toUpperCase(), status, reason, checkedAt: now,
+    executionMode: "DRY_RUN_ONLY", liveExecutionEnabled: false, killSwitchEnabled: true, ...extra,
+  });
+  if (!candidate?.symbol) return result("BLOCKED", "CIEL candidate symbol is missing.");
+  if (reviewed?.verdict !== "APPROVE" || technicalOnly) return result("NOT_APPROVED",
+    "CIEL did not produce a fully confirmed APPROVE; LeverUp entry preflight was not attempted.");
+  if (String(env?.LEVERUP_PREFLIGHT_ENABLED || "").toLowerCase() !== "true") return result("DISABLED",
+    "LeverUp advisor preflight is not enabled in Worker configuration.");
+  if (String(env?.LEVERUP_LIVE_TRADING).toLowerCase() !== "false" ||
+      String(env?.LEVERUP_KILL_SWITCH).toLowerCase() !== "true") return result("BLOCKED_SAFETY_CONFIGURATION",
+    "Live trading must remain false and the LeverUp kill switch must remain true.");
+
+  const traderAddress = String(env?.LEVERUP_TRADER_ADDRESS || "");
+  const agentAddress = String(env?.LEVERUP_AGENT_ADDRESS || "");
+  if (!/^0x[0-9a-fA-F]{40}$/.test(traderAddress) || !/^0x[0-9a-fA-F]{40}$/.test(agentAddress)) {
+    return result("BLOCKED_WALLET_CONFIGURATION", "Trader or agent public address is missing or invalid.");
+  }
+  const minimumLeverage = Number(env?.LEVERUP_MIN_LEVERAGE || 50);
+  if (!Number.isFinite(minimumLeverage) || minimumLeverage < 50) return result("BLOCKED_LEVERAGE_POLICY",
+    "Configured LeverUp minimum leverage is below 50x.");
+
+  const ratioValue = Number(env?.LEVERUP_WMON_COLLATERAL_RATIO);
+  const collateralRatio = Number.isFinite(ratioValue) && ratioValue > 0 && ratioValue <= 1 ? ratioValue : null;
+  let snapshot;
+  try {
+    const readSnapshot = dependencies.readSnapshot || readLeverUpAccountSnapshot;
+    snapshot = await readSnapshot({
+      traderAddress, agentAddress, symbol: String(candidate.symbol).toUpperCase(), collateralRatio,
+      rpcUrl: env?.LEVERUP_RPC_URL || "https://rpc.monad.xyz",
+      ...(dependencies.fetchImpl ? { fetchImpl: dependencies.fetchImpl } : {}),
+    });
+  } catch (error) {
+    const blocked = result("BLOCKED_READ_ONLY_CHECK", errorMessage(error));
+    await savePreflight(env, signalId, blocked);
+    return blocked;
+  }
+
+  const account = accountSummary(snapshot);
+  if (Array.isArray(snapshot.indexedPositions) && snapshot.indexedPositions.length > 0) {
+    const blocked = result("BLOCKED_EXISTING_POSITION",
+      "The trader already has an open LeverUp position. CIEL will not add exposure until it is reconciled or closed.", { account });
+    await savePreflight(env, signalId, blocked); return blocked;
+  }
+  if (!collateralRatio) {
+    const blocked = result("BLOCKED_COLLATERAL_RATIO_UNVERIFIED",
+      "Live WMON collateral ratio is not configured. CIEL will not estimate margin from an example or assume 100% collateral value.", { account });
+    await savePreflight(env, signalId, blocked); return blocked;
+  }
+
+  try {
+    const tiers = snapshot.pairView?.leverageMargins || [];
+    const marketMaxLeverage = Math.max(0, ...tiers.map((tier) => Number(tier.maxLeverage)));
+    const minimumNotionalRaw = BigInt(snapshot.minimumNotionalRaw);
+    const minimumTier = selectLeverageTier(tiers, minimumNotionalRaw);
+    if (!minimumTier) throw new Error("NO_LEVERAGE_TIER_FOR_VENUE_MINIMUM");
+    const inferredLeverage = Number(candidate.leverage ?? env?.LEVERUP_DEFAULT_LEVERAGE ?? (marketMaxLeverage >= 100 ? 100 : 50));
+    if (!Number.isFinite(inferredLeverage) || inferredLeverage < 50) throw new Error("CIEL_INFERENCE_BELOW_50X");
+    const leverageForMinimum = Math.min(inferredLeverage, Number(minimumTier.maxLeverage), marketMaxLeverage);
+    if (leverageForMinimum < 50) throw new Error("MARKET_OR_NOTIONAL_TIER_BELOW_50X");
+
+    const minimumNotionalUsd = Number(minimumNotionalRaw) / 1e18;
+    const monUsdPrice = Number(snapshot.monUsdPriceRaw) / 1e18;
+    const minimumMarginMon = calculateMinimumCollateralMon({ minimumNotionalUsd, leverage: leverageForMinimum, monUsdPrice, collateralRatio });
+    const totalAllocationMon = Number(env?.LEVERUP_TOTAL_ALLOCATION_MON || 50);
+    const reserveMon = Number(env?.LEVERUP_RESERVE_MON ?? totalAllocationMon * 0.5);
+    const allocationCeiling = Math.max(0, totalAllocationMon - reserveMon);
+    const configuredTradeCeiling = Number(env?.LEVERUP_MAX_TRADE_MARGIN_MON);
+    const maxTradeMarginMon = Number.isFinite(configuredTradeCeiling) && configuredTradeCeiling > 0
+      ? Math.min(configuredTradeCeiling, allocationCeiling)
+      : Math.min(minimumMarginMon, allocationCeiling);
+    if (maxTradeMarginMon + 1e-9 < minimumMarginMon) throw new Error("VENUE_MINIMUM_MARGIN_EXCEEDS_CIEL_TRADE_ALLOCATION");
+    const aiMargin = Number(reviewed?.paperMarginMon);
+    const desiredMarginMon = Math.max(minimumMarginMon, Math.min(maxTradeMarginMon,
+      Number.isFinite(aiMargin) && aiMargin > 0 ? aiMargin : minimumMarginMon));
+
+    const expectedHoldSeconds = Math.max(0, Number(candidate.holdMinutes ??
+      (candidate.mode === "RANGE_SCALP" ? 12 : candidate.mode === "CORE_PULLBACK_SCALP" ? 15 : 180)) * 60);
+    const stopPct = Number(candidate.stopPct), targetPct = Number(candidate.targetPct);
+    if (!(stopPct > 0 && targetPct > 0 && stopPct < 100 && targetPct < 100)) throw new Error("CIEL_STOP_OR_TARGET_INVALID");
+    const stopBps = BigInt(Math.max(1, Math.round(stopPct * 100)));
+    const targetBps = BigInt(Math.max(1, Math.round(targetPct * 100)));
+    if (stopBps >= 10_000n || targetBps >= 10_000n) throw new Error("CIEL_STOP_OR_TARGET_OUT_OF_RANGE");
+    const oracleRaw = BigInt(snapshot.oraclePriceRaw), isLong = candidate.side === "LONG";
+    const stopLossPriceRaw = isLong ? oracleRaw * (10_000n - stopBps) / 10_000n : oracleRaw * (10_000n + stopBps) / 10_000n;
+    const takeProfitPriceRaw = isLong ? oracleRaw * (10_000n + targetBps) / 10_000n : oracleRaw * (10_000n - targetBps) / 10_000n;
+
+    const buildPlan = dependencies.buildPlan || buildMarketOpenPlan;
+    const plan = buildPlan({ snapshot, desiredMarginMon, maxTradeMarginMon, inferredLeverage,
+      side: candidate.side, expectedHoldSeconds, reserveMon, stopLossPriceRaw, takeProfitPriceRaw, now });
+    const authorized = Boolean(snapshot.agentAuthorization?.authorized && snapshot.agentAuthorization?.canMarketOpen);
+    const status = authorized ? "PREFLIGHT_PASS_LIVE_DISABLED" : "BLOCKED_AGENT_AUTHORIZATION";
+    const reason = authorized
+      ? "Live market, tier, margin, balance, allowance, fee, slippage and agent-open checks passed. No order was signed or submitted."
+      : "The agent wallet is not authorized for LeverUp market-open permission bit 0. No order was signed or submitted.";
+    let ledgerId = null, ledgerPersisted = false;
+    try {
+      const persist = dependencies.persistPreflight || persistLeverUpPreflight;
+      if (env?.DB?.prepare) {
+        ledgerId = await persist(env.DB, signalId, plan.preflight, {
+          decision: authorized ? "PASS" : "REJECT",
+          rejectionReason: authorized ? null : "AGENT_MARKET_OPEN_PERMISSION_MISSING",
+          blockNumber: snapshot.blockNumber,
+        });
+        ledgerPersisted = true;
+      }
+    } catch (error) { console.error("LeverUp preflight D1 ledger write failed: " + errorMessage(error)); }
+    const record = result(status, reason, {
+      account, ledgerId, ledgerPersisted, inferredLeverage, selectedLeverage: plan.selectedLeverage,
+      tierMaxLeverage: plan.tierMaxLeverage, marginMonUsed: plan.marginMonUsed, notionalUsd: plan.notionalUsd,
+      minimumMarginMon, reserveMon, maxTradeMarginMon,
+      estimatedProtocolCosts: plan.preflight?.estimatedProtocolCosts || null,
+      preflight: plan.preflight || null, plan: jsonSafe(plan),
+    });
+    await savePreflight(env, signalId, record); return record;
+  } catch (error) {
+    const blocked = result("BLOCKED_PREFLIGHT", errorMessage(error), { account });
+    await savePreflight(env, signalId, blocked); return blocked;
+  }
+}
+
+export function formatLeverUpAdvisorLine(record) {
+  if (!record) return "LEVERUP: no preflight was generated.";
+  const account = record.account || {};
+  const accountLine = "WMON balance " + (account.wmonBalanceMon || "unavailable") +
+    " MON; agent market-open permission " + (account.canMarketOpen ? "verified" : "not verified") + ".";
+  if (record.status === "PREFLIGHT_PASS_LIVE_DISABLED") {
+    const costs = record.estimatedProtocolCosts || {};
+    return [
+      "LEVERUP PREFLIGHT: PASS — " + record.selectedLeverage + "x, margin " + Number(record.marginMonUsed).toFixed(3) +
+        " MON, notional $" + Number(record.notionalUsd).toFixed(2) + ".",
+      "Estimated open fee $" + Number(costs.openFeeUsd || 0).toFixed(4) +
+        "; projected holding $" + Number(costs.holdingFeeUsd || 0).toFixed(4) +
+        "; projected funding $" + Number(costs.fundingFeeUsd || 0).toFixed(4) + ".",
+      accountLine,
+      "DRY RUN ONLY — live trading is OFF; no order was signed or submitted.",
+    ].join("\\n");
+  }
+  return "LEVERUP PREFLIGHT: " + record.status + " — " + String(record.reason || "No reason supplied") +
+    " " + accountLine + " Live trading is OFF.";
+}

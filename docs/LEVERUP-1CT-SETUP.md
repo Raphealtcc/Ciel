@@ -6,8 +6,10 @@
 - `src/leverup-readonly.js`: read-only market preflight, live pair/oracle reads, fee-token configuration, onchain position accruals, agent authorization/nonce reads, token balance/allowance reads, and settlement reconciliation.
 - `migrations/0002_leverup_execution_ledger.sql`: additive D1 ledger tables for preflight snapshots, position fee snapshots, and closed-settlement reconciliations. The tier-specific max leverage column is included to match the persistence insert.
 - `scripts/test-leverup-1ct.mjs` and `scripts/test-leverup-readonly.mjs`: safety and accounting tests.
-- The LeverUp adapter is not yet wired into the CIEL signal/entry/exit loop. The current branch is still a non-executing integration build; do not interpret this as live execution being enabled.
-- The Cloudflare Worker has not been redeployed with the outstanding runtime-error investigation/fix.
+- `src/leverup-advisor.js` connects fully confirmed CIEL approvals to a read-only LeverUp account snapshot and market-open preflight. Successful and permission-rejected preflights are persisted to the additive D1 ledger and KV.
+- `scripts/apply-leverup-integration.mjs` injects that coordinator into the recovered Worker build; the Telegram trade card shows the actual LeverUp preflight result.
+- The integration rejects unknown collateral ratios, existing open LeverUp positions, missing WMON balance/allowance, unsupported tiers, missing market data, and missing market-open permission.
+- No live execution path is called. Live trading is explicitly OFF and the kill switch ON.
 
 ## Confirmed public wallet identities
 
@@ -37,13 +39,13 @@ The staging `wrangler.jsonc` now contains the two confirmed public addresses and
 | `LEVERUP_LIVE_TRADING` | Plain text | `false` |
 | `LEVERUP_KILL_SWITCH` | Plain text | `true` |
 | `LEVERUP_MIN_LEVERAGE` | Plain text | `50` |
-| `LEVERUP_TOTAL_ALLOCATION_MON` | Plain text | `50` MON total capital ceiling |
+| `LEVERUP_TOTAL_ALLOCATION_MON` | Plain text | `50` MON total capital ceiling |\n| `LEVERUP_PREFLIGHT_ENABLED` | Plain text | `true` |\n| `LEVERUP_RESERVE_MON` | Plain text | `25` MON reserved; only the minimum venue margin is used unless a per-trade cap is configured |
 | `LEVERUP_AGENT_PRIVATE_KEY` | Secret | Not configured; add only through Cloudflare secret management if/when required |
 | `LEVERUP_RPC_URL` | Secret | Not configured; use a dedicated Monad RPC provider |
 | `LEVERUP_WMON_COLLATERAL_RATIO` | Plain text | Intentionally unset until verified live from LeverUp's order panel/API |
 | `LEVERUP_MAX_TRADE_MARGIN_MON` | Plain text | Intentionally unset; no per-trade budget has been authorized |
 
-The Cloudflare account connection needed for live inspection/configuration was not available for this step. No Cloudflare resources, secrets or deployed versions were modified.
+The Cloudflare account connection is available again. The additive migration `0002_leverup_execution_ledger.sql` has been applied to the isolated `ciel-paper-staging` D1 database and its three tables plus two indexes were verified. No Worker deployment or wallet transaction was performed.
 
 ## Wallet and token setup
 

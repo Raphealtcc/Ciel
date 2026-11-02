@@ -199,4 +199,19 @@ assert.throws(() => buildMarketOpenPlan({
   inferredLeverage: 25, side: "LONG", expectedHoldSeconds: 3600,
 }), /INFERENCE_BELOW_50X/);
 
+const reserveTightSnapshot = {
+  ...planSnapshot,
+  accountTokenStates: {
+    ...planSnapshot.accountTokenStates,
+    [WMON.toLowerCase()]: {
+      balance: (1001n * 10n ** 16n).toString(),
+      allowance: (1001n * 10n ** 16n).toString(),
+    },
+  },
+};
+assert.throws(() => buildMarketOpenPlan({
+  snapshot: reserveTightSnapshot, desiredMarginMon: 10, maxTradeMarginMon: 10,
+  inferredLeverage: 100, side: "LONG", expectedHoldSeconds: 3600, reserveMon: 0.01,
+}), /WMON_BALANCE_INSUFFICIENT_AFTER_RESERVE_FOR_MARGIN_AND_OPEN_FEE/);
+
 console.log("PASS: 50x floor, dynamic tier sizing, WMON+fee-token balance/allowance checks, amountIn/open-fee calculation, cost estimates, and settlement reconciliation.");
