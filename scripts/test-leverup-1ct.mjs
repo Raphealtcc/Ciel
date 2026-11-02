@@ -117,7 +117,8 @@ assert.equal(networkTouched, false, "50x floor must block before signing or netw
 await assert.rejects(() => signAndSubmitIntent({
   enabled: true,
   killSwitchActive: false,
-  agentAuthorized: true,
+  agentAuthorization: { authorized: true, agentAddress: "0x5555555555555555555555555555555555555555", canMarketOpen: true, canMarketClose: true, canPartialClose: true },
+  agentAddress: "0x5555555555555555555555555555555555555555",
   traderAddress: trader,
   signerPrivateKey: `0x${"01".repeat(32)}`,
   action: OneClickAction.MARKET_OPEN,
