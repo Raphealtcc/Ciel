@@ -62,6 +62,8 @@ staging-readonly-smoke:
   image: node:22-alpine
   stage: verify
   needs: []
+  when: delayed
+  start_in: 5 minutes
   script:
     - node scripts/smoke-live-worker.mjs
   rules:
