@@ -87,6 +87,36 @@ replaceExactlyOnce(
   "update help command for leverage-tiered paper trading",
 );
 
+replaceExactlyOnce(
+  '"Reference price: $" + fmt(p.entry_price),',
+  '"Reference price: $" + fmt(p.entry_price),\n    "Reference price source: Hyperliquid mid; LeverUp settles against Pyth and applies per-pair pool slippage. Check LeverUp\'s live quote before entry.",',
+  "disclose Hyperliquid reference versus LeverUp execution price",
+);
+
+replaceExactlyOnce(
+  '"Market quality: 24h notional $" + fmt(market.volume)',
+  '"Hyperliquid market quality: 24h notional $" + fmt(market.volume)',
+  "label market-quality inputs as Hyperliquid data",
+);
+
+replaceExactlyOnce(
+  '"AI evidence basis: CIEL technical signal, local forecast and live derivatives/order-book metrics only. External news and fundamentals were not checked."',
+  '"AI evidence basis: CIEL technical signal, local forecast and Hyperliquid derivatives/order-book metrics only. External news and fundamentals were not checked."',
+  "label AI evidence inputs as Hyperliquid data",
+);
+
+replaceExactlyOnce(
+  '"Gross mark-based paper result; fees, funding, slippage and liquidation mechanics are excluded."',
+  '"Gross Hyperliquid-mid paper result; LeverUp Pyth/pool fills, fees, funding/holding fees, oracle costs, slippage, collateral CR, minimum-hold restrictions and liquidation are excluded."',
+  "make paper close notification explicit about LeverUp execution gaps",
+);
+
+replaceExactlyOnce(
+  '"Gross simulated results using Hyperliquid mids, not LeverUp fills. Fees, funding, slippage, collateral haircuts and liquidation mechanics are not simulated."',
+  '"Paper results use Hyperliquid mids, not LeverUp Pyth/pool fills. Fees, funding/holding fees, oracle costs, slippage, collateral CR, minimum-hold restrictions and liquidation are not simulated."',
+  "make profits help text explicit about LeverUp execution gaps",
+);
+
 await writeFile(output, source);
 console.log(`Wrote patched staging candidate: ${output}`);
 console.log("Recovered source fragments and exact-bundle reconstruction remain unchanged.");
