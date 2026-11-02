@@ -301,22 +301,22 @@ replaceExactlyOnce(
 
 replaceExactlyOnce(
   'async function sendTelegram(env, text) {',
-  'async function ensureStagingTelegramIdentity(env) {\\n  const token = (env.TELEGRAM_BOT_TOKEN || "").trim();\\n  const expectedBotId = (env.TELEGRAM_STAGING_BOT_ID || "").trim();\\n  if (!token || !expectedBotId) throw new Error("Staging Telegram is disabled until a separate bot ID is configured.");\\n  const cacheKey = "ciel:telegram:staging-bot-identity:v1";\\n  const cached = await env.CIEL_STATE.get(cacheKey, "json").catch(() => null);\\n  if (cached && cached.verified === true && String(cached.id) === expectedBotId && Date.now() - Number(cached.checkedAt || 0) < 900000) return cached;\\n  const response = await fetch("https://api.telegram.org/bot" + token + "/getMe", { signal: AbortSignal.timeout(8000) });\\n  const payload = await response.json().catch(() => ({}));\\n  if (!response.ok || payload.ok !== true || String(payload.result?.id || "") !== expectedBotId) throw new Error("Telegram token does not match TELEGRAM_STAGING_BOT_ID; staging notifications are blocked.");\\n  const identity = { verified: true, id: String(payload.result.id), username: String(payload.result.username || ""), checkedAt: Date.now() };\\n  await env.CIEL_STATE.put(cacheKey, JSON.stringify(identity), { expirationTtl: 900 }).catch(() => void 0);\\n  return identity;\\n}\\nasync function sendTelegram(env, text) {',
+  'async function ensureStagingTelegramIdentity(env) {\n  const token = (env.TELEGRAM_BOT_TOKEN || "").trim();\n  const expectedBotId = (env.TELEGRAM_STAGING_BOT_ID || "").trim();\n  if (!token || !expectedBotId) throw new Error("Staging Telegram is disabled until a separate bot ID is configured.");\n  const cacheKey = "ciel:telegram:staging-bot-identity:v1";\n  const cached = await env.CIEL_STATE.get(cacheKey, "json").catch(() => null);\n  if (cached && cached.verified === true && String(cached.id) === expectedBotId && Date.now() - Number(cached.checkedAt || 0) < 900000) return cached;\n  const response = await fetch("https://api.telegram.org/bot" + token + "/getMe", { signal: AbortSignal.timeout(8000) });\n  const payload = await response.json().catch(() => ({}));\n  if (!response.ok || payload.ok !== true || String(payload.result?.id || "") !== expectedBotId) throw new Error("Telegram token does not match TELEGRAM_STAGING_BOT_ID; staging notifications are blocked.");\n  const identity = { verified: true, id: String(payload.result.id), username: String(payload.result.username || ""), checkedAt: Date.now() };\n  await env.CIEL_STATE.put(cacheKey, JSON.stringify(identity), { expirationTtl: 900 }).catch(() => void 0);\n  return identity;\n}\nasync function sendTelegram(env, text) {',
   "require a verified staging Telegram bot before sending any message"
 );
 replaceExactlyOnce(
   '  if (!text.trim()) throw new Error("Telegram text is empty");',
-  '  await ensureStagingTelegramIdentity(env);\\n  if (!text.trim()) throw new Error("Telegram text is empty");',
+  '  await ensureStagingTelegramIdentity(env);\n  if (!text.trim()) throw new Error("Telegram text is empty");',
   "guard outbound Telegram sends with the staging bot identity"
 );
 replaceExactlyOnce(
   '  if (!secret || suppliedSecret !== secret) return new Response("Forbidden", { status: 403 });',
-  '  if (!secret || suppliedSecret !== secret) return new Response("Forbidden", { status: 403 });\\n  try { await ensureStagingTelegramIdentity(env); } catch (error) { console.error("Staging Telegram identity check refused webhook update: " + String(error).slice(0, 180)); return new Response("Staging bot identity not verified", { status: 503 }); }',
+  '  if (!secret || suppliedSecret !== secret) return new Response("Forbidden", { status: 403 });\n  try { await ensureStagingTelegramIdentity(env); } catch (error) { console.error("Staging Telegram identity check refused webhook update: " + String(error).slice(0, 180)); return new Response("Staging bot identity not verified", { status: 503 }); }',
   "refuse Telegram webhook updates until staging bot identity is verified"
 );
 replaceExactlyOnce(
   'const marker = await env.CIEL_STATE.get("ciel:telegram:webhook:auto-registration").catch(() => null);',
-  'const marker = await env.CIEL_STATE.get("ciel:telegram:webhook:auto-registration").catch(() => null);\\n        const markerText = String(marker || "");\\n        const markerTargetsStaging = markerText.startsWith("https://ciel2.gatakehanami.workers.dev/telegram/webhook:");\\n        const markerTargetsProduction = markerText.startsWith("https://ciel.leno3z4rrrri.workers.dev/telegram/webhook:");',
+  'const marker = await env.CIEL_STATE.get("ciel:telegram:webhook:auto-registration").catch(() => null);\n        const markerText = String(marker || "");\n        const markerTargetsStaging = markerText.startsWith("https://ciel2.gatakehanami.workers.dev/telegram/webhook:");\n        const markerTargetsProduction = markerText.startsWith("https://ciel.leno3z4rrrri.workers.dev/telegram/webhook:");',
   "identify whether the existing Telegram webhook marker targets staging or production"
 );
 replaceExactlyOnce(
