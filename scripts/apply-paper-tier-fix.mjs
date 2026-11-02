@@ -193,7 +193,7 @@ replaceExactlyOnce(
 );
 replaceExactlyOnce(
   'const out = { verdict, reason: typeof v.reason === "string" ? v.reason.slice(0, 240) : "No usable Gemini reason.", flags:',
-  'const out = { verdict, paperMarginMon: Number.isFinite(Number(v.paperMarginMon)) ? Number(v.paperMarginMon) : null, reason: typeof v.reason === "string" ? v.reason.slice(0, 240) : "No usable Gemini reason.", flags:',
+  'const out = { verdict, paperMarginMon: typeof v.paperMarginMon === "number" && Number.isFinite(v.paperMarginMon) ? v.paperMarginMon : null, reason: typeof v.reason === "string" ? v.reason.slice(0, 240) : "No usable Gemini reason.", flags:',
   "retain the model-selected margin in the review result",
 );
 replaceExactlyOnce(
@@ -213,7 +213,7 @@ replaceExactlyOnce(
 );
 replaceExactlyOnce(
   'const collateral = minimumMarginForMarketLeverage(marketMaxLeverage);\n    const leverage = marketMaxLeverage >= 100 ? 100 : PAPER_LEVERAGE;',
-  'const collateral = choosePaperMargin(reviewed.verdict === "APPROVE" ? reviewed.paperMarginMon : null, sizingLimits);\n    const marginSizingSource = reviewed.verdict === "APPROVE" && Number.isFinite(Number(reviewed.paperMarginMon)) ? "GEMINI_AI" : "MINIMUM_FALLBACK";\n    const leverage = marketMaxLeverage >= 100 ? 100 : PAPER_LEVERAGE;\n    if (!Number.isFinite(collateral) || collateral + 1e-9 < sizingLimits.minMarginMon || collateral > sizingLimits.maxMarginMon + 1e-9) { console.log("Ciel skipped " + candidate.symbol + ": AI margin could not be safely clamped."); continue; }',
+  'const collateral = choosePaperMargin(reviewed.verdict === "APPROVE" ? reviewed.paperMarginMon : null, sizingLimits);\n    const marginSizingSource = reviewed.verdict === "APPROVE" && typeof reviewed.paperMarginMon === "number" && Number.isFinite(reviewed.paperMarginMon) ? "GEMINI_AI" : "MINIMUM_FALLBACK";\n    const leverage = marketMaxLeverage >= 100 ? 100 : PAPER_LEVERAGE;\n    if (!Number.isFinite(collateral) || collateral + 1e-9 < sizingLimits.minMarginMon || collateral > sizingLimits.maxMarginMon + 1e-9) { console.log("Ciel skipped " + candidate.symbol + ": AI margin could not be safely clamped."); continue; }',
   "use Gemini's margin selection only after deterministic clamping",
 );
 replaceExactlyOnce(
