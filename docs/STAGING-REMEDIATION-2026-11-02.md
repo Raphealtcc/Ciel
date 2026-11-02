@@ -13,10 +13,10 @@
 
 ## External configuration still required
 
-The primary Cloudflare account is not connected in this session and account switching is prohibited. No secrets were read, copied or changed. Staging Telegram still requires a separate bot token, chat ID, webhook secret and numeric bot ID. The webhook URL is https://ciel2.gatakehanami.workers.dev/telegram/webhook.
+The primary Cloudflare account is not connected in this session and account switching is prohibited. No secrets were read, copied or changed. Staging Telegram still requires a separate bot token, chat ID, webhook secret and numeric bot ID. The webhook URL is not guessed. Set it to the primary account staging Worker origin plus `/telegram/webhook` only after that hostname is confirmed.
 
 Gemini review requires at least one of GEMINI_API_KEY_1 through GEMINI_API_KEY_7. Diagnostics reports the configured count without exposing values.
 
 ## Validation gates
 
-GitLab CI validates exact-bundle reconstruction, paper risk limits, market metadata and staging config. The main-branch staging smoke validates the deployed Worker. No LeverUp orders are sent; CIEL remains advisory plus paper-only.
+GitLab CI validates exact-bundle reconstruction, paper risk limits, market metadata and staging config. The main-branch staging smoke is manual until `CIEL_STAGING_BASE_URL` is set to the primary account staging hostname; it refuses the connected account host. No LeverUp orders are sent; CIEL remains advisory plus paper-only.

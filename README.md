@@ -12,7 +12,7 @@ Hyperliquid market monitoring, technical setup detection, local statistical fore
 - `main`: staging candidate plus the byte-exact recovered production baseline and audit evidence. The recovered production bundle remains immutable.
 - `audit/paper-trading-fix`: source branch containing the staging patch, behavioral tests, current source-account audit and account handoff.
 
-The staging candidate targets only the separate `ciel2` Worker and its isolated D1/KV resources. Do not deploy it to the source production Worker.
+The staging candidate targets only the separate `ciel2` Worker and its isolated D1/KV resources. Its primary-account workers.dev hostname is not available in this session. Do not use `ciel2.gatakehanami.workers.dev` or the connected account host as a substitute, and do not deploy it to the source production Worker.
 
 ## Layout
 
@@ -48,21 +48,21 @@ Do not deploy the template until:
 1. The target account has its own D1 database and KV namespace and their IDs replace the placeholders.
 2. The target Durable Object namespaces are created with the declared `new_sqlite_classes` migration.
 3. The recovered D1 schema is reviewed and applied to the target database.
-4. Fresh Gemini/Telegram secrets are configured outside Git. Use a separate Telegram bot for staging so its webhook does not overwrite the live bot's webhook.
+4. Fresh Gemini/Telegram secrets are configured outside Git. Use a separate Telegram bot for staging so its webhook does not overwrite the live bot's webhook. Set `TELEGRAM_WEBHOOK_URL` only after the primary account staging hostname is known, and set `TELEGRAM_STAGING_BOT_ID` to the separate bot ID.
 5. The staging Worker has a separate name and does not receive production traffic.
 
 No LeverUp order credentials are configured. CIEL remains advisory-only; paper trading is automatic and separate from manual START TRACKING.
 
 ## Recovery limits
 
-Cloudflare exposed the deployed JavaScript bundle, not the original TypeScript project. Original TypeScript, original source maps, package lock, test suite, and release pipeline were not recovered. The D1 schema is in GitLab, but D1 row data, KV values, Durable Object state and secret plaintext are not. The paper ledger lives inside the feed Durable Object and its internal KV key cannot be read through the available Cloudflare SQL query API.
+Cloudflare exposed the deployed JavaScript bundle, not the original TypeScript project. Original TypeScript, original source maps, package lock, test suite, and release pipeline were not recovered. The D1 schema is in GitLab, but D1 row data, KV values, Durable Object state and secret plaintext are not. The paper ledger lives inside the feed Durable Object; a read-only aggregate view is now available at `/api/paper`.
 
 See `docs/HANDOFF-2026-11-02.md` before changing the connected Cloudflare account. It records the source account, live Worker, bindings, resource IDs, secret names, current D1 activity and what cannot be cloned.
 
 
 ## Current live coverage and account-switch warning
 
-The latest 14-route GitLab smoke test reached the live Worker. Health was connected/open/fresh; 25 markets were listed, 24 had prices and 23 had order books. QNT uses the verified xyz:QNT price/book alias but remains monitor-only because derivatives context is unavailable and its 5x tier is unsupported. The sampled BTC, ETH, MON, ONDO and ADA books were fresh. Do not treat a healthy global feed flag as proof that every symbol has full market-quality data.
+The primary-account staging hostname is not available in this session, so endpoint observations from the connected Cloudflare account are not accepted as staging validation. The smoke script requires `CIEL_STAGING_BASE_URL` and refuses the connected-account host. The isolated `ciel2` Workers Build is tracked separately through GitLab. QNT is designed as monitor-only until derivatives context and an eligible leverage tier exist.
 
 Do not connect the second Cloudflare account until the account-switch preflight is reviewed. The source secrets and Durable Object paper ledger are not exportable through the available API. The new staging Worker must use new D1/KV/DO resources and a separate Telegram bot.
 
