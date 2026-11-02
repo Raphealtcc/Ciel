@@ -139,7 +139,8 @@ if (hyperliquidPairs.length) {
 }
 
 const markets = await mapLimit(selected.filter((x) => x.pair), 4, async ({ symbol, pair }) => {
-  const staticMapMaxLeverage = staticMap[symbol] ?? null;
+  const sourceMapMaxLeverage = sourceMap[symbol] ?? null;
+  const stagingMapMaxLeverage = stagingMap[symbol] ?? null;
   if (pair.executionVenue === "HYPERLIQUID") {
     const universe = [
       ...(hyperliquidXyzMeta?.universe || []),
@@ -154,9 +155,11 @@ const markets = await mapLimit(selected.filter((x) => x.pair), 4, async ({ symbo
       apiStatus: pair.status,
       executionVenue: pair.executionVenue,
       verificationSource: "Hyperliquid public meta",
-      staticMapMaxLeverage,
+      sourceMapMaxLeverage,
+      stagingMapMaxLeverage,
       verifiedMaxLeverage: maxLeverage,
-      mapMatches: maxLeverage === null ? null : maxLeverage === staticMapMaxLeverage,
+      sourceMapMatches: maxLeverage === null ? null : maxLeverage === sourceMapMaxLeverage,
+      stagingMapMatches: maxLeverage === null ? null : maxLeverage === stagingMapMaxLeverage,
       minHoldingSeconds: pair.minHoldingSeconds,
       error: maxLeverage === null ? "No matching asset in Hyperliquid meta (default or xyz DEX)" : null
     };
@@ -181,9 +184,11 @@ const markets = await mapLimit(selected.filter((x) => x.pair), 4, async ({ symbo
       minHoldingSeconds: pair.minHoldingSeconds,
       onchainStatus: decoded.status,
       onchainName: decoded.name,
-      staticMapMaxLeverage,
+      sourceMapMaxLeverage,
+      stagingMapMaxLeverage,
       verifiedMaxLeverage: maxLeverage || null,
-      mapMatches: maxLeverage === 0 ? null : maxLeverage === staticMapMaxLeverage,
+      sourceMapMatches: maxLeverage === 0 ? null : maxLeverage === sourceMapMaxLeverage,
+      stagingMapMatches: maxLeverage === 0 ? null : maxLeverage === stagingMapMaxLeverage,
       leverageMargins: decoded.leverageMargins,
       error: maxLeverage === 0 ? "Pair exists in REST API but no onchain leverage-margin tiers were returned" : null
     };
@@ -194,7 +199,8 @@ const markets = await mapLimit(selected.filter((x) => x.pair), 4, async ({ symbo
       pairBase: base,
       apiStatus: pair.status,
       executionVenue: pair.executionVenue,
-      staticMapMaxLeverage,
+      sourceMapMaxLeverage,
+      stagingMapMaxLeverage,
       error: String(error)
     };
   }
@@ -214,9 +220,14 @@ const report = {
   markets,
   errors: markets.filter((x) => x.error).map((x) => ({ symbol: x.symbol, error: x.error })),
   hyperliquidMetaErrors,
-  staticMapMismatches: markets.filter((x) => x.mapMatches === false).map((x) => ({
+  sourceMapMismatches: markets.filter((x) => x.sourceMapMatches === false).map((x) => ({
     symbol: x.symbol,
-    staticMapMaxLeverage: x.staticMapMaxLeverage,
+    sourceMapMaxLeverage: x.sourceMapMaxLeverage,
+    verifiedMaxLeverage: x.verifiedMaxLeverage
+  })),
+  stagingMapMismatches: markets.filter((x) => x.stagingMapMatches === false).map((x) => ({
+    symbol: x.symbol,
+    stagingMapMaxLeverage: x.stagingMapMaxLeverage,
     verifiedMaxLeverage: x.verifiedMaxLeverage
   }))
 };
@@ -224,6 +235,6 @@ const report = {
 await writeFile("leverup-market-tier-audit.json", JSON.stringify(report, null, 2) + "\n");
 console.log(JSON.stringify(report, null, 2));
 
-if (report.missingPairs.length || report.errors.length || markets.length !== WATCHLIST.length) {
+if (report.missingPairs.length || report.errors.length || report.stagingMapMismatches.length || markets.length !== WATCHLIST.length) {
   process.exitCode = 1;
 }
