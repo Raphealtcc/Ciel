@@ -13,7 +13,7 @@ function once(before, after, label) {
 }
 
 once(
-  'var CANDLE_HISTORY_SYMBOLS = /* @__PURE__ */ new Set(["BTC", "ETH", "MON"]);',
+  'var CANDLE_HISTORY_SYMBOLS = /* @__PURE__ */ new Set(["BTC", "ETH", "MON", "SOL"]);',
   'var CANDLE_HISTORY_SYMBOLS = /* @__PURE__ */ new Set(["BTC", "ETH", "SOL"]);',
   "persist five-minute candle history for SOL instead of MON",
 );
@@ -285,6 +285,36 @@ once(
   `    if (isScalpMode && eventIntel?.marketImpact === "BROAD_RISK_OFF") continue;
     processedCandidateSymbols.add(candidate.symbol);`,
   "allow the extended trend candidate when its scalp counterpart is blocked",
+);
+
+
+once(
+  '  const processedCandidateSymbols = new Set();\\n  for (const candidate of candidates) {\\n    if (processedCandidateSymbols.has(candidate.symbol)) continue;\\n    const isScalpMode = candidate.mode === "RANGE_SCALP" || candidate.mode === "CORE_PULLBACK_SCALP";\\n    if (isScalpMode && eventIntel?.marketImpact === "BROAD_RISK_OFF") continue;\\n    processedCandidateSymbols.add(candidate.symbol);\\n    const cooldownMs = isScalpMode ? 10 * 6e4 : trendCooldownMs;',
+  '  for (const candidate of candidates) {\\n    const isScalpMode = candidate.mode === "RANGE_SCALP" || candidate.mode === "CORE_PULLBACK_SCALP";\\n    if (isScalpMode && eventIntel?.marketImpact === "BROAD_RISK_OFF") continue;\\n    const cooldownMs = isScalpMode ? 10 * 6e4 : trendCooldownMs;',
+  "evaluate each strategy candidate instead of reserving its symbol before checks",
+);
+
+once(
+  '    const priorReview = await env.DB.prepare("SELECT created_at_ms FROM advisor_ai_audit WHERE symbol=? AND model!=\'CIEL Statistical Ensemble v1\' AND model!=\'CIEL deterministic range guard\' ORDER BY created_at_ms DESC LIMIT 1").bind(candidate.symbol).first();',
+  `    const priorReviewSql = candidate.mode === "CORE_PULLBACK_SCALP"
+      ? "SELECT created_at_ms FROM advisor_ai_audit WHERE symbol=? AND model='CIEL deterministic core scalp guard' ORDER BY created_at_ms DESC LIMIT 1"
+      : candidate.mode === "RANGE_SCALP"
+        ? "SELECT created_at_ms FROM advisor_ai_audit WHERE symbol=? AND model='CIEL deterministic range guard' ORDER BY created_at_ms DESC LIMIT 1"
+        : "SELECT created_at_ms FROM advisor_ai_audit WHERE symbol=? AND model NOT IN ('CIEL Statistical Ensemble v1','CIEL Statistical Ensemble v1 + technical gate','CIEL deterministic range guard','CIEL deterministic core scalp guard','CIEL deterministic positioning gate','Hyperliquid market-quality gate') ORDER BY created_at_ms DESC LIMIT 1";
+    const priorReview = await env.DB.prepare(priorReviewSql).bind(candidate.symbol).first();`,
+  "separate scalp and trend review cooldowns and ignore transient pre-review WAIT rows",
+);
+
+once(
+  '    if (forecastChecks >= 6) break;\\n    forecastChecks++;',
+  '    if (forecastChecks >= 6 && !isScalpMode) continue;\\n    if (!isScalpMode) forecastChecks++;',
+  "keep trend review budget from starving deterministic scalp candidates",
+);
+
+once(
+  '      console.log("Ciel blocked " + candidate.symbol + ": Gemini " + reviewed.verdict + " \\u2014 " + reviewed.reason);\\n      return;\\n    }\\n    const collateral = PAPER_MARGIN_MON, leverage = PAPER_LEVERAGE;',
+  '      console.log("Ciel blocked " + candidate.symbol + ": review " + reviewed.verdict + " \\u2014 " + reviewed.reason);\\n      continue;\\n    }\\n    const collateral = PAPER_MARGIN_MON, leverage = PAPER_LEVERAGE;',
+  "continue to the next candidate when one candidate is rejected or waits",
 );
 
 const legacyModeLabel = 'trade.mode === "RANGE_SCALP" ? "RANGE SCALP" : trade.mode === "TREND_HOLD" ? "TREND HOLD" : "LEGACY"';
