@@ -238,8 +238,8 @@ replaceExactlyOnce(
 );
 
 replaceExactlyOnce(
-  '      lastMessageAt: this.lastMessageAt || null,\\n      lastPongAt: this.lastPongAt || null,\\n      lastPingAt: this.lastPingAt || null,\\n      lastMessageAt: this.lastMessageAt || null,',
-  '      lastMessageAt: this.lastMessageAt || null,\\n      lastPongAt: this.lastPongAt || null,\\n      lastPingAt: this.lastPingAt || null,',
+  '      lastMessageAt: this.lastMessageAt || null,\n      lastPongAt: this.lastPongAt || null,\n      lastPingAt: this.lastPingAt || null,\n      lastMessageAt: this.lastMessageAt || null,',
+  '      lastMessageAt: this.lastMessageAt || null,\n      lastPongAt: this.lastPongAt || null,\n      lastPingAt: this.lastPingAt || null,',
   "remove duplicate lastMessageAt property from the staging bundle without altering recovered evidence",
 );
 
