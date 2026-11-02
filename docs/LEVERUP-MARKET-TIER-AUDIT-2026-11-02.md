@@ -104,3 +104,10 @@ Sources:
 - [LeverUp liquidation guide](https://leverup.gitbook.io/docs/trading/liquidation)
 
 **Decision:** Market max leverage and the $20 global minimum notional are verified for the current watchlist. Exact MON collateral minima still depend on the live CR and order-panel rounding. The patched staging map matches all 25 checked markets; production remains untouched.
+
+
+## Live MON reference check (00:37 UTC)
+
+The public CIEL market endpoint reported MON/USD = $0.019038 during the 14-route smoke test. At that reference, 22 MON at 50x and 11 MON at 100x both imply $20.9418 notional at 100% CR. The exact CR threshold to reach the $20 global minimum with either amount is 20 / 20.9418 = 95.5%. If CR is 95%, effective notional is about $19.895, slightly below $20; a higher CR or one additional MON would be needed. The live LeverUp order-panel CR was not accessible, so the fixed 22/11 paper tiers are not claimed to be guaranteed live minima.
+
+The latest feed also reported QNT as unpriced and KPEPE/QNT without order books. QNT is not currently usable by the Hyperliquid-backed advisor, even though LeverUp market metadata confirms it as a 5x market.
