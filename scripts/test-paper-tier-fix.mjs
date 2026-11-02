@@ -197,4 +197,12 @@ assert.ok(source.includes("const collateral = minimumMarginForMarketLeverage(mar
 assert.ok(source.includes('const leverage = marketMaxLeverage >= 100 ? 100 : PAPER_LEVERAGE;'));
 assert.ok(source.includes('Margin: " + paperResult.trade.marginMon + " MON | leverage: " + paperResult.trade.leverage + "x'));
 
+assert.ok(source.includes("Reference price source: Hyperliquid mid; LeverUp settles against Pyth and applies per-pair pool slippage. Check LeverUp's live quote before entry."));
+assert.ok(source.includes("Hyperliquid market quality: 24h notional"));
+assert.ok(source.includes("AI evidence basis: CIEL technical signal, local forecast and Hyperliquid derivatives/order-book metrics only."));
+assert.ok(source.includes("Gross Hyperliquid-mid paper result; LeverUp Pyth/pool fills"));
+assert.ok(source.includes("Paper results use Hyperliquid mids, not LeverUp Pyth/pool fills."));
+assert.equal(context.LEVERUP_MARKET_MAX_LEVERAGE.CASHCAT, 3);
+assert.equal(context.LEVERUP_MARKET_MAX_LEVERAGE.PONS, 3);
+
 console.log("PASS: 50x/100x+ tier entry, 22/11 MON margins, P&L math, stop/target/max-hold/profit-protection closes, /profits equity reconciliation, entry guards, and tier-consistent Telegram copy.");
