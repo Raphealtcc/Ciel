@@ -288,18 +288,6 @@ once(
 );
 
 once(
-  'localRangeReview ? "Market review (LOCAL DETERMINISTIC / GEMINI SKIPPED): " + r.reason : "Gemini " + r.verdict + ": " + r.reason,',
-  'localCoreScalpReview || localRangeReview ? "Market review (LOCAL DETERMINISTIC / GEMINI SKIPPED): " + r.reason : "Gemini " + r.verdict + ": " + r.reason,',
-  "show local deterministic review instead of falsely labelling a core scalp as Gemini WAIT",
-);
-
-once(
-  'localRangeReview\\n      ? "Review basis: local regime, CCI, 3-minute rejection, statistical forecast and live derivatives/order-book safeguards. Gemini is deliberately skipped for this short-duration scalp to preserve API quota."',
-  '(localCoreScalpReview || localRangeReview)\\n      ? "Review basis: closed 1m/5m candle setup, statistical forecast and live derivatives/order-book safeguards. Gemini is deliberately skipped for this short-duration scalp to preserve API quota."',
-  "show the actual local scalp evidence basis",
-);
-
-once(
   'const bounceLine = s.mode === "RANGE_SCALP"\\n    ? "Range entry confirmation:',
   'const bounceLine = s.mode === "CORE_PULLBACK_SCALP"\\n    ? "Entry confirmation: closed 5m EMA trend plus 1m pullback/reclaim and volume confirmation."\\n    : s.mode === "RANGE_SCALP"\\n    ? "Range entry confirmation:',
   "explain the candle-based pullback entry rather than showing unrelated bounce logic",
