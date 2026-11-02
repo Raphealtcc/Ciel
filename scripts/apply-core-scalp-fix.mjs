@@ -114,12 +114,12 @@ const analyzer = `function analyzeCorePullbackScalp(symbol, oneMinuteRows, fiveM
   if (!volumeOk) return null;
   let side=null, pivot=0;
   if (trendUp) {
-    const touched=recent.some(c=>c.l<=fast1+atr*0.18 && c.l>=fast1-atr*0.75);
+    const touched=recent.some(c=>c.c<c.o && c.l<=fast1+atr*0.18 && c.l>=fast1-atr*0.75);
     if (touched && latest.c>latest.o && latest.c>previous.h && latest.c>fast1) {
       side="LONG"; pivot=Math.min(...recent.map(c=>c.l),latest.l);
     }
   } else {
-    const touched=recent.some(c=>c.h>=fast1-atr*0.18 && c.h<=fast1+atr*0.75);
+    const touched=recent.some(c=>c.c>c.o && c.h>=fast1-atr*0.18 && c.h<=fast1+atr*0.75);
     if (touched && latest.c<latest.o && latest.c<previous.l && latest.c<fast1) {
       side="SHORT"; pivot=Math.max(...recent.map(c=>c.h),latest.h);
     }
