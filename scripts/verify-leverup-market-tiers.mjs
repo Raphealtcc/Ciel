@@ -4,14 +4,15 @@ import vm from "node:vm";
 const DIAMOND = "0xea1b8E4aB7f14F7dCA68c5B214303B13078FC5ec";
 const RPC = process.env.LEVERUP_RPC_URL || "https://rpc.monad.xyz";
 const PAIRS_URL = "https://service.leverup.xyz/v1/pairs?size=100&block_chain=MONAD";
+const HYPERLIQUID_INFO = "https://api.hyperliquid.xyz/info";
 const WATCHLIST = [
   "BTC", "ETH", "MON", "BNB", "XRP", "HYPE", "ONDO", "KPEPE", "QNT", "ZEC",
   "TRX", "AAVE", "ADA", "CASHCAT", "DOGE", "LINK", "LIT", "PONS", "PUMP",
   "SEI", "SOL", "SUI", "UNI", "VIRTUAL", "XMR"
 ];
 
-const PAIR_SELECTOR = "0x9bd39764"; // getPairByBaseV4(address), from the verified PairsManagerFacet ABI
-const TRADING_CONFIG_SELECTOR = "0x3569c2f7"; // getTradingConfig(), from the verified TradingConfigFacet ABI
+const PAIR_SELECTOR = "0x9bd39764"; // getPairByBaseV4(address), verified PairsManagerFacet ABI
+const TRADING_CONFIG_SELECTOR = "0x3569c2f7"; // getTradingConfig(), verified TradingConfigFacet ABI
 
 async function fetchJson(url, init = {}) {
   const response = await fetch(url, { ...init, signal: AbortSignal.timeout(20_000) });
@@ -41,6 +42,14 @@ async function rpc(method, params) {
   throw lastError;
 }
 
+async function hyperliquidMeta(dex) {
+  return fetchJson(HYPERLIQUID_INFO, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(dex ? { type: "meta", dex } : { type: "meta" })
+  });
+}
+
 function asWord(hex, byteOffset) {
   const start = 2 + byteOffset * 2;
   const word = hex.slice(start, start + 64);
@@ -65,7 +74,7 @@ function asString(hex, tupleBase, fieldWordIndex) {
 
 function decodePairView(result) {
   if (!result || result === "0x") throw new Error("getPairByBaseV4 returned empty data");
-  const tupleBase = asNumber(result, 0); // the single dynamic PairView tuple starts at this offset
+  const tupleBase = asNumber(result, 0);
   const name = asString(result, tupleBase, 0);
   const base = "0x" + result.slice(2 + (tupleBase + 32) * 2 + 24, 2 + (tupleBase + 32) * 2 + 64);
   const pairType = asNumber(result, tupleBase + 3 * 32);
@@ -101,6 +110,11 @@ async function mapLimit(items, limit, fn) {
   return output;
 }
 
+const symbolsSource = await readFile("recovered-src/symbols.js.part-001", "utf8");
+const staticMatch = symbolsSource.match(/var LEVERUP_MARKET_MAX_LEVERAGE = Object\.freeze\((\{[\s\S]*?\})\);/);
+if (!staticMatch) throw new Error("Could not extract the recovered static leverage map");
+const staticMap = vm.runInNewContext("(" + staticMatch[1] + ")");
+
 const pairsResponse = await fetchJson(PAIRS_URL);
 const allPairs = pairsResponse.content || [];
 const selected = WATCHLIST.map((symbol) => {
@@ -115,10 +129,41 @@ const configResult = await rpc("eth_call", [{ to: DIAMOND, data: TRADING_CONFIG_
 if (!configResult || configResult.length < 130) throw new Error("getTradingConfig returned too little data");
 const minNotionalUsdRaw = asWord(configResult, 32).toString();
 
+let hyperliquidXyzMeta = null;
+let hyperliquidDefaultMeta = null;
+const hyperliquidPairs = selected.filter((x) => x.pair?.executionVenue === "HYPERLIQUID");
+if (hyperliquidPairs.length) {
+  hyperliquidXyzMeta = await hyperliquidMeta("xyz");
+  hyperliquidDefaultMeta = await hyperliquidMeta(null);
+}
+
 const markets = await mapLimit(selected.filter((x) => x.pair), 4, async ({ symbol, pair }) => {
+  const staticMapMaxLeverage = staticMap[symbol] ?? null;
+  if (pair.executionVenue === "HYPERLIQUID") {
+    const universe = [
+      ...(hyperliquidXyzMeta?.universe || []),
+      ...(hyperliquidDefaultMeta?.universe || [])
+    ];
+    const asset = universe.find((item) => item.name === symbol);
+    const maxLeverage = asset?.maxLeverage ?? null;
+    return {
+      symbol,
+      pairName: pair.pairName,
+      pairBase: pair.base || pair.baseAddress,
+      apiStatus: pair.status,
+      executionVenue: pair.executionVenue,
+      verificationSource: "Hyperliquid public meta",
+      staticMapMaxLeverage,
+      verifiedMaxLeverage: maxLeverage,
+      mapMatches: maxLeverage === null ? null : maxLeverage === staticMapMaxLeverage,
+      minHoldingSeconds: pair.minHoldingSeconds,
+      error: maxLeverage === null ? "No matching asset in Hyperliquid meta (default or xyz DEX)" : null
+    };
+  }
+
   const base = pair.base || pair.baseAddress;
   if (!base || !/^0x[0-9a-fA-F]{40}$/.test(base)) {
-    return { symbol, pairName: pair.pairName, error: "Missing/invalid pair base address", status: pair.status, executionVenue: pair.executionVenue };
+    return { symbol, pairName: pair.pairName, error: "Missing/invalid pair base address", apiStatus: pair.status, executionVenue: pair.executionVenue };
   }
   const data = PAIR_SELECTOR + base.slice(2).toLowerCase().padStart(64, "0");
   try {
@@ -131,11 +176,15 @@ const markets = await mapLimit(selected.filter((x) => x.pair), 4, async ({ symbo
       pairBase: base,
       apiStatus: pair.status,
       executionVenue: pair.executionVenue,
+      verificationSource: "LeverUp Diamond getPairByBaseV4",
       minHoldingSeconds: pair.minHoldingSeconds,
       onchainStatus: decoded.status,
       onchainName: decoded.name,
-      maxLeverage,
-      leverageMargins: decoded.leverageMargins
+      staticMapMaxLeverage,
+      verifiedMaxLeverage: maxLeverage || null,
+      mapMatches: maxLeverage === 0 ? null : maxLeverage === staticMapMaxLeverage,
+      leverageMargins: decoded.leverageMargins,
+      error: maxLeverage === 0 ? "Pair exists in REST API but no onchain leverage-margin tiers were returned" : null
     };
   } catch (error) {
     return {
@@ -144,6 +193,7 @@ const markets = await mapLimit(selected.filter((x) => x.pair), 4, async ({ symbo
       pairBase: base,
       apiStatus: pair.status,
       executionVenue: pair.executionVenue,
+      staticMapMaxLeverage,
       error: String(error)
     };
   }
@@ -161,7 +211,12 @@ const report = {
   watchlist: WATCHLIST,
   missingPairs: selected.filter((x) => !x.pair).map((x) => x.symbol),
   markets,
-  errors: markets.filter((x) => x.error).map((x) => ({ symbol: x.symbol, error: x.error }))
+  errors: markets.filter((x) => x.error).map((x) => ({ symbol: x.symbol, error: x.error })),
+  staticMapMismatches: markets.filter((x) => x.mapMatches === false).map((x) => ({
+    symbol: x.symbol,
+    staticMapMaxLeverage: x.staticMapMaxLeverage,
+    verifiedMaxLeverage: x.verifiedMaxLeverage
+  }))
 };
 
 await writeFile("leverup-market-tier-audit.json", JSON.stringify(report, null, 2) + "\n");
