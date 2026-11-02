@@ -47,7 +47,7 @@ The earlier REA pass on the recovered production bundle analyzed seven parsed Ja
 The same pipeline individually passed:
 - exact recovered bundle reconstruction: 209,745 bytes, SHA-256 24e6452b4a2854a1e37f864adcb201d588771460eed68bcd100f5cfbafd564b6;
 - staging patch application and syntax check;
-- paper behavior tests for 50x/100x entries, margin tiers, leveraged P&L math, insufficient balance, duplicate signal and one-open-trade-per-symbol guards; the supplied /profits arithmetic was reconciled manually, while close lifecycle/profit-protection behavior was inspected in source but not independently exercised end-to-end;
+- paper behavior tests for 50x/100x entries, margin floors and AI-selected sizing, 5% per-trade/10% portfolio stop-risk caps, leveraged P&L math, insufficient balance, duplicate signal, one-open-trade-per-symbol, stop-loss, take-profit, max-hold, profit-protection confirmation, and /profits equity reconciliation;
 - case-preserving Hyperliquid order-book fallback patch assertions;
 - staging resource isolation checks;
 - live LeverUp market metadata verification;
