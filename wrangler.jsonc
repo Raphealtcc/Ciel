@@ -1,50 +1,61 @@
 {
-  // RECOVERY TEMPLATE — not deploy-ready until target-account bindings and DO migration history are reviewed.
-  // IDs below identify the currently connected SOURCE account. Replace them for a different target account.
-  "name": "ciel",
-  "main": "reconstructed/worker.js",
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  // Isolated staging Worker. These IDs are the staging resources supplied by the user.
+  "name": "ciel2",
+  "main": "reconstructed/patched-worker.js",
   "compatibility_date": "2026-09-08",
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": true,
-  "triggers": {
-    "crons": ["* * * * *"]
-  },
+  "preview_urls": true,
+  "triggers": { "crons": ["* * * * *"] },
   "vars": {
-    "ADVISORY_COLLATERAL_MON": "10",
-    "ADVISORY_LEVERAGE": "100",
-    "ADVISORY_MAX_HOLD_MINUTES": "90",
     "ADVISORY_MIN_CONFIDENCE": "0.72",
+    "ADVISORY_TREND_REVIEW_COOLDOWN_MINUTES": "30",
     "ALERT_COOLDOWN_MINUTES": "15",
     "ALERT_WINDOW_MINUTES": "5",
     "GEMINI_MODEL": "gemini-3.5-flash-lite",
-    "GEMINI_REVIEW_COOLDOWN_MINUTES": "15",
     "MOVE_ALERT_PCT": "2.0",
     "WATCH_SYMBOLS": "BTC,ETH,MON,BNB,XRP,HYPE,ONDO,KPEPE,QNT,ZEC,TRX,AAVE,ADA,CASHCAT,DOGE,LINK,LIT,PONS,PUMP,SEI,SOL,SUI,UNI,VIRTUAL,XMR"
   },
-  "d1_databases": [
-    {
+  "d1_databases": [{
+    "binding": "DB",
+    "database_name": "ciel-paper-staging",
+    "database_id": "a41e95fe-58cc-443a-839e-5ee0525e9fcf"
+  }],
+  "kv_namespaces": [{
+    "binding": "CIEL_STATE",
+    "id": "6e1fa505914c4d3b87b5b49c9d54f6fe"
+  }],
+  "previews": {
+    // Preview settings do not inherit top-level vars or bindings.
+    // Branch previews intentionally share the isolated staging D1/KV dataset.
+    "vars": {
+      "ADVISORY_MIN_CONFIDENCE": "0.72",
+      "ADVISORY_TREND_REVIEW_COOLDOWN_MINUTES": "30",
+      "ALERT_COOLDOWN_MINUTES": "15",
+      "ALERT_WINDOW_MINUTES": "5",
+      "GEMINI_MODEL": "gemini-3.5-flash-lite",
+      "MOVE_ALERT_PCT": "2.0",
+      "WATCH_SYMBOLS": "BTC,ETH,MON,BNB,XRP,HYPE,ONDO,KPEPE,QNT,ZEC,TRX,AAVE,ADA,CASHCAT,DOGE,LINK,LIT,PONS,PUMP,SEI,SOL,SUI,UNI,VIRTUAL,XMR"
+    },
+    "d1_databases": [{
       "binding": "DB",
-      "database_name": "ciel",
-      "database_id": "fb55e85b-af9b-45b3-ba43-6c7f7996dfa8"
-    }
-  ],
-  "kv_namespaces": [
-    {
+      "database_name": "ciel-paper-staging",
+      "database_id": "a41e95fe-58cc-443a-839e-5ee0525e9fcf"
+    }],
+    "kv_namespaces": [{
       "binding": "CIEL_STATE",
-      "id": "8b5c4b6078ce43a8aec4d9343855a70f"
-    }
-  ],
+      "id": "6e1fa505914c4d3b87b5b49c9d54f6fe"
+    }]
+  },
   "durable_objects": {
     "bindings": [
       { "name": "HYPERLIQUID_FEED", "class_name": "HyperliquidFeed" },
       { "name": "TRADING_ENGINE", "class_name": "TradingEngine" }
     ]
   },
-  "migrations": [
-    {
-      // Fresh-target bootstrap only. Do not apply to the existing source Worker namespace.
-      "tag": "v1",
-      "new_classes": ["HyperliquidFeed", "TradingEngine"]
-    }
-  ]
+  "migrations": [{
+    "tag": "v1",
+    "new_sqlite_classes": ["HyperliquidFeed", "TradingEngine"]
+  }]
 }

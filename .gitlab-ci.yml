@@ -5,10 +5,34 @@ verify-ciel-recovery:
   stage: verify
   script:
     - node --check scripts/reassemble-recovered-worker.mjs
+    - node --check scripts/apply-paper-tier-fix.mjs
+    - node --check scripts/test-paper-tier-fix.mjs
+    - node --check scripts/check-staging-config.mjs
     - node --check scripts/summarize-rea.mjs
+    - node --check scripts/verify-leverup-market-tiers.mjs
+    - node --check scripts/smoke-live-worker.mjs
     - npm run check
+    - npm run build
   rules:
-    - if: '$CI_COMMIT_BRANCH'
+    - if: '$CI_COMMIT_BRANCH || $CI_PIPELINE_SOURCE == "merge_request_event"'
+
+verify-leverup-market-metadata:
+  image: node:22-alpine
+  stage: verify
+  needs: [verify-ciel-recovery]
+  script:
+    - npm run check:paper
+    - node scripts/verify-leverup-market-tiers.mjs
+  artifacts:
+    when: always
+    paths: [leverup-market-tier-audit.json]
+    expire_in: 30 days
+  allow_failure: true
+  rules:
+    - changes:
+        - scripts/verify-leverup-market-tiers.mjs
+        - recovered-src/symbols.js.part-001
+        - wrangler.jsonc
 
 analyze-ciel-with-rea:
   image: node:22-alpine
@@ -16,14 +40,16 @@ analyze-ciel-with-rea:
   needs: [verify-ciel-recovery]
   script:
     - apk add --no-cache procps
-    - npm run reassemble
-    - npx -y rea-agents@latest analyze-javascript-application "$CI_PROJECT_DIR/reconstructed" --json > "$CI_PROJECT_DIR/rea-analysis.json" 2> "$CI_PROJECT_DIR/rea-analysis.stderr.log" || true
-    - node scripts/summarize-rea.mjs "$CI_PROJECT_DIR/rea-analysis.json"
+    - npm run check:paper
+    - mkdir -p "$CI_PROJECT_DIR/rea-patched"
+    - cp reconstructed/patched-worker.js "$CI_PROJECT_DIR/rea-patched/worker.js"
+    - npx -y rea-agents@latest analyze-javascript-application "$CI_PROJECT_DIR/rea-patched" --json > "$CI_PROJECT_DIR/rea-patched-analysis.json" 2> "$CI_PROJECT_DIR/rea-patched-analysis.stderr.log"
+    - node scripts/summarize-rea.mjs "$CI_PROJECT_DIR/rea-patched-analysis.json" "$CI_PROJECT_DIR/rea-patched-summary.json"
   artifacts:
     when: always
-    paths: [rea-analysis.json, rea-summary.json, rea-analysis.stderr.log]
+    paths: [rea-patched-analysis.json, rea-patched-summary.json, rea-patched-analysis.stderr.log]
     expire_in: 30 days
-  allow_failure: true
+  allow_failure: false
   rules:
     - changes:
         - recovered-src/**/*
@@ -31,3 +57,24 @@ analyze-ciel-with-rea:
         - package.json
         - wrangler.jsonc
         - .gitlab-ci.yml
+
+staging-readonly-smoke:
+  image: node:22-alpine
+  stage: verify
+  needs: []
+  script:
+    - node scripts/smoke-live-worker.mjs
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "audit/paper-trading-fix" || $CI_PIPELINE_SOURCE == "merge_request_event"'
+
+verify-cloudflare-bun-bootstrap:
+  image: node:22-alpine
+  stage: verify
+  script:
+    - npm install --global bun@1.4.4
+    - test "$(bun --version)" = "1.4.4"
+    - bun install
+    - test -s reconstructed/patched-worker.js
+    - node --check reconstructed/patched-worker.js
+  rules:
+    - if: '$CI_COMMIT_BRANCH || $CI_PIPELINE_SOURCE == "merge_request_event"'
