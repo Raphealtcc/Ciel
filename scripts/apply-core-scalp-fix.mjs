@@ -275,12 +275,6 @@ once(
 
 
 once(
-  'if (!paperStorage || paperCash + 1e-9 < PAPER_MARGIN_MON) {',
-  'if (!paperStorage || paperCash + 1e-9 < 11) {',
-  "permit the 11 MON verified minimum tier while still checking each candidate's own floor",
-);
-
-once(
   '    if (processedCandidateSymbols.has(candidate.symbol)) continue;\\n    processedCandidateSymbols.add(candidate.symbol);\\n    const isScalpMode = candidate.mode === "RANGE_SCALP" || candidate.mode === "CORE_PULLBACK_SCALP";\\n    if (isScalpMode && eventIntel?.marketImpact === "BROAD_RISK_OFF") continue;',
   '    if (processedCandidateSymbols.has(candidate.symbol)) continue;\\n    const isScalpMode = candidate.mode === "RANGE_SCALP" || candidate.mode === "CORE_PULLBACK_SCALP";\\n    if (isScalpMode && eventIntel?.marketImpact === "BROAD_RISK_OFF") continue;\\n    processedCandidateSymbols.add(candidate.symbol);',
   "allow a valid extended trend candidate if the same-symbol scalp is blocked by broad risk-off",
@@ -303,6 +297,13 @@ once(
   'const bounceLine = s.mode === "CORE_PULLBACK_SCALP"\\n    ? "Entry confirmation: closed 5m EMA trend plus 1m pullback/reclaim and volume confirmation."\\n    : s.mode === "RANGE_SCALP"\\n    ? "Range entry confirmation:',
   "explain the candle-based pullback entry rather than showing unrelated bounce logic",
 );
+
+
+const legacyModeLabel = 'trade.mode === "RANGE_SCALP" ? "RANGE SCALP" : trade.mode === "TREND_HOLD" ? "TREND HOLD" : "LEGACY"';
+const legacyModeCount = source.split(legacyModeLabel).length - 1;
+if (legacyModeCount !== 2) throw new Error("Expected two paper summary mode labels, found " + legacyModeCount);
+source = source.replaceAll(legacyModeLabel, 'trade.mode === "CORE_PULLBACK_SCALP" ? "CORE PULLBACK SCALP" : trade.mode === "RANGE_SCALP" ? "RANGE SCALP" : trade.mode === "TREND_HOLD" ? "TREND HOLD" : "LEGACY"');
+console.log("Applied core scalp patch: show core pullback trades distinctly in paper summaries");
 
 await writeFile(file, source);
 console.log("Wrote core BTC/ETH/SOL pullback scalp candidate to reconstructed/patched-worker.js");
