@@ -357,7 +357,10 @@ export async function readLastAgentNonce(traderAddress, agentAddress, { publicCl
 export async function readTokenBalancesAndAllowances(traderAddress, tokenAddresses, {
   diamond = LEVERUP_1CT.diamond, publicClient = createLeverUpPublicClient(),
 } = {}) {
-  const tokens = [...new Set((tokenAddresses || []).filter(Boolean).map((x) => String(x).toLowerCase()))];
+  const tokens = [...new Set((tokenAddresses || [])
+    .filter(Boolean)
+    .map((x) => String(x).toLowerCase())
+    .filter((x) => x !== LEVERUP_1CT.zeroAddress.toLowerCase()))];
   const states = await Promise.all(tokens.map(async (token) => {
     const [balance, allowance] = await Promise.all([
       publicClient.readContract({ address: token, abi: ERC20_READ_ABI, functionName: "balanceOf", args: [traderAddress] }),
