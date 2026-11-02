@@ -28,10 +28,10 @@ for (const [path, name] of routes) {
   let body;
   try { body = text ? JSON.parse(text) : null; } catch { body = null; }
   const details = {};
-  if (name === "health") Object.assign(details, { ok: body?.ok, connected: body?.connected, websocketConnected: body?.websocketConnected, fresh: body?.fresh, lastTickAt: body?.lastTickAt, lastTickAgeMs: body?.lastTickAt ? Date.now() - Number(body.lastTickAt) : null });
+  if (name === "health") Object.assign(details, { ok: body?.ok, connected: body?.connected, websocketConnected: body?.websocketConnected, connectionState: body?.connectionState, degraded: body?.degraded, fresh: body?.fresh, lastTickAt: body?.lastTickAt, lastTickAgeMs: body?.lastTickAt ? Date.now() - Number(body.lastTickAt) : null, lastCloseCode: body?.lastCloseCode, lastCloseReason: body?.lastCloseReason, reconnectAttempts: body?.reconnectAttempts, lastError: body?.lastError });
   if (name === "markets") Object.assign(details, { connected: body?.connected, connectionState: body?.connectionState, marketCount: body?.markets?.length, pricedMarketCount: body?.markets?.filter((m) => Number(m.price) > 0).length, missingPriceSymbols: body?.markets?.filter((m) => !(Number(m.price) > 0)).map((m) => m.symbol), bookCount: body?.bookCount, bookWatchlistCount: body?.bookWatchlistCount, missingBookSymbols: body?.missingBookSymbols, monUsd: body?.markets?.find((m) => String(m.symbol).toUpperCase() === "MON")?.price ?? null });
   if (name === "candles") Object.assign(details, { count: body?.count, source: body?.source });
-  if (name.startsWith("orderbook-")) Object.assign(details, { stale: body?.stale, snapshotKeys: body?.snapshot && typeof body.snapshot === "object" ? Object.keys(body.snapshot).slice(0, 8) : [] });
+  if (name.startsWith("orderbook-")) Object.assign(details, { stale: body?.stale, source: body?.source, snapshotKeys: body?.snapshot && typeof body.snapshot === "object" ? Object.keys(body.snapshot).slice(0, 8) : [] });
   if (name === "positions" || name === "signals") Object.assign(details, { count: body?.count, monUsd: body?.monUsd, mode: body?.mode });
   if (name === "research") Object.assign(details, { model: body?.model, recentResearchCount: body?.recentResearch?.length, geminiCooldownActive: body?.geminiAnalysis?.cooldown?.active ?? null });
   if (name === "intraday") Object.assign(details, { sampledAt: body?.sampledAt, sampleDays: body?.analysis?.sampleDays ?? body?.analysis?.days ?? null });
