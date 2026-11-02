@@ -3,7 +3,14 @@ import { readFile } from "node:fs/promises";
 import vm from "node:vm";
 
 const source = await readFile("reconstructed/patched-worker.js", "utf8");
-assert.ok(source.includes('new Set(["BTC", "ETH", "SOL"])'));
+assert.ok(source.includes('new Set(["BTC", "ETH", "MON", "SOL"])'), "SOL candle history must be added without dropping MON");
+assert.ok(source.includes('interval: "1m"'));
+assert.ok(!source.includes("processedCandidateSymbols"), "trend candidates must not reserve a symbol before scalp evaluation");
+assert.ok(source.includes("model='CIEL deterministic core scalp guard'"), "core scalp cooldown must be mode-specific");
+assert.ok(source.includes("model NOT IN ('CIEL Statistical Ensemble v1','CIEL Statistical Ensemble v1 + technical gate','CIEL deterministic range guard','CIEL deterministic core scalp guard'"), "trend cooldown must ignore scalp and pre-review gate rows");
+assert.ok(source.includes("if (forecastChecks >= 6 && !isScalpMode) continue;"), "trend review budget must not starve deterministic scalp candidates");
+const blockedReview = source.match(/if \(reviewed\.verdict === "REJECT" \|\| reviewed\.verdict === "WAIT" && !waitFallback\) \{([\s\S]*?)\n    \}/);
+assert.ok(blockedReview && /continue;/.test(blockedReview[1]) && !/return;/.test(blockedReview[1]), "a blocked candidate must not abort the whole advisor cycle");
 assert.ok(source.includes('interval: "1m"'));
 assert.ok(source.includes('mode:"CORE_PULLBACK_SCALP"'));
 assert.ok(source.includes('"5M_TREND_FILTER","1M_PULLBACK","1M_RECLAIM","VOLUME_CONFIRMATION"'));
@@ -51,4 +58,17 @@ assert.equal(longSignal.side,"LONG");
 assert.equal(longSignal.mode,"CORE_PULLBACK_SCALP");
 assert.ok(longSignal.stopPct>0 && longSignal.stopPct<=0.45, "long stop must fit the risk ceiling");
 
-console.log("PASS: core scalp rejects stale, incomplete, flat and no-pullback data, and accepts a valid long pullback/reclaim.");
+const mirror = (rows) => rows.map((c) => ({
+  ...c,
+  open_price: 200 - c.open_price,
+  high_price: 200 - c.low_price,
+  low_price: 200 - c.high_price,
+  close_price: 200 - c.close_price,
+}));
+const shortSignal = analyze("SOL", mirror(validLong), mirror(five), now);
+assert.ok(shortSignal, "valid closed-candle short pullback/reclaim should trigger");
+assert.equal(shortSignal.side, "SHORT");
+assert.equal(shortSignal.mode, "CORE_PULLBACK_SCALP");
+assert.ok(shortSignal.stopPct > 0 && shortSignal.stopPct <= 0.45, "short stop must fit the risk ceiling");
+
+console.log("PASS: core scalp rejects stale, incomplete, flat and no-pullback data, accepts long and short pullback/reclaims, and evaluates scalp/trend candidates independently.");
