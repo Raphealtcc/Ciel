@@ -20,6 +20,7 @@ verify-leverup-market-metadata:
   stage: verify
   needs: [verify-ciel-recovery]
   script:
+    - npm run check:paper
     - node scripts/verify-leverup-market-tiers.mjs
   artifacts:
     when: always
