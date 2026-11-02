@@ -80,6 +80,10 @@ assert.equal(minimumMarginForMarketLeverage(100), 11);
 assert.equal(minimumMarginForMarketLeverage(1001), 11);
 assert.equal(minimumMarginForMarketLeverage(25), null);
 assert.equal(minimumMarginForMarketLeverage(5), null);
+assert.equal(context.LEVERUP_MARKET_MAX_LEVERAGE.BTC, 100);
+assert.equal(context.LEVERUP_MARKET_MAX_LEVERAGE.ETH, 100);
+assert.equal(minimumMarginForMarketLeverage(context.LEVERUP_MARKET_MAX_LEVERAGE.QNT), null);
+assert.equal(minimumMarginForMarketLeverage(context.LEVERUP_MARKET_MAX_LEVERAGE.LIT), null);
 
 const stopLossMath = paperTradePnl({ side: "LONG", entryPrice: 100, entryMonUsd: 0.2, marginMon: 22, leverage: 50 }, 99.6, 0.2);
 assert.ok(Math.abs(stopLossMath.mon - (-4.4)) < 1e-9);
@@ -103,11 +107,11 @@ assert.equal(opened100.trade.leverage, 100);
 assert.equal(opened100.availableBalanceMon, 49);
 
 const thousandMarket = makeStorage();
-const opened1001 = await openPaperTrade(thousandMarket, params("BTC", "test-1001"));
-assert.equal(opened1001.opened, true);
-assert.equal(opened1001.trade.maxMarketLeverage, 1001);
-assert.equal(opened1001.trade.leverage, 100);
-assert.equal(opened1001.trade.marginMon, 11);
+const openedBtc = await openPaperTrade(thousandMarket, params("BTC", "test-btc-100"));
+assert.equal(openedBtc.opened, true);
+assert.equal(openedBtc.trade.maxMarketLeverage, 100);
+assert.equal(openedBtc.trade.leverage, 100);
+assert.equal(openedBtc.trade.marginMon, 11);
 
 const unsupported = await openPaperTrade(makeStorage(), params("CASHCAT", "unsupported"));
 assert.equal(unsupported.opened, false);
