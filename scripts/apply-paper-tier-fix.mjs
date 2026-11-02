@@ -362,7 +362,7 @@ replaceExactlyOnce(
 );
 replaceExactlyOnce(
   'if (!expectedBotId || url.hostname !== "ciel2.gatakehanami.workers.dev") return json2({ error: "Staging bot identity and staging host must be configured." }, 403);',
-  'const configuredWebhookUrl = (env.TELEGRAM_WEBHOOK_URL || "").trim();\\n        let target;\\n        try { target = new URL(configuredWebhookUrl); } catch { return json2({ error: "Primary-account staging webhook URL is not configured." }, 503); }\\n        if (!expectedBotId || target.protocol !== "https:" || target.pathname !== "/telegram/webhook" || url.origin !== target.origin) return json2({ error: "Staging bot identity and configured staging origin must match." }, 403);',
+  'const configuredWebhookUrl = (env.TELEGRAM_WEBHOOK_URL || "").trim();\n        let target;\n        try { target = new URL(configuredWebhookUrl); } catch { return json2({ error: "Primary-account staging webhook URL is not configured." }, 503); }\n        if (!expectedBotId || target.protocol !== "https:" || target.pathname !== "/telegram/webhook" || url.origin !== target.origin) return json2({ error: "Staging bot identity and configured staging origin must match." }, 403);',
   "require the explicitly configured primary-account staging origin for manual webhook registration"
 );
 replaceExactlyOnce(
@@ -372,7 +372,7 @@ replaceExactlyOnce(
 );
 replaceExactlyOnce(
   'const markerTargetsStaging = markerText.startsWith("https://ciel2.gatakehanami.workers.dev/telegram/webhook:");',
-  'const configuredWebhookUrl = String(env.TELEGRAM_WEBHOOK_URL || "").trim();\\n        const markerTargetsStaging = Boolean(configuredWebhookUrl && markerText.startsWith(configuredWebhookUrl + ":"));',
+  'const configuredWebhookUrl = String(env.TELEGRAM_WEBHOOK_URL || "").trim();\n        const markerTargetsStaging = Boolean(configuredWebhookUrl && markerText.startsWith(configuredWebhookUrl + ":"));',
   "compare the Telegram marker against the configured primary-account staging URL"
 );
 
