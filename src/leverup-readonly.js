@@ -768,6 +768,7 @@ export function buildMarketOpenPlan({
     safetyBufferPct: 0,
     now,
   });
+  preflight.inferredLeverage = Number(inferredLeverage);
   const fees = snapshot.pairView.feeConfig;
   if (!fees || typeof fees.openFeeP !== "number") throw new Error("LIVE_OPEN_FEE_CONFIG_MISSING");
   const usesLvToken = [LEVERUP_TOKENS.LVMON, LEVERUP_TOKENS.LVUSD].some((x) => x.toLowerCase() === tokenIn.toLowerCase());
@@ -951,6 +952,8 @@ export async function readLeverUpAccountSnapshot({
   return {
     checkedAt: Date.now(),
     blockNumber: blockNumber.toString(),
+    traderAddress: traderAddress || null,
+    agentAddress: agentAddress || null,
     market,
     pairView,
     oraclePriceRaw: prices[pairBase.toLowerCase()].toString(),

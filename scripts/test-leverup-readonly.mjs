@@ -14,6 +14,7 @@ import {
   readAgentAuthorization,
   readLastAgentNonce,
   normalizePairView,
+  buildMarketOpenPlan,
 } from "../src/leverup-readonly.js";
 
 const tiers = [
@@ -139,4 +140,62 @@ assert.equal(estimate.openFeeUsd, 0.3);
 assert.equal(estimate.closeFeeUsd, 0.3);
 assert.ok(estimate.holdingFeeUsd > 0);
 assert.ok(estimate.fundingFeeUsd < 0);
-console.log("PASS: 50x floor, dynamic tier gate, collateral minimum, cost estimates, live accrual reads, and settlement reconciliation.");
+
+const WMON = "0x3bd359C1119dA7Da1D913D1C4D2B7c461115433A";
+const LVMON = "0x91b81bfbe3A747230F0529Aa28d8b2Bc898E6D56";
+const USDC = "0x754704Bc059F8C67012fEd69BC8A327a5aafb603";
+const wmonRaw = 100n * 10n ** 18n;
+const planSnapshot = {
+  traderAddress: testTrader,
+  agentAddress: testAgent,
+  collateralRatio: 1,
+  market: { pairName: "BTC/USD", base: "0x3333333333333333333333333333333333333333", status: "AVAILABLE", executionVenue: "POOL", minHoldingSeconds: 0 },
+  pairView: {
+    base: "0x3333333333333333333333333333333333333333",
+    leverageMargins: [
+      { notionalUsdRaw: (20n * 10n ** 18n).toString(), maxLeverage: 100, tier: 0 },
+      { notionalUsdRaw: (100n * 10n ** 18n).toString(), maxLeverage: 50, tier: 1 },
+    ],
+    minHoldingSeconds: 0,
+    longHoldingFeeRateRaw: "1000000",
+    shortHoldingFeeRateRaw: "1000000",
+    feeConfig: { openFeeP: 3, closeFeeP: 3, enabled: true, minCloseFeeP: 0, lvTokenDiscountP: 5000 },
+    slippageConfig: { enabled: true, slippageLongP: 5, slippageShortP: 5 },
+  },
+  marketInfo: { fundingFeeRate: "4000000000" },
+  oraclePriceRaw: (1000n * 10n ** 18n).toString(),
+  monUsdPriceRaw: (2n * 10n ** 16n).toString(),
+  minimumNotionalRaw: (20n * 10n ** 18n).toString(),
+  accountTokenStates: {
+    [WMON.toLowerCase()]: { balance: wmonRaw.toString(), allowance: wmonRaw.toString() },
+    [USDC.toLowerCase()]: { balance: (100n * 10n ** 6n).toString(), allowance: (100n * 10n ** 6n).toString() },
+  },
+  antiDdosConfig: {
+    fetchedAt: Date.now(), validUntil: Date.now() + 60_000,
+    config: [{ action: 0, enabled: true, priority: 0, feeToken: USDC, antiDdosFee: 1000n.toString() }],
+  },
+  agentAuthorization: { authorized: true, agentAddress: testAgent, canMarketOpen: true, canMarketClose: true, canPartialClose: true },
+  lastAgentNonce: "77",
+};
+const plan = buildMarketOpenPlan({
+  snapshot: planSnapshot, desiredMarginMon: 20, maxTradeMarginMon: 50,
+  inferredLeverage: 100, side: "LONG", expectedHoldSeconds: 3600,
+});
+assert.equal(plan.selectedLeverage, 100);
+assert.equal(plan.notionalUsd, 20);
+assert.equal(plan.marginMonUsed, "10");
+assert.equal(plan.action, 0);
+assert.ok(BigInt(plan.amountInRaw) > 10n * 10n ** 18n, "amountIn includes the open fee");
+assert.equal(plan.feeToken.toLowerCase(), USDC.toLowerCase());
+assert.equal(plan.nonce, (BigInt(Date.now()) > 78n ? plan.nonce : "78"));
+assert.equal(plan.mode, "DRY_RUN_ONLY");
+assert.throws(() => buildMarketOpenPlan({
+  snapshot: planSnapshot, desiredMarginMon: 5, maxTradeMarginMon: 50,
+  inferredLeverage: 100, side: "LONG", expectedHoldSeconds: 3600,
+}), /INSUFFICIENT_MARGIN_FOR_50X_PLUS_TIER_MINIMUM/);
+assert.throws(() => buildMarketOpenPlan({
+  snapshot: planSnapshot, desiredMarginMon: 20, maxTradeMarginMon: 50,
+  inferredLeverage: 25, side: "LONG", expectedHoldSeconds: 3600,
+}), /INFERENCE_BELOW_50X/);
+
+console.log("PASS: 50x floor, dynamic tier sizing, WMON+fee-token balance/allowance checks, amountIn/open-fee calculation, cost estimates, and settlement reconciliation.");
