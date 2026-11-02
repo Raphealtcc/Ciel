@@ -193,6 +193,30 @@ once(
   "evaluate scalp and trend candidates independently without symbol reservation",
 );
 
+
+once(
+  '    const priorReview = await env.DB.prepare("SELECT created_at_ms FROM advisor_ai_audit WHERE symbol=? AND model!=\\'CIEL Statistical Ensemble v1\\' AND model!=\\'CIEL deterministic range guard\\' ORDER BY created_at_ms DESC LIMIT 1").bind(candidate.symbol).first();',
+  `    const priorReviewSql = candidate.mode === "CORE_PULLBACK_SCALP"
+      ? "SELECT created_at_ms FROM advisor_ai_audit WHERE symbol=? AND model='CIEL deterministic core scalp guard' ORDER BY created_at_ms DESC LIMIT 1"
+      : candidate.mode === "RANGE_SCALP"
+        ? "SELECT created_at_ms FROM advisor_ai_audit WHERE symbol=? AND model='CIEL deterministic range guard' ORDER BY created_at_ms DESC LIMIT 1"
+        : "SELECT created_at_ms FROM advisor_ai_audit WHERE symbol=? AND model NOT IN ('CIEL Statistical Ensemble v1','CIEL Statistical Ensemble v1 + technical gate','CIEL deterministic range guard','CIEL deterministic core scalp guard','CIEL deterministic positioning gate','Hyperliquid market-quality gate') ORDER BY created_at_ms DESC LIMIT 1";
+    const priorReview = await env.DB.prepare(priorReviewSql).bind(candidate.symbol).first();`,
+  "separate scalp and trend review cooldowns and ignore transient pre-review WAIT rows",
+);
+
+once(
+  '    if (forecastChecks >= 6) break;\\n    forecastChecks++;',
+  '    if (forecastChecks >= 6 && !isScalpMode) continue;\\n    if (!isScalpMode) forecastChecks++;',
+  "keep trend review budget from starving deterministic scalp candidates",
+);
+
+once(
+  '      console.log("Ciel blocked " + candidate.symbol + ": Gemini " + reviewed.verdict + " \\u2014 " + reviewed.reason);\\n      return;\\n    }\\n    const collateral = PAPER_MARGIN_MON, leverage = PAPER_LEVERAGE;',
+  '      console.log("Ciel blocked " + candidate.symbol + ": review " + reviewed.verdict + " \\u2014 " + reviewed.reason);\\n      continue;\\n    }\\n    const collateral = PAPER_MARGIN_MON, leverage = PAPER_LEVERAGE;',
+  "continue to the next candidate when one candidate is rejected or waits",
+);
+
 once(
   'const intraday = candidate.mode === "RANGE_SCALP" ? null : await getIntradayPattern',
   'const intraday = isScalpMode ? null : await getIntradayPattern',
