@@ -367,9 +367,6 @@ for (let offset = 0; offset < bookTargets.length; offset += 4) {
   hyperliquidFeedDiagnostics.allWatchlistBookChecks.push(...batch);
 }
 
-  }
-}
-
 const report = {
   checkedAt: new Date().toISOString(),
   chainId: "143",
