@@ -13,6 +13,8 @@ const pairBase = "0x2222222222222222222222222222222222222222";
 const tokenIn = "0x3333333333333333333333333333333333333333";
 const lvToken = "0x4444444444444444444444444444444444444444";
 const hash = `0x${"ab".repeat(32)}`;
+const offset40 = "0000000000000000000000000000000000000000000000000000000000000040";
+const offset60 = "0000000000000000000000000000000000000000000000000000000000000060";
 
 const openData = buildActionData(OneClickAction.MARKET_OPEN, trader, [
   pairBase, true, tokenIn, lvToken, 11n * 10n ** 18n, 10000000000n,
@@ -25,16 +27,23 @@ assert.equal(openData.slice(2 + 24, 2 + 64), pairBase.slice(2).toLowerCase(),
 const closeData = buildActionData(OneClickAction.MARKET_CLOSE, trader, [hash, 0]);
 assert.equal(closeData.length, 2 + 2 * 64);
 
-const dynamic = buildActionData(OneClickAction.BATCH_MARKET_CLOSE, trader, [[hash], 0]);
-assert.equal(dynamic.slice(2, 66), "0000000000000000000000000000000000000000000000000000000000000060",
-  "dynamic offset must include the prepended trader word");
+const dynamicClose = buildActionData(OneClickAction.BATCH_MARKET_CLOSE, trader, [[hash], 0]);
+assert.equal(dynamicClose.slice(2, 66), offset60,
+  "batch-close dynamic offset must include the prepended trader word");
 
 const tpData = buildActionData(OneClickAction.BATCH_CREATE_DECREASE_ORDERS, trader, [
   hash,
   [[0, 2n * 10n ** 18n, 5000000000n, 0], [1, 1n * 10n ** 18n, 10000000000n, 0]],
 ]);
-assert.equal(tpData.slice(2, 66), "0000000000000000000000000000000000000000000000000000000000000060",
-  "TP/SL dynamic offset must include the prepended trader word");
+assert.equal(tpData.slice(2, 66), hash.slice(2), "batch TP/SL data must begin with the position hash");
+assert.equal(tpData.slice(2 + 64, 2 + 128), offset60,
+  "batch TP/SL array offset must include the prepended trader word");
+
+const updateData = buildActionData(OneClickAction.BATCH_UPDATE_DECREASE_ORDERS, trader, [
+  [[hash, 2n * 10n ** 18n, 5000000000n, 0]],
+]);
+assert.equal(updateData.slice(2, 66), offset40,
+  "batch-update array offset must include the prepended trader word");
 
 const intent = buildTypedIntent({
   action: OneClickAction.MARKET_CLOSE,
