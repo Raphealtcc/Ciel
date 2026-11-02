@@ -1,8 +1,10 @@
-const BASE = process.env.CIEL_STAGING_BASE_URL || "https://ciel2.gatakehanami.workers.dev";
-const stagingHost = "ciel2.gatakehanami.workers.dev";
-if (new URL(BASE).hostname !== stagingHost) {
-  throw new Error("Refusing to smoke-test a non-staging host: " + new URL(BASE).hostname);
+const configuredBase = (process.env.CIEL_STAGING_BASE_URL || "").trim();
+if (!configuredBase) throw new Error("CIEL_STAGING_BASE_URL must be set to the primary account staging Worker. Refusing to guess or use the connected account.");
+const parsedBase = new URL(configuredBase);
+if (parsedBase.protocol !== "https:" || ["ciel2.gatakehanami.workers.dev", "ciel.leno3z4rrrri.workers.dev"].includes(parsedBase.hostname)) {
+  throw new Error("Refusing to smoke-test the connected Cloudflare account or a non-HTTPS host: " + parsedBase.hostname);
 }
+const BASE = parsedBase.origin;
 
 const routes = [
   ["/", "root"],

@@ -13,7 +13,7 @@ assert.equal(config.main, "reconstructed/patched-worker.js");
 assert.equal(config.compatibility_date, "2026-09-08");
 assert.equal(config.workers_dev, true);
 assert.equal(config.preview_urls, true);
-assert.equal(config.vars.TELEGRAM_WEBHOOK_URL, "https://ciel2.gatakehanami.workers.dev/telegram/webhook");
+assert.equal(config.vars.TELEGRAM_WEBHOOK_URL, "", "Primary account staging hostname is not yet verified; do not guess it.");
 assert.equal(config.vars.TELEGRAM_STAGING_BOT_ID, "");
 assert.deepEqual(config.triggers.crons, ["* * * * *"]);
 

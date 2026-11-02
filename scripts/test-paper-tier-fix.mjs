@@ -233,6 +233,8 @@ assert.ok(source.includes("Staging bot identity not verified"));
 assert.ok(source.includes("telegramWebhookMarkerTargetsProduction"));
 assert.ok(source.includes("bot identity does not match TELEGRAM_STAGING_BOT_ID"));
 assert.ok(source.includes("TELEGRAM_WEBHOOK_URL"));
+assert.ok(!source.includes("https://ciel2.gatakehanami.workers.dev"));
+assert.ok(source.includes("Primary-account staging webhook URL is not configured."));
 assert.ok(source.includes("/api/paper"));
 assert.ok(source.includes("/api/diagnostics"));
 assert.ok(source.includes("xyz:QNT"));
