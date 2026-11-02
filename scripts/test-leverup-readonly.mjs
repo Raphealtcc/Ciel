@@ -103,7 +103,7 @@ assert.throws(() => buildLeverUpPreflight({
 assert.throws(() => buildLeverUpPreflight({
   market: { status: "AVAILABLE", minHoldingSeconds: 0, executionVenue: "POOL" },
   pairView: { leverageMargins: tiers, minHoldingSeconds: 0 },
-  expectedHoldSeconds: 0,
+  expectedHoldSeconds: 0, isLong: true,
   oraclePriceRaw: "1", monUsdPriceRaw: "1", minimumNotionalRaw: "20000000000000000000",
   requestedLeverage: 25, availableMarginMon: 100, collateralRatio: 1,
 }), /BELOW_50X/);
