@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
 const raw = await readFile("wrangler.jsonc", "utf8");
-const json = raw.replace(/^\\s*\\/\\/.*$/gm, "");
+const json = raw.replace(/^\s*\/\/.*$/gm, "");
 const config = JSON.parse(json);
 
 const expectedD1 = "a41e95fe-58cc-443a-839e-5ee0525e9fcf";
