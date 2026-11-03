@@ -14,8 +14,8 @@
 
 ## Confirmed public wallet identities
 
-- Trader wallet: `0x7aCd7C622a87a148CcdEBd213D7C4070E200186F`
-- Agent wallet: `0xd422fc040ad9294d553150Cf5646Ab0B1729E443`
+- Trader wallet: `0xd422fc040ad9294d553150Cf5646Ab0B1729E443`
+- Agent wallet: `0x77DF3ae15b994131797905e59675da3544C90DFF`
 
 These are public addresses only. The trader wallet remains the owner of funds and positions. The agent key is an intent signer and must never be given the trader wallet's private key.
 
@@ -35,8 +35,8 @@ The staging `wrangler.jsonc` now contains the two confirmed public addresses and
 
 | Name | Type | Value / purpose |
 | --- | --- | --- |
-| `LEVERUP_TRADER_ADDRESS` | Plain text | `0x7aCd7C622a87a148CcdEBd213D7C4070E200186F` |
-| `LEVERUP_AGENT_ADDRESS` | Plain text | `0xd422fc040ad9294d553150Cf5646Ab0B1729E443` |
+| `LEVERUP_TRADER_ADDRESS` | Plain text | `0x77DF3ae15b994131797905e59675da3544C90DFF` |
+| `LEVERUP_AGENT_ADDRESS` | Plain text | `0x77DF3ae15b994131797905e59675da3544C90DFF` |
 | `LEVERUP_LIVE_TRADING` | Plain text | `false` |
 | `LEVERUP_KILL_SWITCH` | Plain text | `true` |
 | `LEVERUP_MIN_LEVERAGE` | Plain text | `50` |
