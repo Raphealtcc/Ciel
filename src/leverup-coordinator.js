@@ -417,7 +417,8 @@ export async function runLeverUpPositionManager({ env, db, now = Date.now(), dep
     const latestPrice = prices[position.pairBase];
     if (!latestPrice) continue;
     const saved = entries.find((x) => String(x.positionHash || "").toLowerCase() === hash);
-    const candidate = saved?.candidate || {};
+    if (!saved) continue; // Never apply CIEL exit policy to a manually opened or otherwise unmanaged position.
+    const candidate = saved.candidate || {};
     const partials = Array.isArray(candidate.partialTakeProfits) ? candidate.partialTakeProfits : [];
     const completed = Array.isArray(saved?.completedPartialLevels) ? saved.completedPartialLevels : [];
     const action = evaluateLeverUpPositionAction({
