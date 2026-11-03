@@ -208,7 +208,7 @@ export function evaluateLeverUpPositionAction({ position, currentPriceRaw, now =
       if (completedPartialLevels.includes(i)) continue;
       const level = partialTakeProfits[i] || {};
       const targetPct = Number(level.targetPct), closePct = Number(level.closePct ?? level.percent);
-      if (!(targetPct > 0 && closePct > 0 && closePct < 100)) continue;
+      if (!(targetPct > 0 && targetPct < 100 && closePct > 0 && closePct < 100)) continue;
       const delta = BigInt(Math.round(targetPct * 100));
       const partialTarget = isLong ? entry * (10_000n + delta) / 10_000n : entry * (10_000n - delta) / 10_000n;
       if (isLong ? price >= partialTarget : price <= partialTarget) {
@@ -278,6 +278,17 @@ export async function reconcilePendingLeverUpIntents({ env, db, now = Date.now()
       }
       if (Number(row.action) === OneClickAction.MARKET_CLOSE || Number(row.action) === OneClickAction.PARTIAL_CLOSE) {
         await updateIntent(db, row.signal_id, "EXECUTED", { payload: { ...payload, intentStatus: state, executedAt: now } });
+        if (Number(row.action) === OneClickAction.PARTIAL_CLOSE && Number.isInteger(Number(payload.levelIndex))) {
+          const entryRows = await db.prepare("SELECT signal_id,payload_json,status FROM leverup_execution_intents WHERE action = 0 AND status IN ('EXECUTED','RECONCILED','SUBMITTED','PENDING')").all();
+          for (const entryRow of entryRows.results || []) {
+            let entryPayload = {};
+            try { entryPayload = JSON.parse(entryRow.payload_json || "{}"); } catch {}
+            if (String(entryPayload.positionHash || "").toLowerCase() !== String(payload.positionHash || "").toLowerCase()) continue;
+            const levels = new Set(Array.isArray(entryPayload.completedPartialLevels) ? entryPayload.completedPartialLevels : []);
+            levels.add(Number(payload.levelIndex));
+            await updateIntent(db, entryRow.signal_id, entryRow.status, { payload: { ...entryPayload, completedPartialLevels: [...levels] } });
+          }
+        }
         reconciled++; continue;
       }
       await updateIntent(db, row.signal_id, "RECONCILED", { payload: { ...payload, intentStatus: state } });
@@ -386,7 +397,7 @@ export async function runLeverUpPositionManager({ env, db, now = Date.now(), dep
       : [position.positionHash, slippage];
     const fee = selectFeeToken(oneClickAction, antiDdos.config, balances, [], { requireAllowance: false });
     const nonce = await (dependencies.readNonce || readLastAgentNonce)(traderAddress, agentAddress, { publicClient: client });
-    const signalId = "position-" + hash.slice(2, 22) + "-" + action.action.toLowerCase() + (action.levelIndex == null ? "" : "-" + action.levelIndex);
+    const signalId = "position-" + hash + "-" + action.action.toLowerCase() + (action.levelIndex == null ? "" : "-" + action.levelIndex);
     const result = await submitLeverUpIntent({
       env, db, signalId, action: oneClickAction, actionValues, traderAddress, agentAddress,
       agentAuthorization: auth, nonce: (BigInt(nonce) + 1n).toString(), deadline: Math.floor(now / 1000) + 300,
