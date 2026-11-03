@@ -24,7 +24,7 @@ once(
 
 once(
   '      await notify(env, setupMessage(position, candidate, reviewed, prices.MON, forecast, quality.market, intraday) + paperLine, [',
-  '      const leverUpLine = formatLeverUpAdvisorLine(leverUpPlan);\n      await notify(env, setupMessage(position, candidate, reviewed, prices.MON, forecast, quality.market, intraday) + paperLine + "\\n\\n" + leverUpLine, [',
+  '      const leverUpLine = formatLeverUpAdvisorLine(leverUpPlan);\n      await notify(env, setupMessage(position, candidate, reviewed, prices.MON, forecast, quality.market, intraday) + paperLine + "\n\n" + leverUpLine, [',
   "attach real LeverUp preflight, collateral and fee status to the CIEL trade card",
 );
 
@@ -36,8 +36,8 @@ once(
 );
 
 once(
-  '  async scheduled(_event, env, ctx) {\\n    ctx.waitUntil(ensureTelegramWebhook(env));',
-  '  async scheduled(_event, env, ctx) {\\n    ctx.waitUntil(ensureTelegramWebhook(env));\\n    if (String(env?.LEVERUP_PREFLIGHT_ENABLED).toLowerCase() === "true") {\\n      ctx.waitUntil((async () => {\\n        try {\\n          const now = Date.now();\\n          const diagnosticKey = "ciel:leverup:diagnostics:v1";\\n          const last = Number(await env.CIEL_STATE.get(diagnosticKey + ":checkedAt") || 0);\\n          if (!last || now - last >= 15 * 60 * 1000) {\\n            let diagnostics;\\n            try { diagnostics = await runLeverUpDiagnostics({ env, now }); }\\n            catch (error) { diagnostics = { ok: false, mode: "READ_ONLY_DRY_RUN", error: String(error?.message || error).slice(0, 220), orderSubmitted: false }; }\\n            await env.CIEL_STATE.put(diagnosticKey, JSON.stringify(diagnostics), { expirationTtl: 3600 });\\n            await env.CIEL_STATE.put(diagnosticKey + ":checkedAt", String(now), { expirationTtl: 3600 });\\n          }\\n          const lifecycle = await runLeverUpPositionManager({ env, db: env.DB, now });\\n          if (lifecycle.submitted) console.log("LeverUp position manager submitted " + lifecycle.submitted + " exit intent(s).");\\n        } catch (error) {\\n          console.error("LeverUp scheduled read/management cycle failed: " + String(error?.message || error).slice(0, 220));\\n        }\\n      })());\\n    }',
+  '  async scheduled(_event, env, ctx) {\n    ctx.waitUntil(ensureTelegramWebhook(env));',
+  '  async scheduled(_event, env, ctx) {\n    ctx.waitUntil(ensureTelegramWebhook(env));\n    if (String(env?.LEVERUP_PREFLIGHT_ENABLED).toLowerCase() === "true") {\n      ctx.waitUntil((async () => {\n        try {\n          const now = Date.now();\n          const diagnosticKey = "ciel:leverup:diagnostics:v1";\n          const last = Number(await env.CIEL_STATE.get(diagnosticKey + ":checkedAt") || 0);\n          if (!last || now - last >= 15 * 60 * 1000) {\n            let diagnostics;\n            try { diagnostics = await runLeverUpDiagnostics({ env, now }); }\n            catch (error) { diagnostics = { ok: false, mode: "READ_ONLY_DRY_RUN", error: String(error?.message || error).slice(0, 220), orderSubmitted: false }; }\n            await env.CIEL_STATE.put(diagnosticKey, JSON.stringify(diagnostics), { expirationTtl: 3600 });\n            await env.CIEL_STATE.put(diagnosticKey + ":checkedAt", String(now), { expirationTtl: 3600 });\n          }\n          const lifecycle = await runLeverUpPositionManager({ env, db: env.DB, now });\n          if (lifecycle.submitted) console.log("LeverUp position manager submitted " + lifecycle.submitted + " exit intent(s).");\n        } catch (error) {\n          console.error("LeverUp scheduled read/management cycle failed: " + String(error?.message || error).slice(0, 220));\n        }\n      })());\n    }',
   "run read-only diagnostics and position/settlement management from the existing minute cron"
 );
 
