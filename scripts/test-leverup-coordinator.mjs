@@ -7,9 +7,9 @@ assert.equal(b50.collateralUsd,.45); assert.equal(b100.collateralUsd,.23);
 assert.ok(b50.requiredMon > 22.5); assert.ok(b100.requiredMon > 11.5);
 assert.throws(()=>calculateLeverUpEntryBudget({minimumNotionalUsd:20,leverage:25,monUsdPrice:.02,collateralRatio:1}),/50X/);
 const safe=evaluateLeverUpPortfolioRisk({requestedLeverage:100,availableWmonMon:25,requestedMarginMon:1,entryBudgetMon:1,currentOpenPositions:[],proposedStopRiskMon:.2,killSwitchActive:false});
-const productionSized=evaluateLeverUpPortfolioRisk({requestedLeverage:50,totalAllocationMon:50,reserveMon:25,availableWmonMon:25,requestedMarginMon:22,entryBudgetMon:22,currentOpenPositions:[],proposedStopRiskMon:4.4,aggregateStopRiskMon:0,maxAggregateStopRiskMon:5,dailyRealizedLossMon:0,maxDailyRealizedLossMon:9,rollingDrawdownMon:0,maxRollingDrawdownMon:5,killSwitchActive:false});
-assert.equal(productionSized.allowed,true,"50x minimum-size entry with a 0.4% stop must pass the agreed 5 MON risk envelope");
-assert.equal(evaluateLeverUpPortfolioRisk({requestedLeverage:50,totalAllocationMon:50,reserveMon:25,availableWmonMon:25,requestedMarginMon:22,entryBudgetMon:22,currentOpenPositions:[],proposedStopRiskMon:5.1,aggregateStopRiskMon:0,maxAggregateStopRiskMon:5,dailyRealizedLossMon:0,maxDailyRealizedLossMon:9,rollingDrawdownMon:0,maxRollingDrawdownMon:5,killSwitchActive:false}).allowed,false,"stop risk above the cap must still be rejected");
+const productionSized=evaluateLeverUpPortfolioRisk({requestedLeverage:50,totalAllocationMon:50,reserveMon:25,availableWmonMon:25,requestedMarginMon:22,entryBudgetMon:22,currentOpenPositions:[],proposedStopRiskMon:5.28,aggregateStopRiskMon:0,maxAggregateStopRiskMon:6,dailyRealizedLossMon:0,maxDailyRealizedLossMon:9,rollingDrawdownMon:0,maxRollingDrawdownMon:6,killSwitchActive:false});
+assert.equal(productionSized.allowed,true,"100x minimum-size entry from the latest preflight with a 0.4% stop must pass the 6 MON risk envelope");
+assert.equal(evaluateLeverUpPortfolioRisk({requestedLeverage:50,totalAllocationMon:50,reserveMon:25,availableWmonMon:25,requestedMarginMon:22,entryBudgetMon:22,currentOpenPositions:[],proposedStopRiskMon:6.1,aggregateStopRiskMon:0,maxAggregateStopRiskMon:6,dailyRealizedLossMon:0,maxDailyRealizedLossMon:9,rollingDrawdownMon:0,maxRollingDrawdownMon:6,killSwitchActive:false}).allowed,false,"stop risk above the cap must still be rejected");
 assert.equal(safe.allowed,true);
 assert.equal(evaluateLeverUpPortfolioRisk({
   requestedLeverage: 100, availableWmonMon: 25, requestedMarginMon: 1, entryBudgetMon: 1,

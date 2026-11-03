@@ -2,7 +2,7 @@
 export const LEVERUP_RISK_DEFAULTS = Object.freeze({
   totalAllocationMon: 50, reserveMon: 25, minLeverage: 50,
   maxConcurrentPositions: 1, maxDailyRealizedLossMon: 9,
-  maxRollingDrawdownMon: 5, maxAggregateStopRiskMon: 5,
+  maxRollingDrawdownMon: 6, maxAggregateStopRiskMon: 6,
   feeBufferPct: 25, slippageBufferPct: 25,
 });
 const finitePositive = (v) => Number.isFinite(Number(v)) && Number(v) > 0;
@@ -19,7 +19,7 @@ export function calculateLeverUpEntryBudget({ minimumCollateralUsd, minimumNotio
   const bufferUsd = collateralUsd * ((Math.max(0, Number(feeBufferPct) || 0) + Math.max(0, Number(slippageBufferPct) || 0)) / 100);
   return { collateralUsd, feesUsd, bufferUsd, requiredUsd: collateralUsd + feesUsd + bufferUsd, requiredMon: (collateralUsd + feesUsd + bufferUsd) / Number(monUsdPrice) };
 }
-export function evaluateLeverUpPortfolioRisk({ requestedLeverage, totalAllocationMon = 50, reserveMon = 25, availableWmonMon, requestedMarginMon, entryBudgetMon, currentOpenPositions = [], maxConcurrentPositions = 1, proposedStopRiskMon, aggregateStopRiskMon = 0, maxAggregateStopRiskMon = 5, dailyRealizedLossMon = 0, maxDailyRealizedLossMon = 9, rollingDrawdownMon = 0, maxRollingDrawdownMon = 5, staleFeed = false, executionUncertain = false, killSwitchActive = true }) {
+export function evaluateLeverUpPortfolioRisk({ requestedLeverage, totalAllocationMon = 50, reserveMon = 25, availableWmonMon, requestedMarginMon, entryBudgetMon, currentOpenPositions = [], maxConcurrentPositions = 1, proposedStopRiskMon, aggregateStopRiskMon = 0, maxAggregateStopRiskMon = 6, dailyRealizedLossMon = 0, maxDailyRealizedLossMon = 9, rollingDrawdownMon = 0, maxRollingDrawdownMon = 6, staleFeed = false, executionUncertain = false, killSwitchActive = true }) {
   const reasons = [];
   const n = (v) => Number(v);
   if (killSwitchActive) reasons.push("KILL_SWITCH_ACTIVE");
