@@ -205,6 +205,13 @@ export function formatLeverUpAdvisorLine(record) {
   const account = record.account || {};
   const accountLine = "WMON balance " + (account.wmonBalanceMon || "unavailable") +
     " MON; agent market-open permission " + (account.canMarketOpen ? "verified" : "not verified") + ".";
+  const riskLine = record.coordination?.status === "REJECTED"
+    ? "PORTFOLIO RISK BLOCKED — " + (record.coordination.risk?.reasons || []).join(", ") + "."
+    : record.coordination?.status === "REJECTED_RISK"
+      ? "LIVE ENTRY BLOCKED BY PORTFOLIO RISK — " + (record.coordination.reasons || []).join(", ") + "."
+      : record.coordination?.status === "SUBMITTED"
+        ? "LIVE INTENT SUBMITTED — " + String(record.coordination.intentHash || "hash pending") + "."
+        : null;
   if (record.status === "PREFLIGHT_PASS_LIVE_DISABLED" || record.status === "PREFLIGHT_PASS_LIVE_ENABLED") {
     const costs = record.estimatedProtocolCosts || {};
     return [
@@ -214,6 +221,7 @@ export function formatLeverUpAdvisorLine(record) {
         "; projected holding $" + Number(costs.holdingFeeUsd || 0).toFixed(4) +
         "; projected funding $" + Number(costs.fundingFeeUsd || 0).toFixed(4) + ".",
       accountLine,
+      ...(riskLine ? [riskLine] : []),
       record.status === "PREFLIGHT_PASS_LIVE_ENABLED" ? "LIVE MODE — idempotent execution coordinator handled submission and reconciliation." : "DRY RUN ONLY — live trading is OFF; no order was signed or submitted.",
     ].join("\\n");
   }
