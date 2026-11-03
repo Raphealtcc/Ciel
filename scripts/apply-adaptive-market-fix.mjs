@@ -158,5 +158,7 @@ once(
   "retain the 60-minute continuation hold in paper execution",
 );
 
+once("(s.mode === \"CORE_PULLBACK_SCALP\" ? \"CORE PULLBACK SCALP\" : s.mode === \"RANGE_SCALP\" ? \"RANGE SCALP\" : \"TREND HOLD\")","(s.mode === \"CORE_PULLBACK_SCALP\" ? \"CORE PULLBACK SCALP\" : s.mode === \"CORE_TREND_CONTINUATION\" ? \"5M TREND CONTINUATION\" : s.mode === \"RANGE_SCALP\" ? \"RANGE SCALP\" : \"TREND HOLD\")","label 5m continuation correctly in the setup message");
+
 await writeFile(file,source);
 console.log("Adaptive core-market patch complete: BTC/ETH/SOL lead the scan, all other configured markets remain eligible, paper outcomes adjust ranking only after eight closed samples, and no D1 writes or risk-limit changes are introduced.");
