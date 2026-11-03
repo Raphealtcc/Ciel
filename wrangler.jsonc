@@ -1,6 +1,6 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
-  // Isolated staging Worker. These IDs are the staging resources supplied by the user.
+  // Production replacement Worker. The attached D1/KV resources remain isolated paper/staging datasets.
   "name": "ciel2",
   "main": "reconstructed/patched-worker.js",
   "compatibility_date": "2026-09-08",
@@ -37,7 +37,7 @@
     "LEVERUP_MAX_TRADE_MARGIN_MON": "25",
     "LEVERUP_MAX_CONCURRENT_POSITIONS": "1",
     "LEVERUP_MAX_DAILY_LOSS_MON": "9",
-    "LEVERUP_MAX_DRAWDOWN_MON": "6",
+    "LEVERUP_MAX_DRAWDOWN_MON": "9",
     "LEVERUP_MAX_AGGREGATE_STOP_RISK_MON": "6",
     "LEVERUP_COLLATERAL_100X_USD": "0.23",
     "LEVERUP_COLLATERAL_50X_USD": "0.43"
@@ -77,7 +77,7 @@
       "LEVERUP_MAX_TRADE_MARGIN_MON": "25",
       "LEVERUP_MAX_CONCURRENT_POSITIONS": "1",
       "LEVERUP_MAX_DAILY_LOSS_MON": "9",
-      "LEVERUP_MAX_DRAWDOWN_MON": "6",
+      "LEVERUP_MAX_DRAWDOWN_MON": "9",
       "LEVERUP_MAX_AGGREGATE_STOP_RISK_MON": "6",
       "LEVERUP_COLLATERAL_100X_USD": "0.23",
       "LEVERUP_COLLATERAL_50X_USD": "0.43"

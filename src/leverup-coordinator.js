@@ -37,7 +37,7 @@ export async function prepareLeverUpExecution({ signal, preflight, account, port
     dailyRealizedLossMon: portfolio?.dailyRealizedLossMon ?? 0,
     maxDailyRealizedLossMon: env?.LEVERUP_MAX_DAILY_LOSS_MON ?? 9,
     rollingDrawdownMon: portfolio?.rollingDrawdownMon ?? 0,
-    maxRollingDrawdownMon: env?.LEVERUP_MAX_DRAWDOWN_MON ?? 6,
+    maxRollingDrawdownMon: env?.LEVERUP_MAX_DRAWDOWN_MON ?? 9,
     staleFeed: Boolean(account?.staleFeed),
     executionUncertain: Boolean(account?.executionUncertain),
     killSwitchActive: false,
@@ -186,7 +186,7 @@ export async function executeLeverUpEntry({ env, db, candidate, signalId, snapsh
     dailyRealizedLossMon: portfolioRisk.dailyRealizedLossMon,
     maxDailyRealizedLossMon: env.LEVERUP_MAX_DAILY_LOSS_MON ?? 9,
     rollingDrawdownMon: portfolioRisk.rollingDrawdownMon,
-    maxRollingDrawdownMon: env.LEVERUP_MAX_DRAWDOWN_MON ?? 6,
+    maxRollingDrawdownMon: env.LEVERUP_MAX_DRAWDOWN_MON ?? 9,
     staleFeed: now - Number(snapshot.checkedAt || now) > 30_000, executionUncertain: false, killSwitchActive: false,
   });
   if (!risk.allowed) return { status: "REJECTED_RISK", reasons: risk.reasons, risk };
