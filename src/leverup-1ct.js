@@ -203,6 +203,35 @@ export function assertLiveExecutionAllowed({
   }
 }
 
+// Signs an intent locally for validation only. This function never calls LeverUp or broadcasts.
+export async function signIntentDryRun({
+  env, traderAddress, agentAddress, agentAuthorization, action, nonce, deadline,
+  actionValues, feeToken = LEVERUP_1CT.zeroAddress, antiDdosFee = 0n,
+  preflight, now = Date.now(), maxPreflightAgeMs = 30_000,
+}) {
+  if (String(env?.LEVERUP_LIVE_TRADING).toLowerCase() !== "false" ||
+      String(env?.LEVERUP_KILL_SWITCH).toLowerCase() !== "true") throw new Error("DRY_RUN_REQUIRES_LIVE_OFF_AND_KILL_SWITCH_ON");
+  if (!/^0x[0-9a-fA-F]{40}$/.test(traderAddress || "")) throw new Error("LEVERUP_TRADER_ADDRESS_MISSING_OR_INVALID");
+  if (!/^0x[0-9a-fA-F]{40}$/.test(agentAddress || "")) throw new Error("LEVERUP_AGENT_ADDRESS_MISSING_OR_INVALID");
+  if (!agentAuthorization?.authorized || String(agentAuthorization.agentAddress).toLowerCase() !== agentAddress.toLowerCase()) throw new Error("LEVERUP_AGENT_NOT_VERIFIED_AUTHORIZED");
+  const permissionByAction = { 0: "canMarketOpen", 1: "canMarketClose", 9: "canPartialClose" };
+  const permission = permissionByAction[Number(action)];
+  if (!permission || agentAuthorization[permission] !== true) throw new Error("LEVERUP_AGENT_ACTION_PERMISSION_MISSING");
+  if (Number(action) === 0) {
+    if (!preflight || preflight.preflightPassed !== true || preflight.status !== "AVAILABLE") throw new Error("LEVERUP_PREFLIGHT_NOT_PASSED");
+    if (Number(preflight.requestedLeverage) < 50 || Number(preflight.marketMaxLeverage) < 50 || Number(preflight.maxLeverageForNotional) < 50) throw new Error("LEVERUP_MINIMUM_50X_NOT_MET");
+    const checkedAt = Number(preflight.checkedAt);
+    if (!Number.isFinite(checkedAt) || checkedAt > now + 5_000 || now - checkedAt > maxPreflightAgeMs) throw new Error("LEVERUP_PREFLIGHT_STALE");
+  }
+  const key = String(env?.LEVERUP_AGENT_PRIVATE_KEY || "").trim();
+  if (!key) throw new Error("LEVERUP_AGENT_SIGNING_KEY_MISSING");
+  const signer = privateKeyToAccount(key.startsWith("0x") ? key : "0x" + key);
+  if (signer.address.toLowerCase() !== agentAddress.toLowerCase()) throw new Error("LEVERUP_SIGNER_KEY_DOES_NOT_MATCH_AUTHORIZED_AGENT");
+  const intent = buildTypedIntent({ action, trader: traderAddress, nonce, deadline, actionValues, feeToken, antiDdosFee });
+  const signature = await signer.signTypedData(intent.typedData);
+  return { signed: true, signerAddress: signer.address, signatureDigest: keccak256(signature), intentDigest: intent.actionDataHash };
+}
+
 export async function signAndSubmitIntent(options) {
   // This guard is deliberately the first operation: no signer construction,
   // signature generation, or network request is possible while execution is OFF.
