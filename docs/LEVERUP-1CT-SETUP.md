@@ -9,8 +9,10 @@
 - `src/leverup-advisor.js` connects fully confirmed CIEL approvals to a read-only LeverUp account snapshot and market-open preflight. Successful and permission-rejected preflights are persisted to the additive D1 ledger and KV.
 - `scripts/apply-leverup-integration.mjs` injects that coordinator into the recovered Worker build; the Telegram trade card shows the actual LeverUp preflight result.
 - The integration rejects unknown collateral ratios, existing open LeverUp positions, missing WMON balance/allowance, unsupported tiers, missing market data, and missing market-open permission.
-- Automatic token-approval helper is isolated in `src/leverup-approval.js`; it validates the trader key against `LEVERUP_TRADER_ADDRESS`, allowlists supported collateral/fee tokens, approves only the exact required amount to the fixed 1CT Diamond, waits for confirmation, and rereads allowance. It refuses to run unless `LEVERUP_LIVE_TRADING=true` and `LEVERUP_KILL_SWITCH=false`.
-- The current advisor/coordinator still runs in dry-run mode; no approval or live execution is wired into the current signal lifecycle. Live trading is explicitly OFF and the kill switch ON.
+- Exact token approval is wired into the guarded live submission coordinator. It validates the trader key against `LEVERUP_TRADER_ADDRESS`, allowlists WMON/LVMON/USDC/LVUSD, approves only the exact amount required by the current intent, waits for confirmation, and rereads allowance. It refuses to run unless `LEVERUP_LIVE_TRADING=true` and `LEVERUP_KILL_SWITCH=false`.
+- The CIEL approved-signal path now has a D1 idempotency claim, exact allowance preparation, guarded EIP-712 submission, ambiguous-submission quarantine, status polling/reconciliation, and on-chain position confirmation. An uncertain submit is never automatically replayed.
+- The minute cron runs read-only account diagnostics, open-position monitoring, fee snapshots, stop/target/max-hold checks, configured partial take-profits, and closed-position settlement reconciliation. It only submits management intents when live mode is explicitly enabled.
+- The current Worker configuration remains `LEVERUP_LIVE_TRADING=false` and `LEVERUP_KILL_SWITCH=true`. No approval or order transaction is permitted in the deployed configuration.
 
 ## Confirmed public wallet identities
 
