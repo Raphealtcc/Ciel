@@ -18,8 +18,8 @@ once(
 );
 
 once(
-  '      this.state.storage.get("lastContextSnapshotPersistAt")\n    ]);',
-  '      this.state.storage.get("lastContextSnapshotPersistAt"),\n      this.state.storage.get("coreScalpCandles")\n    ]);',
+  '      this.state.storage.get("lastContextSnapshotPersistAt")',
+  '      this.state.storage.get("lastContextSnapshotPersistAt"),\n      this.state.storage.get("coreScalpCandles")',
   "restore the core scalp candle cache after Durable Object restarts",
 );
 

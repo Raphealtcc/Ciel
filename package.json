@@ -10,7 +10,6 @@
     "check:staging-config": "node scripts/check-staging-config.mjs",
     "verify:leverup": "npm run check:paper && node scripts/verify-leverup-market-tiers.mjs",
     "build": "npm run check:paper",
-    "postinstall": "npm run build",
     "patch:core-scalp": "node scripts/apply-core-scalp-fix.mjs",
     "patch:d1-efficiency": "node scripts/apply-d1-efficiency-fix.mjs",
     "test:d1-efficiency": "node scripts/test-d1-efficiency.mjs",
