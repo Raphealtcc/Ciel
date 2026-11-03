@@ -214,4 +214,22 @@ assert.throws(() => buildMarketOpenPlan({
   inferredLeverage: 100, side: "LONG", expectedHoldSeconds: 3600, reserveMon: 0.01,
 }), /WMON_BALANCE_INSUFFICIENT_AFTER_RESERVE_FOR_MARGIN_AND_OPEN_FEE/);
 
+const noAllowanceSnapshot = {
+  ...planSnapshot,
+  accountTokenStates: {
+    ...planSnapshot.accountTokenStates,
+    [WMON.toLowerCase()]: { balance: wmonRaw.toString(), allowance: "0" },
+  },
+};
+assert.throws(() => buildMarketOpenPlan({
+  snapshot: noAllowanceSnapshot, desiredMarginMon: 20, maxTradeMarginMon: 50,
+  inferredLeverage: 100, side: "LONG", expectedHoldSeconds: 3600,
+}), /WMON_DIAMOND_ALLOWANCE_INSUFFICIENT/);
+const approvalReadyPlan = buildMarketOpenPlan({
+  snapshot: noAllowanceSnapshot, desiredMarginMon: 20, maxTradeMarginMon: 50,
+  inferredLeverage: 100, side: "LONG", expectedHoldSeconds: 3600, requireExistingAllowance: false,
+});
+assert.equal(approvalReadyPlan.mode, "DRY_RUN_ONLY");
+
+
 console.log("PASS: 50x floor, dynamic tier sizing, WMON+fee-token balance/allowance checks, amountIn/open-fee calculation, cost estimates, and settlement reconciliation.");

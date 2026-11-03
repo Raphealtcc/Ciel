@@ -13,6 +13,7 @@ verify-ciel-recovery:
     - node --check scripts/apply-leverup-integration.mjs
     - node --check scripts/test-core-scalp.mjs
     - node --check scripts/test-leverup-advisor.mjs
+    - node --check scripts/test-leverup-lifecycle.mjs
     - node --check scripts/test-paper-tier-fix.mjs
     - node --check scripts/test-leverup-1ct.mjs
     - node --check src/leverup-1ct.js
