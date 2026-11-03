@@ -26,6 +26,7 @@ assert.equal(config.vars.LEVERUP_AUTO_APPROVE, "true");
 assert.equal(config.vars.LEVERUP_PREFLIGHT_ENABLED, "true");
 assert.equal(config.vars.LEVERUP_LIVE_TRADING, "false");
 assert.equal(config.vars.LEVERUP_KILL_SWITCH, "true");
+assert.equal(config.vars.LEVERUP_PURGE_LIVE_ENABLED, "true", "Only the explicit manual purge command may close live positions while the kill switch is on");
 assert.equal(config.vars.LEVERUP_MIN_LEVERAGE, "50");
 assert.equal(config.vars.LEVERUP_TOTAL_ALLOCATION_MON, "50");
 assert.equal(config.vars.LEVERUP_RESERVE_MON, "25");
@@ -54,7 +55,8 @@ assert.ok(config.previews && typeof config.previews === "object", "Worker Previe
 const expectedPreviewVars = {
   ...config.vars,
   TELEGRAM_WEBHOOK_URL: "",
-  TELEGRAM_STAGING_BOT_ID: ""
+  TELEGRAM_STAGING_BOT_ID: "",
+  LEVERUP_PURGE_LIVE_ENABLED: "false"
 };
 assert.deepEqual(config.previews.vars, expectedPreviewVars, "Previews must retain the full variable set but must not claim the shared Telegram bot/webhook");
 const previewD1 = config.previews.d1_databases?.find((item) => item.binding === "DB");
