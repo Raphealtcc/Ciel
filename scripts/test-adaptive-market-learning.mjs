@@ -61,4 +61,9 @@ assert.ok(source.includes("advisorScanRaw"));
 assert.ok(source.includes("advisorScan, feed:"));
 assert.ok(source.includes("Core pullback scalps: "));
 assert.ok(source.includes("5m trend continuation: "));
+assert.ok(source.includes("CIEL deterministic core trend continuation guard"));
+assert.ok(source.includes("LOCAL_CORE_TREND_CONTINUATION"));
+assert.ok(source.includes("CORE_TREND_CONTINUATION\\"));
+assert.ok(!source.includes("paperStorage.put(\\"ciel:adaptive-learning:v1\\").bind"));
+
 console.log("PASS: bounded adaptive learning, core-market scheduling, separate /profits strategy buckets, and 5m breakout-retest long/short gates.");
