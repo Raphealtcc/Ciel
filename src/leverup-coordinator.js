@@ -5,7 +5,7 @@ import {
 } from "./leverup-1ct.js";
 import { ensureLeverUpTokenAllowance } from "./leverup-approval.js";
 import {
-  LEVERUP_TOKENS, createLeverUpPublicClient, fetchOpenPositions, fetchAllPositionsPaginated,
+  LEVERUP_TOKENS, createLeverUpPublicClient, fetchOpenPositions, fetchAllPositionsPaginated, fetchLeverUpPairs,
   fetchLatestOraclePrices, fetchAntiDdosConfig, readPositionsV4, normalizePositionAccrual,
   readPairByBaseV4, readTokenBalancesAndAllowances, readAgentAuthorization, readLastAgentNonce,
   persistPositionFeeSnapshot, reconcileClosedPosition, persistSettlementReconciliation,
@@ -79,9 +79,11 @@ export async function submitLeverUpIntent({
   env, db, signalId, action, actionValues, traderAddress, agentAddress, agentAuthorization,
   nonce, deadline, feeToken = ZERO, antiDdosFee = 0n, preflight = null,
   allowanceRequirements = [], pairBase = null, leverage = null, marginMon = null,
-  notionalUsd = null, payload = {}, now = Date.now(), dependencies = {},
+  notionalUsd = null, payload = {}, now = Date.now(), dependencies = {}, allowRiskReducingClose = false,
 }) {
-  if (!liveEnabled(env)) return { status: "LIVE_DISABLED", submitted: false };
+  const closeOnly = Number(action) === OneClickAction.MARKET_CLOSE || Number(action) === OneClickAction.PARTIAL_CLOSE;
+  const emergencyCloseEnabled = allowRiskReducingClose && closeOnly && String(env?.LEVERUP_LIVE_TRADING).toLowerCase() === "true";
+  if (!liveEnabled(env) && !emergencyCloseEnabled) return { status: "LIVE_DISABLED", submitted: false };
   if (!signalId || !Number.isInteger(Number(action))) throw new Error("LEVERUP_INTENT_INPUT_INVALID");
   const claim = await claimIntent(db, { signalId, action, pairBase, leverage, marginMon, notionalUsd,
     payload: { ...payload, action, actionValues: serializable(actionValues), feeToken, antiDdosFee: String(antiDdosFee) }, now });
@@ -357,6 +359,137 @@ export function collectLeverUpPairBases(apiPositions = [], entries = []) {
     ...apiPositions.map((p) => String(p?.pairBase || p?.pair?.base || "").toLowerCase()),
     ...entries.map((entry) => String(entry?.pairBase || entry?.plan?.preflight?.pairBase || entry?.plan?.pairBase || "").toLowerCase()),
   ].filter((base) => /^0x[0-9a-f]{40}$/.test(base)))];
+}
+
+function normalizeLeverUpPurgeSymbol(value) {
+  return String(value || "").trim().toUpperCase()
+    .replace(/\\.(P|PERP)$/,"")
+    .replace(/[-_/](USD|USDT|USDC|PERP)$/,"")
+    .replace(/(USDT|USDC|USD|PERP)$/,"")
+    .replace(/[^A-Z0-9]/g,"");
+}
+
+function pairMatchesPurgeSymbol(pair, symbol) {
+  if (!symbol) return true;
+  const values = [pair?.symbol, pair?.pairName, pair?.name, pair?.ticker, pair?.baseSymbol,
+    pair?.pair?.symbol, pair?.pair?.name, pair?.baseToken?.symbol];
+  return values.some((value) => normalizeLeverUpPurgeSymbol(value) === symbol);
+}
+
+export async function purgeLeverUpPositions({ env, db, symbol = null, now = Date.now(), dependencies = {} }) {
+  const requestedSymbol = normalizeLeverUpPurgeSymbol(symbol);
+  if (symbol && !requestedSymbol) return { status: "INVALID_SYMBOL", checked: 0, submitted: 0 };
+  const traderAddress = String(env?.LEVERUP_TRADER_ADDRESS || "");
+  const agentAddress = String(env?.LEVERUP_AGENT_ADDRESS || "");
+  if (!/^0x[0-9a-fA-F]{40}$/.test(traderAddress) || !/^0x[0-9a-fA-F]{40}$/.test(agentAddress)) {
+    return { status: "BLOCKED_WALLET_CONFIGURATION", checked: 0, submitted: 0 };
+  }
+  const fetchImpl = dependencies.fetchImpl || fetch;
+  const client = dependencies.publicClient || createLeverUpPublicClient(env?.LEVERUP_RPC_URL || "https://rpc.monad.xyz");
+  let pairs = [], apiPositions = [], pairDiscoveryError = null;
+  try { pairs = await (dependencies.fetchPairs || fetchLeverUpPairs)({ fetchImpl }); }
+  catch (error) { pairDiscoveryError = String(error?.message || error).slice(0, 180); }
+  try { apiPositions = await (dependencies.fetchOpenPositions || fetchOpenPositions)(traderAddress, { fetchImpl }); }
+  catch { /* on-chain market scan below remains authoritative */ }
+  const selectedPairs = (pairs || []).filter((pair) => pairMatchesPurgeSymbol(pair, requestedSymbol));
+  if (requestedSymbol && !selectedPairs.length && !(apiPositions || []).some((p) =>
+    normalizeLeverUpPurgeSymbol(p?.symbol || p?.pair?.symbol || p?.pair?.name || p?.pairName) === requestedSymbol)) {
+    return { status: "UNKNOWN_TOKEN", requestedSymbol, checked: 0, submitted: 0, discoveryError: pairDiscoveryError };
+  }
+  const bases = [...new Set([
+    ...selectedPairs.map((pair) => String(pair?.base || pair?.pairBase || "").toLowerCase()),
+    ...(apiPositions || []).filter((p) => pairMatchesPurgeSymbol(p, requestedSymbol))
+      .map((p) => String(p?.pairBase || p?.pair?.base || "").toLowerCase()),
+  ].filter((base) => /^0x[0-9a-f]{40}$/.test(base)))];
+  if (!bases.length) return { status: pairDiscoveryError ? "DISCOVERY_FAILED" : "NO_MARKETS_FOUND", requestedSymbol, checked: 0, submitted: 0, discoveryError: pairDiscoveryError };
+  const pairMeta = new Map();
+  for (const pair of selectedPairs) {
+    const base = String(pair?.base || pair?.pairBase || "").toLowerCase();
+    if (base) pairMeta.set(base, pair);
+  }
+  const concurrency = 8;
+  const positionMap = new Map(), pairViews = new Map(), readErrors = [];
+  for (let i = 0; i < bases.length; i += concurrency) {
+    const batch = bases.slice(i, i + concurrency);
+    const results = await Promise.all(batch.map(async (base) => {
+      try {
+        const [rows, pairView] = await Promise.all([
+          (dependencies.readPositions || readPositionsV4)(traderAddress, base, { publicClient: client }),
+          (dependencies.readPair || readPairByBaseV4)(base, { publicClient: client }),
+        ]);
+        return { base, rows, pairView };
+      } catch (error) { return { base, error: String(error?.message || error).slice(0, 160) }; }
+    }));
+    for (const result of results) {
+      if (result.error) { readErrors.push({ pairBase: result.base, reason: result.error }); continue; }
+      pairViews.set(result.base, result.pairView);
+      for (const row of result.rows || []) {
+        let qty = 0n;
+        try { qty = BigInt(row.qty ?? row.qtyRaw ?? 0); } catch {}
+        if (qty <= 0n || !/^0x[0-9a-fA-F]{64}$/.test(String(row.positionHash || ""))) continue;
+        const position = normalizePositionAccrual(row);
+        positionMap.set(position.positionHash.toLowerCase(), {
+          ...position, pairBase: result.base,
+          purgeSymbol: pairMeta.get(result.base)?.symbol || pairMeta.get(result.base)?.pairName || pairMeta.get(result.base)?.name || null,
+        });
+      }
+    }
+  }
+  const positions = [...positionMap.values()];
+  if (!positions.length) return {
+    status: readErrors.length ? "PARTIAL_DISCOVERY_NO_POSITIONS" : "NO_OPEN_POSITIONS",
+    requestedSymbol, checked: bases.length, submitted: 0, openPositionCount: 0, readErrors,
+  };
+  if (String(env?.LEVERUP_LIVE_TRADING).toLowerCase() !== "true") {
+    return { status: "LIVE_DISABLED", requestedSymbol, checked: bases.length, submitted: 0, openPositionCount: positions.length,
+      positions: positions.map((p) => ({ symbol: p.purgeSymbol, positionHash: p.positionHash })) };
+  }
+  if (!db?.prepare) return { status: "BLOCKED_D1_LEDGER_UNAVAILABLE", requestedSymbol, checked: bases.length, submitted: 0, openPositionCount: positions.length };
+  const [auth, antiDdos] = await Promise.all([
+    (dependencies.readAuthorization || readAgentAuthorization)(traderAddress, agentAddress, { publicClient: client }),
+    (dependencies.fetchAntiDdos || fetchAntiDdosConfig)({ fetchImpl }),
+  ]);
+  if (!auth?.authorized || !auth.canMarketClose) {
+    return { status: "BLOCKED_CLOSE_PERMISSION_MISSING", requestedSymbol, checked: bases.length, submitted: 0, openPositionCount: positions.length };
+  }
+  const feeTokens = (antiDdos.config || []).filter((item) => item.enabled && item.feeToken).map((item) => item.feeToken);
+  const balances = await (dependencies.readBalances || readTokenBalancesAndAllowances)(traderAddress, feeTokens, { publicClient: client });
+  let submitted = 0;
+  const results = [];
+  for (const position of positions) {
+    const pairView = pairViews.get(position.pairBase);
+    if (!pairView?.slippageConfig?.enabled) {
+      results.push({ symbol: position.purgeSymbol, positionHash: position.positionHash, status: "SKIPPED", reason: "CLOSE_SLIPPAGE_CONFIG_UNAVAILABLE" });
+      continue;
+    }
+    try {
+      const oneClickAction = OneClickAction.MARKET_CLOSE;
+      const slippage = BigInt(position.isLong ? pairView.slippageConfig.slippageLongP : pairView.slippageConfig.slippageShortP);
+      const actionValues = [position.positionHash, slippage];
+      const fee = selectFeeToken(oneClickAction, antiDdos.config, balances, [], { requireAllowance: false });
+      const nonce = await (dependencies.readNonce || readLastAgentNonce)(traderAddress, agentAddress, { publicClient: client });
+      const signalId = "manual-purge-" + position.positionHash.toLowerCase();
+      const result = await submitLeverUpIntent({
+        env, db, signalId, action: oneClickAction, actionValues, traderAddress, agentAddress,
+        agentAuthorization: auth, nonce: (BigInt(nonce) + 1n).toString(), deadline: Math.floor(now / 1000) + 300,
+        feeToken: fee.feeToken, antiDdosFee: fee.antiDdosFee,
+        allowanceRequirements: fee.feeToken.toLowerCase() === ZERO.toLowerCase() ? [] : [{ tokenAddress: fee.feeToken, amount: fee.antiDdosFee }],
+        pairBase: position.pairBase,
+        payload: { positionHash: position.positionHash, action: "MANUAL_PURGE", requestedSymbol, symbol: position.purgeSymbol },
+        now, dependencies, allowRiskReducingClose: true,
+      });
+      if (result.submitted) submitted++;
+      results.push({ symbol: position.purgeSymbol, positionHash: position.positionHash, status: result.status, intentHash: result.intentHash || null, reason: result.reason || null });
+    } catch (error) {
+      results.push({ symbol: position.purgeSymbol, positionHash: position.positionHash, status: "FAILED", reason: String(error?.message || error).slice(0, 180) });
+    }
+  }
+  return {
+    status: submitted === positions.length ? "SUBMITTED" : (submitted ? "PARTIAL" : "NO_CLOSES_SUBMITTED"),
+    requestedSymbol, checked: bases.length, submitted, openPositionCount: positions.length,
+    killSwitchBypassedForRiskReducingClose: String(env?.LEVERUP_KILL_SWITCH).toLowerCase() === "true",
+    results, readErrors,
+  };
 }
 
 export async function runLeverUpPositionManager({ env, db, now = Date.now(), dependencies = {} }) {
