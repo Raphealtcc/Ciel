@@ -39,6 +39,19 @@ function normalizedKey(value) {
   return key.startsWith("0x") ? key : "0x" + key;
 }
 
+export function inspectLeverUpTraderSigner({ env }) {
+  const traderAddress = String(env?.LEVERUP_TRADER_ADDRESS || "");
+  if (!isAddress(traderAddress)) return { status: "FAILED", reason: "LEVERUP_TRADER_ADDRESS_MISSING_OR_INVALID" };
+  try {
+    const account = privateKeyToAccount(normalizedKey(env?.LEVERUP_TRADER_PRIVATE_KEY));
+    const matches = account.address.toLowerCase() === traderAddress.toLowerCase();
+    return { status: matches ? "PASS" : "FAILED", signerAddress: account.address,
+      matchesConfiguredTrader: matches, reason: matches ? null : "LEVERUP_TRADER_SIGNER_KEY_DOES_NOT_MATCH_TRADER_ADDRESS" };
+  } catch (error) {
+    return { status: "FAILED", reason: String(error?.message || error).slice(0, 180) };
+  }
+}
+
 /**
  * Ensure a precise ERC-20 allowance for the fixed LeverUp Monad 1CT Diamond.
  * This is intentionally unavailable in dry-run mode. The caller must invoke it

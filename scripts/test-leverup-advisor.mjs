@@ -98,7 +98,9 @@ import { privateKeyToAccount } from "viem/accounts";
 const diagKey = `0x${"02".repeat(32)}`;
 const diagAgent = privateKeyToAccount(diagKey).address;
 const diag = await runLeverUpDiagnostics({
-  env: { ...env, LEVERUP_AGENT_PRIVATE_KEY: diagKey, LEVERUP_AGENT_ADDRESS: diagAgent,
+  env: { ...env, LEVERUP_TRADER_PRIVATE_KEY: "0x" + "03".repeat(32),
+    LEVERUP_TRADER_ADDRESS: privateKeyToAccount("0x" + "03".repeat(32)).address,
+    LEVERUP_AGENT_PRIVATE_KEY: diagKey, LEVERUP_AGENT_ADDRESS: diagAgent,
     LEVERUP_LIVE_TRADING: "false", LEVERUP_KILL_SWITCH: "true" },
   now: Date.now(),
   dependencies: { readSnapshot: async () => ({
@@ -112,6 +114,8 @@ const diag = await runLeverUpDiagnostics({
 assert.equal(diag.ok, true);
 assert.equal(diag.signing.status, "PASS");
 assert.equal(diag.signerMatchesConfiguredAgent, true);
+assert.equal(diag.traderSignerMatchesConfiguredWallet, true);
+assert.equal(diag.traderSigning.status, "PASS");
 assert.equal(diag.orderSubmitted, false);
 assert.equal(JSON.stringify(diag).includes(diagKey), false);
 console.log("PASS: CIEL-to-LeverUp preflight is read-only, 50x-minimum, reserve-aware, approval-gated, existing-position-safe, ledger-backed, and hard-locked from live execution, with read-only wallet and synthetic signer diagnostics.");

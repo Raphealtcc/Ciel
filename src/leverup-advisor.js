@@ -4,6 +4,7 @@ import {
 } from "./leverup-readonly.js";
 import { OneClickAction, signIntentDryRun } from "./leverup-1ct.js";
 import { prepareLeverUpExecution } from "./leverup-coordinator.js";
+import { inspectLeverUpTraderSigner } from "./leverup-approval.js";
 
 const WMON = LEVERUP_TOKENS.WMON.toLowerCase();
 const errorMessage = (error) => String(error?.message || error || "Unknown LeverUp preflight failure").slice(0, 220);
@@ -215,6 +216,7 @@ export async function runLeverUpDiagnostics({ env, now = Date.now(), dependencie
   });
   const auth = snapshot.agentAuthorization || {};
   const keyConfigured = Boolean(String(env?.LEVERUP_AGENT_PRIVATE_KEY || "").trim());
+  const traderSigning = inspectLeverUpTraderSigner({ env });
   let signing = { status: "NOT_TESTED", reason: "Signer key missing or agent lacks market-open permission." };
   if (keyConfigured && auth.authorized && auth.canMarketOpen === true) {
     try {
@@ -243,7 +245,8 @@ export async function runLeverUpDiagnostics({ env, now = Date.now(), dependencie
   }));
   return jsonSafe({
     ok: true, mode: "READ_ONLY_DRY_RUN", checkedAt: now, blockNumber: snapshot.blockNumber,
-    traderWallet: traderAddress, agentWallet: agentAddress, signerKeyConfigured: keyConfigured,
+    traderWallet: traderAddress, agentWallet: agentAddress, traderSigning,
+    traderSignerMatchesConfiguredWallet: traderSigning.matchesConfiguredTrader ?? false, signerKeyConfigured: keyConfigured,
     signerAddress: signing.signerAddress || null,
     signerMatchesConfiguredAgent: signing.signerAddress
       ? signing.signerAddress.toLowerCase() === agentAddress.toLowerCase() : null,
