@@ -266,8 +266,12 @@ export async function runLeverUpDiagnostics({ env, now = Date.now(), dependencie
     const state = snapshot.accountTokenStates?.[String(token).toLowerCase()];
     return [label, state ? { balanceRaw: state.balance, allowanceRaw: state.allowance } : null];
   }));
+  const diagnosticsOk = traderSigning.status === "PASS" && signing.status === "PASS" &&
+    Boolean(auth.authorized && auth.canMarketOpen && auth.canMarketClose && auth.canPartialClose) &&
+    Object.values(balancesAndAllowances).every((value) => value !== null);
   return jsonSafe({
-    ok: true, mode: "READ_ONLY_DRY_RUN", checkedAt: now, blockNumber: snapshot.blockNumber,
+    ok: diagnosticsOk, status: diagnosticsOk ? "READ_ONLY_CHECKS_PASS" : "READ_ONLY_CHECKS_INCOMPLETE",
+    mode: "READ_ONLY_DRY_RUN", checkedAt: now, blockNumber: snapshot.blockNumber,
     traderWallet: traderAddress, agentWallet: agentAddress, traderSigning,
     traderSignerMatchesConfiguredWallet: traderSigning.matchesConfiguredTrader ?? false, signerKeyConfigured: keyConfigured,
     signerAddress: signing.signerAddress || null,
