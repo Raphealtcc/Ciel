@@ -25,6 +25,14 @@ const context = vm.createContext({ __name() {} });
 vm.runInContext(source.slice(start, end) + "\nglobalThis.analyze = analyzeCorePullbackScalp;", context);
 const analyze = context.analyze;
 
+const coreScalpCall = 'if (now - this.lastCoreScalpCandleAt >= 55e3) background.push(this.writeCoreScalpCandles(now));';
+const sampleMethodAt = source.indexOf("async samplePrices(now)");
+const backgroundDeclarationAt = source.indexOf("const background = [];", sampleMethodAt);
+const coreScalpCallAt = source.indexOf(coreScalpCall, sampleMethodAt);
+assert.equal(source.split(coreScalpCall).length - 1, 1, "core candle background task must be scheduled exactly once");
+assert.ok(backgroundDeclarationAt >= 0 && coreScalpCallAt > backgroundDeclarationAt,
+  "core candle background task must be queued after initialization; prevents the deployed background TDZ ReferenceError");
+
 const now = 1_800_000_000_000;
 const candles = (count, step, interval, base, closeOffset=0) => Array.from({length:count},(_,i)=>{
   const close=base+i*step+closeOffset;

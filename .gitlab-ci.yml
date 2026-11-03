@@ -4,11 +4,19 @@ verify-ciel-recovery:
   image: node:22-alpine
   stage: verify
   script:
+    - npm install --ignore-scripts
     - node --check scripts/reassemble-recovered-worker.mjs
     - node --check scripts/apply-paper-tier-fix.mjs
     - node --check scripts/apply-core-scalp-fix.mjs
+    - node --check scripts/apply-leverup-integration.mjs
     - node --check scripts/test-core-scalp.mjs
+    - node --check scripts/test-leverup-advisor.mjs
     - node --check scripts/test-paper-tier-fix.mjs
+    - node --check scripts/test-leverup-1ct.mjs
+    - node --check src/leverup-1ct.js
+    - node --check src/leverup-readonly.js
+    - node --check src/leverup-advisor.js
+    - node --check scripts/test-leverup-readonly.mjs
     - node --check scripts/check-staging-config.mjs
     - node --check scripts/summarize-rea.mjs
     - node --check scripts/verify-leverup-market-tiers.mjs
@@ -23,6 +31,7 @@ verify-leverup-market-metadata:
   stage: verify
   needs: [verify-ciel-recovery]
   script:
+    - npm install --ignore-scripts
     - npm run check:paper
     - node scripts/verify-leverup-market-tiers.mjs
   artifacts:
@@ -41,6 +50,7 @@ analyze-ciel-with-rea:
   stage: reverse-engineer
   needs: [verify-ciel-recovery]
   script:
+    - npm install --ignore-scripts
     - apk add --no-cache procps
     - npm run check:paper
     - mkdir -p "$CI_PROJECT_DIR/rea-patched"
@@ -56,6 +66,7 @@ analyze-ciel-with-rea:
     - changes:
         - recovered-src/**/*
         - scripts/**/*
+        - src/**/*
         - package.json
         - wrangler.jsonc
         - .gitlab-ci.yml
@@ -82,3 +93,20 @@ verify-cloudflare-bun-bootstrap:
     - node --check reconstructed/patched-worker.js
   rules:
     - if: '$CI_COMMIT_BRANCH || $CI_PIPELINE_SOURCE == "merge_request_event"'
+
+build-cloudflare-release-candidate:
+  image: node:22-alpine
+  stage: verify
+  needs: [verify-ciel-recovery]
+  script:
+    - npm install --ignore-scripts
+    - npm run build
+    - npx wrangler deploy --dry-run --outdir dist --config wrangler.jsonc
+    - node --input-type=module -e 'import fs from "node:fs"; const files=fs.readdirSync("dist").filter((f)=>f.endsWith(".js")); if(files.length!==1) throw new Error("Expected exactly one bundled Worker JS file in dist, found "+files.join(",")); const file="dist/"+files[0]; const data=fs.readFileSync(file); const b64=data.toString("base64"); console.log("WORKER_BUNDLE_FILE="+file+" BYTES="+data.length); for(let i=0,n=0;i<b64.length;i+=3000,n++) console.log("WORKER_BUNDLE_CHUNK_"+n+":"+b64.slice(i,i+3000)); console.log("WORKER_BUNDLE_CHUNK_COUNT="+Math.ceil(b64.length/3000));'
+  artifacts:
+    when: always
+    paths: [dist/, reconstructed/patched-worker.js]
+    expire_in: 1 day
+  allow_failure: false
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "feature/leverup-1ct-autotrader"'
