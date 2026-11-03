@@ -51,7 +51,6 @@ export async function ensureLeverUpTokenAllowance({
   requiredAmount,
   publicClient,
   walletClient,
-  waitForReceipt = true,
 }) {
   if (String(env?.LEVERUP_AUTO_APPROVE).toLowerCase() !== "true") {
     throw new Error("LEVERUP_AUTO_APPROVE_DISABLED");
@@ -103,21 +102,14 @@ export async function ensureLeverUpTokenAllowance({
       address: tokenAddress, abi: ERC20_APPROVAL_ABI, functionName: "approve",
       args: [spender, 0n], account,
     });
-    if (waitForReceipt) {
-      const resetReceipt = await reader.waitForTransactionReceipt({ hash: resetHash });
-      if (resetReceipt.status !== "success") throw new Error("LEVERUP_ALLOWANCE_RESET_REVERTED");
-    }
+    const resetReceipt = await reader.waitForTransactionReceipt({ hash: resetHash });
+    if (resetReceipt.status !== "success") throw new Error("LEVERUP_ALLOWANCE_RESET_REVERTED");
   }
 
   const approvalTxHash = await signer.writeContract({
     address: tokenAddress, abi: ERC20_APPROVAL_ABI, functionName: "approve",
     args: [spender, amount], account,
   });
-  if (!waitForReceipt) {
-    return { status: "SUBMITTED_UNCONFIRMED", traderAddress, tokenAddress, spender,
-      allowance: currentAllowance.toString(), requiredAmount: amount.toString(), approvalTxHash };
-  }
-
   const receipt = await reader.waitForTransactionReceipt({ hash: approvalTxHash });
   if (receipt.status !== "success") throw new Error("LEVERUP_TOKEN_APPROVAL_REVERTED");
   const confirmedAllowance = await readAllowance();

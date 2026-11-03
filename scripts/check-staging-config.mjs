@@ -9,8 +9,8 @@ const expectedD1 = "a41e95fe-58cc-443a-839e-5ee0525e9fcf";
 const expectedKv = "6e1fa505914c4d3b87b5b49c9d54f6fe";
 const expectedWebhook = "https://ciel2.gatakehanami.workers.dev/telegram/webhook";
 const expectedBotId = "9190238402";
-const traderAddress = "0x7aCd7C622a87a148CcdEBd213D7C4070E200186F";
-const agentAddress = "0xd422fc040ad9294d553150Cf5646Ab0B1729E443";
+const traderAddress = "0xd422fc040ad9294d553150Cf5646Ab0B1729E443";
+const agentAddress = "0x77DF3ae15b994131797905e59675da3544C90DFF";
 const retiredProductionHost = "ciel.leno3z4rrrri.workers.dev";
 
 assert.equal(config.name, "ciel2", "Cloudflare Workers Builds target name must match the replacement Worker");
