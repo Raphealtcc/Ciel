@@ -153,8 +153,8 @@ once(
   "persist 5m trend-continuation paper trades under their own strategy mode",
 );
 once(
-  'holdMinutes:candidate.holdMinutes || (candidate.mode === "CORE_PULLBACK_SCALP" ? 15 : candidate.mode === "RANGE_SCALP" ? 12 : 180), mode:candidate.mode',
-  'holdMinutes:candidate.holdMinutes || (candidate.mode === "CORE_PULLBACK_SCALP" ? 15 : candidate.mode === "CORE_TREND_CONTINUATION" ? 60 : candidate.mode === "RANGE_SCALP" ? 12 : 180), mode:candidate.mode',
+  'candidate.mode === "RANGE_SCALP" ? 12 : 180), mode:candidate.mode',
+  'candidate.mode === "CORE_TREND_CONTINUATION" ? 60 : candidate.mode === "RANGE_SCALP" ? 12 : 180), mode:candidate.mode',
   "retain the 60-minute continuation hold in paper execution",
 );
 
