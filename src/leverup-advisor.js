@@ -196,3 +196,65 @@ export function formatLeverUpAdvisorLine(record) {
   return "LEVERUP PREFLIGHT: " + record.status + " — " + String(record.reason || "No reason supplied") +
     " " + accountLine + " Live trading is OFF.";
 }
+
+export async function runLeverUpDiagnostics({ env, now = Date.now(), dependencies = {} }) {
+  const traderAddress = String(env?.LEVERUP_TRADER_ADDRESS || "");
+  const agentAddress = String(env?.LEVERUP_AGENT_ADDRESS || "");
+  if (String(env?.LEVERUP_LIVE_TRADING).toLowerCase() !== "false" ||
+      String(env?.LEVERUP_KILL_SWITCH).toLowerCase() !== "true") {
+    return { ok: false, mode: "READ_ONLY_DRY_RUN", status: "BLOCKED_SAFETY_CONFIGURATION" };
+  }
+  if (!/^0x[0-9a-fA-F]{40}$/.test(traderAddress) || !/^0x[0-9a-fA-F]{40}$/.test(agentAddress)) {
+    return { ok: false, mode: "READ_ONLY_DRY_RUN", status: "BLOCKED_WALLET_CONFIGURATION" };
+  }
+  const readSnapshot = dependencies.readSnapshot || readLeverUpAccountSnapshot;
+  const snapshot = await readSnapshot({
+    traderAddress, agentAddress, symbol: "BTC", collateralRatio: null,
+    rpcUrl: env?.LEVERUP_RPC_URL || "https://rpc.monad.xyz",
+    ...(dependencies.fetchImpl ? { fetchImpl: dependencies.fetchImpl } : {}),
+  });
+  const auth = snapshot.agentAuthorization || {};
+  const keyConfigured = Boolean(String(env?.LEVERUP_AGENT_PRIVATE_KEY || "").trim());
+  let signing = { status: "NOT_TESTED", reason: "Signer key missing or agent lacks market-open permission." };
+  if (keyConfigured && auth.authorized && auth.canMarketOpen === true) {
+    try {
+      const pairBase = String(snapshot.market?.base || snapshot.pairView?.base || "");
+      if (!/^0x[0-9a-fA-F]{40}$/.test(pairBase)) throw new Error("LEVERUP_PAIR_BASE_INVALID");
+      const signed = await signIntentDryRun({
+        env, traderAddress, agentAddress, agentAuthorization: auth,
+        action: OneClickAction.MARKET_OPEN,
+        nonce: (BigInt(snapshot.lastAgentNonce || "0") + 1n).toString(),
+        deadline: Math.floor(now / 1000) + 300,
+        actionValues: [pairBase.toLowerCase(), true, LEVERUP_TOKENS.WMON, LEVERUP_TOKENS.LVMON,
+          1n, 1n, 1n, 0n, 0n, 0, 0n],
+        preflight: { preflightPassed: true, status: "AVAILABLE", requestedLeverage: 50,
+          marketMaxLeverage: 50, maxLeverageForNotional: 50, checkedAt: now },
+        now,
+      });
+      signing = { status: "PASS", syntheticSignOnly: true, signerAddress: signed.signerAddress,
+        signatureDigest: signed.signatureDigest, intentDigest: signed.intentDigest };
+    } catch (error) { signing = { status: "FAILED", reason: errorMessage(error) }; }
+  }
+  const tokenLabels = { WMON: LEVERUP_TOKENS.WMON, LVMON: LEVERUP_TOKENS.LVMON,
+    USDC: LEVERUP_TOKENS.USDC, LVUSD: LEVERUP_TOKENS.LVUSD };
+  const balancesAndAllowances = Object.fromEntries(Object.entries(tokenLabels).map(([label, token]) => {
+    const state = snapshot.accountTokenStates?.[String(token).toLowerCase()];
+    return [label, state ? { balanceRaw: state.balance, allowanceRaw: state.allowance } : null];
+  }));
+  return jsonSafe({
+    ok: true, mode: "READ_ONLY_DRY_RUN", checkedAt: now, blockNumber: snapshot.blockNumber,
+    traderWallet: traderAddress, agentWallet: agentAddress, signerKeyConfigured: keyConfigured,
+    signerAddress: signing.signerAddress || null,
+    signerMatchesConfiguredAgent: signing.signerAddress
+      ? signing.signerAddress.toLowerCase() === agentAddress.toLowerCase() : null,
+    balancesAndAllowances, indexedPositions: snapshot.indexedPositions || [],
+    onchainPositions: snapshot.onchainPositions || [],
+    agentAuthorization: {
+      authorized: Boolean(auth.authorized), agentAddress: auth.agentAddress || null,
+      canMarketOpen: Boolean(auth.canMarketOpen), canMarketClose: Boolean(auth.canMarketClose),
+      canPartialClose: Boolean(auth.canPartialClose), authorizedAt: auth.authorizedAt || null,
+    },
+    lastAgentNonce: snapshot.lastAgentNonce || null, signing,
+    liveTradingEnabled: false, killSwitchActive: true, orderSubmitted: false,
+  });
+}
