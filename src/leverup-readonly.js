@@ -705,7 +705,7 @@ function minBigInt(...values) {
 export function buildMarketOpenPlan({
   snapshot, desiredMarginMon, maxTradeMarginMon, inferredLeverage, side,
   expectedHoldSeconds, reserveMon = 0, stopLossPriceRaw = 0n,
-  takeProfitPriceRaw = 0n, broker = 0, extraFeeRaw = 0n, now = Date.now(),
+  takeProfitPriceRaw = 0n, broker = 0, extraFeeRaw = 0n, requireExistingAllowance = true, now = Date.now(),
 }) {
   if (!snapshot?.market || !snapshot?.pairView || !snapshot?.accountTokenStates || !snapshot?.antiDdosConfig) {
     throw new Error("MARKET_OPEN_SNAPSHOT_INCOMPLETE");
@@ -788,7 +788,7 @@ export function buildMarketOpenPlan({
   if (amountInRaw > (2n ** 96n - 1n) || extraFee > (2n ** 96n - 1n)) throw new Error("ONECLICK_UINT96_OVERFLOW");
   if (totalCollateralSpend > availableRaw) throw new Error("WMON_BALANCE_INSUFFICIENT_AFTER_RESERVE_FOR_MARGIN_AND_OPEN_FEE");
   if (wmonBalanceRaw < totalCollateralSpend) throw new Error("WMON_BALANCE_INSUFFICIENT_FOR_MARGIN_AND_OPEN_FEE");
-  if (wmonAllowanceRaw < totalCollateralSpend) throw new Error("WMON_DIAMOND_ALLOWANCE_INSUFFICIENT");
+  if (wmonAllowanceRaw < totalCollateralSpend && requireExistingAllowance) throw new Error("WMON_DIAMOND_ALLOWANCE_INSUFFICIENT");
   const antiDdos = snapshot.antiDdosConfig;
   if (!antiDdos.validUntil || now >= Number(antiDdos.validUntil)) throw new Error("ANTIDDOS_CONFIG_STALE");
   const feeSelection = selectFeeToken(
@@ -796,6 +796,7 @@ export function buildMarketOpenPlan({
     antiDdos.config,
     snapshot.accountTokenStates,
     [{ token: tokenIn, amount: totalCollateralSpend }],
+    { requireAllowance: requireExistingAllowance },
   );
   const qtyRaw = notionalRaw * (10n ** 10n) / pairPriceRaw;
   if (qtyRaw <= 0n || qtyRaw > (2n ** 128n - 1n)) throw new Error("ONECLICK_QTY_OUT_OF_RANGE");
@@ -853,6 +854,10 @@ export function normalizePositionAccrual(position) {
     isLong: Boolean(position.isLong),
     marginToken: position.marginToken,
     marginRaw: String(position.margin),
+    qtyRaw: String(position.qty),
+    entryPriceRaw: String(position.entryPrice),
+    stopLossRaw: String(position.stopLoss),
+    takeProfitRaw: String(position.takeProfit),
     openFeeRaw: String(position.openFee),
     executionFeeRaw: String(position.executionFee),
     fundingFeeRaw: String(position.fundingFee),

@@ -145,7 +145,7 @@ export function buildTypedIntent({
   };
 }
 
-export function selectFeeToken(action, feeConfig, accountStateByToken, additionalSpends = []) {
+export function selectFeeToken(action, feeConfig, accountStateByToken, additionalSpends = [], { requireAllowance = true } = {}) {
   const options = (Array.isArray(feeConfig) ? feeConfig : [])
     .filter((item) => Number(item.action) === action && item.enabled === true)
     .sort((a, b) => Number(a.priority) - Number(b.priority));
@@ -163,7 +163,7 @@ export function selectFeeToken(action, feeConfig, accountStateByToken, additiona
       .reduce((sum, spend) => sum + BigInt(spend.amount), 0n);
     const fee = BigInt(option.antiDdosFee);
     const required = fee + extra;
-    if (BigInt(state.balance) >= required && BigInt(state.allowance) >= required) {
+    if (BigInt(state.balance) >= required && (!requireAllowance || BigInt(state.allowance) >= required)) {
       return { feeToken: token, antiDdosFee: fee };
     }
   }
@@ -273,6 +273,15 @@ export async function signAndSubmitIntent(options) {
     throw new Error("LeverUp returned an invalid intent hash");
   }
   return { intentHash, intent };
+}
+
+export async function getIntentStatusOnce(baseUrl, intentHash, { fetchImpl = fetch } = {}) {
+  if (!/^0x[0-9a-fA-F]{64}$/.test(String(intentHash || ""))) throw new Error("Invalid intent hash");
+  const response = await fetchImpl(`${baseUrl || LEVERUP_1CT.baseUrl}/v2/trading/${intentHash}/status`);
+  if (response.status === 404) return { indexed: false, executed: false, skipped: false, status: "NOT_INDEXED" };
+  if (!response.ok) throw new Error(`LeverUp intent status HTTP ${response.status}`);
+  const status = await response.json();
+  return { ...status, indexed: true };
 }
 
 export async function pollIntentStatus(baseUrl, intentHash, {
