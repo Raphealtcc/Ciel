@@ -9,7 +9,8 @@
 - `src/leverup-advisor.js` connects fully confirmed CIEL approvals to a read-only LeverUp account snapshot and market-open preflight. Successful and permission-rejected preflights are persisted to the additive D1 ledger and KV.
 - `scripts/apply-leverup-integration.mjs` injects that coordinator into the recovered Worker build; the Telegram trade card shows the actual LeverUp preflight result.
 - The integration rejects unknown collateral ratios, existing open LeverUp positions, missing WMON balance/allowance, unsupported tiers, missing market data, and missing market-open permission.
-- No live execution path is called. Live trading is explicitly OFF and the kill switch ON.
+- Automatic token-approval helper is isolated in `src/leverup-approval.js`; it validates the trader key against `LEVERUP_TRADER_ADDRESS`, allowlists supported collateral/fee tokens, approves only the exact required amount to the fixed 1CT Diamond, waits for confirmation, and rereads allowance. It refuses to run unless `LEVERUP_LIVE_TRADING=true` and `LEVERUP_KILL_SWITCH=false`.
+- The current advisor/coordinator still runs in dry-run mode; no approval or live execution is wired into the current signal lifecycle. Live trading is explicitly OFF and the kill switch ON.
 
 ## Confirmed public wallet identities
 
@@ -40,7 +41,9 @@ The staging `wrangler.jsonc` now contains the two confirmed public addresses and
 | `LEVERUP_KILL_SWITCH` | Plain text | `true` |
 | `LEVERUP_MIN_LEVERAGE` | Plain text | `50` |
 | `LEVERUP_TOTAL_ALLOCATION_MON` | Plain text | `50` MON total capital ceiling |\n| `LEVERUP_PREFLIGHT_ENABLED` | Plain text | `true` |\n| `LEVERUP_RESERVE_MON` | Plain text | `25` MON reserved; only the minimum venue margin is used unless a per-trade cap is configured |
-| `LEVERUP_AGENT_PRIVATE_KEY` | Secret | Not configured; add only through Cloudflare secret management if/when required |
+| `LEVERUP_AGENT_PRIVATE_KEY` | Secret | Agent intent-signing key; configure only through Cloudflare secret management |
+| `LEVERUP_TRADER_PRIVATE_KEY` | Secret | Trader-only ERC-20 approval signer; configure only through Cloudflare secret management |
+| `LEVERUP_AUTO_APPROVE` | Plain text | `true`; exact-amount approvals only, and only when live trading is explicitly enabled and kill switch is off |
 | `LEVERUP_RPC_URL` | Secret | Not configured; use a dedicated Monad RPC provider |
 | `LEVERUP_WMON_COLLATERAL_RATIO` | Plain text | Intentionally unset until verified live from LeverUp's order panel/API |
 | `LEVERUP_MAX_TRADE_MARGIN_MON` | Plain text | Intentionally unset; no per-trade budget has been authorized |
