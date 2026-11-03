@@ -89,6 +89,7 @@ const emergency = await purgeLeverUpPositions({
 assert.equal(emergency.status, "SUBMITTED");
 assert.equal(emergency.submitted, 1);
 assert.equal(emergency.killSwitchBypassedForRiskReducingClose, true);
+assert.equal(emergency.purgeOnlyMode, true, "manual purge may close while normal live trading remains off");
 assert.equal(liveSubmitCalls, 1, "emergency path may submit only the market-close action");
 
 console.log("PASS: paper purge targeting/accounting, stale-mark protection, live-off gate, and kill-switch-safe close-only submission.");
