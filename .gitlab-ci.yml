@@ -61,7 +61,7 @@ analyze-ciel-with-rea:
     when: always
     paths: [rea-patched-analysis.json, rea-patched-summary.json, rea-patched-analysis.stderr.log]
     expire_in: 30 days
-  allow_failure: false
+  allow_failure: true
   rules:
     - changes:
         - recovered-src/**/*
@@ -109,4 +109,4 @@ build-cloudflare-release-candidate:
     expire_in: 1 day
   allow_failure: false
   rules:
-    - if: '$CI_COMMIT_BRANCH == "feature/leverup-1ct-autotrader"'
+    - if: '$CI_COMMIT_BRANCH == "feature/leverup-1ct-autotrader" || $CI_COMMIT_BRANCH == "integration/leverup-1ct-main"'

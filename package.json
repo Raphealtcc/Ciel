@@ -6,7 +6,7 @@
     "reassemble": "node scripts/reassemble-recovered-worker.mjs",
     "check": "npm run reassemble && node --check reconstructed/worker.js",
     "patch:paper": "node scripts/apply-paper-tier-fix.mjs",
-    "check:paper": "npm run reassemble && npm run patch:paper && node scripts/allow-replacement-telegram-host.mjs && npm run patch:core-scalp && npm run patch:leverup && node --check reconstructed/patched-worker.js && node scripts/test-paper-tier-fix.mjs && node scripts/test-core-scalp.mjs && node scripts/test-leverup-1ct.mjs && node scripts/test-leverup-readonly.mjs && node scripts/test-leverup-advisor.mjs && npm run check:staging-config && npm run test:leverup-coordinator",
+    "check:paper": "npm run reassemble && npm run patch:paper && node scripts/allow-replacement-telegram-host.mjs && npm run patch:core-scalp && npm run patch:leverup && node --check reconstructed/patched-worker.js && node scripts/test-paper-tier-fix.mjs && node scripts/test-core-scalp.mjs && node scripts/test-leverup-1ct.mjs && node scripts/test-leverup-approval.mjs && node scripts/test-leverup-readonly.mjs && node scripts/test-leverup-advisor.mjs && npm run check:staging-config && npm run test:leverup-coordinator",
     "check:staging-config": "node scripts/check-staging-config.mjs",
     "verify:leverup": "npm run check:paper && node scripts/verify-leverup-market-tiers.mjs",
     "build": "npm run check:paper",
@@ -16,7 +16,8 @@
     "test:leverup-readonly": "node scripts/test-leverup-readonly.mjs",
     "patch:leverup": "node scripts/apply-leverup-integration.mjs",
     "test:leverup-advisor": "node scripts/test-leverup-advisor.mjs",
-    "test:leverup-coordinator": "node scripts/test-leverup-coordinator.mjs"
+    "test:leverup-coordinator": "node scripts/test-leverup-coordinator.mjs",
+    "test:leverup-approval": "node scripts/test-leverup-approval.mjs"
   },
   "devDependencies": {
     "wrangler": "^4.135.0"
