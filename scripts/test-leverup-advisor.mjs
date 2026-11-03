@@ -114,7 +114,8 @@ const diag = await runLeverUpDiagnostics({
     agentAuthorization: { authorized: true, agentAddress: diagAgent,
       canMarketOpen: true, canMarketClose: true, canPartialClose: true },
     lastAgentNonce: "0", blockNumber: "123", indexedPositions: [], onchainPositions: [],
-    accountTokenStates: { [wmon]: { balance: "1000000000000000000", allowance: "1000000000000000000" } },
+    accountTokenStates: Object.fromEntries(Object.values(LEVERUP_TOKENS).map((token) =>
+      [token.toLowerCase(), { balance: "1000000000000000000", allowance: "1000000000000000000" }])),
   }) },
 });
 assert.equal(diag.ok, true);
