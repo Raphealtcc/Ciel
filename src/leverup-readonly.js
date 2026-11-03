@@ -944,14 +944,20 @@ export async function readLeverUpAccountSnapshot({
   if (!monMarket?.base) throw new Error("MON_COLLATERAL_PRICE_PAIR_MISSING");
   const blockNumber = await publicClient.getBlockNumber();
   const blockTag = "0x" + blockNumber.toString(16);
-  const [prices, pairView, minimumNotionalRaw, marketInfo, indexedPositions, onchainPositions] = await Promise.all([
+  const [prices, pairView, minimumNotionalRaw, marketInfo, indexedPositions] = await Promise.all([
     fetchLatestOraclePrices([pairBase, monMarket.base], { fetchImpl }),
     readPairByBaseV4(pairBase, { publicClient, blockNumber }),
     readGlobalMinimumNotional({ rpcUrl, fetchImpl, blockTag }),
     readMarketInfoV2(pairBase, { publicClient, blockNumber }),
     traderAddress ? fetchOpenPositions(traderAddress, { fetchImpl }) : Promise.resolve([]),
-    traderAddress ? readPositionsV4(traderAddress, pairBase, { publicClient, blockNumber }) : Promise.resolve([]),
   ]);
+  const positionBases = [...new Set([pairBase, ...(indexedPositions || [])
+    .map((position) => String(position.pairBase || position.pair?.base || "").toLowerCase())
+    .filter((base) => /^0x[0-9a-f]{40}$/.test(base))])];
+  const onchainPositions = traderAddress
+    ? (await Promise.all(positionBases.map((base) => readPositionsV4(traderAddress, base, { publicClient, blockNumber }))))
+      .flat()
+    : [];
   const feeTokens = antiDdos.config.filter((item) => item.enabled && item.feeToken)
     .map((item) => item.feeToken);
   const [accountTokenStates, agentAuthorization, lastAgentNonce] = traderAddress
