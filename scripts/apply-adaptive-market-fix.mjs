@@ -139,8 +139,8 @@ once(
   "expose the latest advisor scan through protected diagnostics",
 );
 once(
-  'telegramWebhookRegistrationMarkerPresent: Boolean(marker), feed:',
-  'telegramWebhookRegistrationMarkerPresent: Boolean(marker), advisorScan, feed:',
+  'telegramWebhookRegistrationMarkerPresent: Boolean(marker)',
+  'telegramWebhookRegistrationMarkerPresent: Boolean(marker), advisorScan',
   "include strategy rejection and adaptive-learning summaries in diagnostics",
 );
 
