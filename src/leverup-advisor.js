@@ -3,7 +3,7 @@ import {
   calculateMinimumCollateralMon, buildMarketOpenPlan, persistLeverUpPreflight,
 } from "./leverup-readonly.js";
 import { OneClickAction, signIntentDryRun } from "./leverup-1ct.js";
-import { prepareLeverUpExecution } from "./leverup-coordinator.js";
+import { prepareLeverUpExecution, executeLeverUpEntry } from "./leverup-coordinator.js";
 import { inspectLeverUpTraderSigner } from "./leverup-approval.js";
 
 const WMON = LEVERUP_TOKENS.WMON.toLowerCase();
@@ -43,19 +43,23 @@ async function savePreflight(env, signalId, record) {
 export async function prepareLeverUpAdvisorPlan({
   env, candidate, reviewed, signalId, now = Date.now(), technicalOnly = false, dependencies = {},
 }) {
+  const liveMode = String(env?.LEVERUP_LIVE_TRADING).toLowerCase() === "true" &&
+    String(env?.LEVERUP_KILL_SWITCH).toLowerCase() === "false";
+  const dryRunMode = String(env?.LEVERUP_LIVE_TRADING).toLowerCase() === "false" &&
+    String(env?.LEVERUP_KILL_SWITCH).toLowerCase() === "true";
   const result = (status, reason, extra = {}) => ({
     schemaVersion: 1, signalId: String(signalId || ""),
     symbol: String(candidate?.symbol || "").toUpperCase(), status, reason, checkedAt: now,
-    executionMode: "DRY_RUN_ONLY", liveExecutionEnabled: false, killSwitchEnabled: true, ...extra,
+    executionMode: liveMode ? "LIVE_GATED" : "DRY_RUN_ONLY",
+    liveExecutionEnabled: liveMode, killSwitchEnabled: !liveMode, ...extra,
   });
   if (!candidate?.symbol) return result("BLOCKED", "CIEL candidate symbol is missing.");
   if (reviewed?.verdict !== "APPROVE" || technicalOnly) return result("NOT_APPROVED",
     "CIEL did not produce a fully confirmed APPROVE; LeverUp entry preflight was not attempted.");
   if (String(env?.LEVERUP_PREFLIGHT_ENABLED || "").toLowerCase() !== "true") return result("DISABLED",
     "LeverUp advisor preflight is not enabled in Worker configuration.");
-  if (String(env?.LEVERUP_LIVE_TRADING).toLowerCase() !== "false" ||
-      String(env?.LEVERUP_KILL_SWITCH).toLowerCase() !== "true") return result("BLOCKED_SAFETY_CONFIGURATION",
-    "Live trading must remain false and the LeverUp kill switch must remain true.");
+  if (!dryRunMode && !liveMode) return result("BLOCKED_SAFETY_CONFIGURATION",
+    "Execution flags must be exactly LIVE=false/KILL=true for dry-run or LIVE=true/KILL=false for explicitly enabled live execution.");
 
   const traderAddress = String(env?.LEVERUP_TRADER_ADDRESS || "");
   const agentAddress = String(env?.LEVERUP_AGENT_ADDRESS || "");
@@ -136,11 +140,14 @@ export async function prepareLeverUpAdvisorPlan({
 
     const buildPlan = dependencies.buildPlan || buildMarketOpenPlan;
     const plan = buildPlan({ snapshot, desiredMarginMon, maxTradeMarginMon, inferredLeverage,
-      side: candidate.side, expectedHoldSeconds, reserveMon, stopLossPriceRaw, takeProfitPriceRaw, now });
+      side: candidate.side, expectedHoldSeconds, reserveMon, stopLossPriceRaw, takeProfitPriceRaw,
+      requireExistingAllowance: false, now });
     const authorized = Boolean(snapshot.agentAuthorization?.authorized && snapshot.agentAuthorization?.canMarketOpen);
-    const status = authorized ? "PREFLIGHT_PASS_LIVE_DISABLED" : "BLOCKED_AGENT_AUTHORIZATION";
+    const status = authorized ? (liveMode ? "PREFLIGHT_PASS_LIVE_ENABLED" : "PREFLIGHT_PASS_LIVE_DISABLED") : "BLOCKED_AGENT_AUTHORIZATION";
     const reason = authorized
-      ? "Live market, tier, margin, balance, allowance, fee, slippage and agent-open checks passed. No order was signed or submitted."
+      ? (liveMode
+        ? "Live market, tier, margin, balance, fee, slippage and agent-open checks passed; entry is submitted only after idempotency, risk and exact allowance checks."
+        : "Live market, tier, margin, balance and fee checks passed. Exact token approvals are prepared for live mode; no approval transaction or order was signed or submitted.")
       : "The agent wallet is not authorized for LeverUp market-open permission bit 0. No order was signed or submitted.";
     let ledgerId = null, ledgerPersisted = false;
     try {
@@ -156,7 +163,7 @@ export async function prepareLeverUpAdvisorPlan({
     } catch (error) { console.error("LeverUp preflight D1 ledger write failed: " + errorMessage(error)); }
     let dryRunSigning = { status: "NOT_CONFIGURED" };
     let coordination = { status: "NOT_RUN" };
-    if (authorized && env?.LEVERUP_AGENT_PRIVATE_KEY) {
+    if (authorized && env?.LEVERUP_AGENT_PRIVATE_KEY && dryRunMode) {
       try {
         dryRunSigning = await signIntentDryRun({
           env, traderAddress, agentAddress, agentAuthorization: snapshot.agentAuthorization,
@@ -175,6 +182,9 @@ export async function prepareLeverUpAdvisorPlan({
           portfolio: {}, env, store: env.CIEL_STATE, now,
         });
       } catch (error) { dryRunSigning = { status: "FAILED", reason: errorMessage(error) }; }
+    }
+    if (authorized && liveMode) {
+      coordination = await executeLeverUpEntry({ env, db: env.DB, candidate, signalId, snapshot, plan, now, dependencies });
     }
     const record = result(status, reason, {
       account, ledgerId, ledgerPersisted, inferredLeverage, selectedLeverage: plan.selectedLeverage,
@@ -195,7 +205,7 @@ export function formatLeverUpAdvisorLine(record) {
   const account = record.account || {};
   const accountLine = "WMON balance " + (account.wmonBalanceMon || "unavailable") +
     " MON; agent market-open permission " + (account.canMarketOpen ? "verified" : "not verified") + ".";
-  if (record.status === "PREFLIGHT_PASS_LIVE_DISABLED") {
+  if (record.status === "PREFLIGHT_PASS_LIVE_DISABLED" || record.status === "PREFLIGHT_PASS_LIVE_ENABLED") {
     const costs = record.estimatedProtocolCosts || {};
     return [
       "LEVERUP PREFLIGHT: PASS — " + record.selectedLeverage + "x, margin " + Number(record.marginMonUsed).toFixed(3) +
@@ -204,7 +214,7 @@ export function formatLeverUpAdvisorLine(record) {
         "; projected holding $" + Number(costs.holdingFeeUsd || 0).toFixed(4) +
         "; projected funding $" + Number(costs.fundingFeeUsd || 0).toFixed(4) + ".",
       accountLine,
-      "DRY RUN ONLY — live trading is OFF; no order was signed or submitted.",
+      record.status === "PREFLIGHT_PASS_LIVE_ENABLED" ? "LIVE MODE — idempotent execution coordinator handled submission and reconciliation." : "DRY RUN ONLY — live trading is OFF; no order was signed or submitted.",
     ].join("\\n");
   }
   return "LEVERUP PREFLIGHT: " + record.status + " — " + String(record.reason || "No reason supplied") +
