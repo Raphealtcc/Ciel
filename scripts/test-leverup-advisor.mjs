@@ -88,4 +88,26 @@ const notApproved = await prepareLeverUpAdvisorPlan({
 });
 assert.equal(notApproved.status, "NOT_APPROVED");
 
-console.log("PASS: CIEL-to-LeverUp preflight is read-only, 50x-minimum, reserve-aware, approval-gated, existing-position-safe, ledger-backed, and hard-locked from live execution.");
+
+import { runLeverUpDiagnostics } from "../src/leverup-advisor.js";
+import { privateKeyToAccount } from "viem/accounts";
+const diagKey = `0x${"02".repeat(32)}`;
+const diagAgent = privateKeyToAccount(diagKey).address;
+const diag = await runLeverUpDiagnostics({
+  env: { ...env, LEVERUP_AGENT_PRIVATE_KEY: diagKey, LEVERUP_AGENT_ADDRESS: diagAgent,
+    LEVERUP_LIVE_TRADING: "false", LEVERUP_KILL_SWITCH: "true" },
+  now: Date.now(),
+  dependencies: { readSnapshot: async () => ({
+    market: { base: "0x3333333333333333333333333333333333333333" },
+    agentAuthorization: { authorized: true, agentAddress: diagAgent,
+      canMarketOpen: true, canMarketClose: true, canPartialClose: true },
+    lastAgentNonce: "0", blockNumber: "123", indexedPositions: [], onchainPositions: [],
+    accountTokenStates: { [wmon]: { balance: "1000000000000000000", allowance: "1000000000000000000" } },
+  }) },
+});
+assert.equal(diag.ok, true);
+assert.equal(diag.signing.status, "PASS");
+assert.equal(diag.signerMatchesConfiguredAgent, true);
+assert.equal(diag.orderSubmitted, false);
+assert.equal(JSON.stringify(diag).includes(diagKey), false);
+console.log("PASS: CIEL-to-LeverUp preflight is read-only, 50x-minimum, reserve-aware, approval-gated, existing-position-safe, ledger-backed, and hard-locked from live execution, with read-only wallet and synthetic signer diagnostics.");
