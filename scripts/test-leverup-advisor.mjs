@@ -66,6 +66,10 @@ assert.equal(ready.status, "PREFLIGHT_PASS_LIVE_DISABLED");
 assert.equal(ready.liveExecutionEnabled, false);
 assert.equal(ready.killSwitchEnabled, true);
 assert.equal(ready.selectedLeverage, 100);
+assert.ok(Math.abs(seenPlanArgs.snapshot.collateralRatio - (20 / (100 * 0.23))) < 1e-9,
+  "100x collateral ratio must be derived from the $0.23 minimum, not a hardcoded protocol ratio");
+assert.ok(Math.abs(ready.minimumMarginMon - (0.23 / 0.019038)) < 1e-6,
+  "minimum WMON must be calculated from the $0.23 USD collateral and live MON/USD oracle");
 assert.ok(seenPlanArgs.desiredMarginMon >= ready.minimumMarginMon);
 assert.equal(seenPlanArgs.maxTradeMarginMon, ready.minimumMarginMon, "unset per-trade cap defaults to venue minimum only");
 assert.equal(seenPlanArgs.reserveMon, 25);

@@ -45,7 +45,7 @@ The staging `wrangler.jsonc` now contains the two confirmed public addresses and
 | `LEVERUP_TRADER_PRIVATE_KEY` | Secret | Trader-only ERC-20 approval signer; configure only through Cloudflare secret management |
 | `LEVERUP_AUTO_APPROVE` | Plain text | `true`; exact-amount approvals only, and only when live trading is explicitly enabled and kill switch is off |
 | `LEVERUP_RPC_URL` | Secret | Not configured; use a dedicated Monad RPC provider |
-| `LEVERUP_WMON_COLLATERAL_RATIO` | Plain text | Intentionally unset until verified live from LeverUp's order panel/API |
+| `LEVERUP_COLLATERAL_50X_USD` | Plain text | `0.43` USD minimum collateral at 50x |\n| `LEVERUP_COLLATERAL_100X_USD` | Plain text | `0.23` USD minimum collateral at 100x; linear interpolation between 50x and 100x; 0.23 USD floor above 100x |
 | `LEVERUP_MAX_TRADE_MARGIN_MON` | Plain text | Intentionally unset; no per-trade budget has been authorized |
 
 The additive migrations `0002_leverup_execution_ledger.sql` and `0003_leverup_execution_coordination.sql` are applied to the isolated `ciel-paper-staging` D1 database; all five LeverUp tables were verified. On 2026-11-03, the main-branch read-only CIEL/LeverUp preflight bundle was deployed to the isolated `ciel2` Worker (version `09e69cf9-4a29-4643-bdf7-cf0ab8f74dfa`, deployment `294ad345-78d7-4cea-868a-b4014dc5b694`). The public health endpoint returned HTTP 200, and the protected diagnostics endpoint returned HTTP 401 when called without authorization. All six existing secret bindings, D1, KV, Durable Object namespaces, exports, and the one-minute cron schedule were preserved. Live trading remains `false`, the kill switch remains `true`, and no wallet approval or order was submitted. The approval helper remains isolated in source and is not yet wired into a live order lifecycle.
@@ -85,9 +85,9 @@ Cost formulas used for projections:
 
 ## Important unresolved input
 
-The WMON collateral ratio is not returned in the public `GET /v1/pairs` response or the documented pair-view structure. LeverUp's AnyCollateral guidance says collateral ratios can change and must be checked in the order panel at trade time. A published example uses 70%, but that is not a live value and must not be hardcoded. The code therefore requires a verified ratio and fails closed if it is missing. Do not substitute the 15% maintenance-margin figure for the WMON collateral ratio; they are different concepts.
+The Worker no longer invents a protocol collateral-ratio value. It uses the operator-provided minimum collateral schedule: $0.43 at 50x, $0.23 at 100x, linearly interpolated for 50x–100x, and $0.23 as the conservative floor above 100x. The amount is scaled proportionally to the live global minimum notional, then converted to WMON using LeverUp's live MON/USD oracle. The equivalent ratio is derived only to satisfy the existing sizing interface. Live market tier, notional, price, balance, fee, and margin checks remain mandatory. These are operator-supplied operating minimums, not a claim that LeverUp publishes a fixed collateral ratio.
 
-The venue minimum notional is read from the live contract, not hardcoded. Minimum WMON collateral is calculated from the current MON/USD price, selected leverage, and verified WMON collateral ratio. The total 50 MON ceiling is not a per-trade allocation. The per-trade margin ceiling remains unset until explicitly configured.
+The venue minimum notional is read from the live contract, not hardcoded. Minimum WMON collateral is calculated from the current MON/USD price, selected leverage, and verified WMON collateral ratio. The total 50 MON ceiling is not a per-trade allocation. The current per-trade margin ceiling is 25 MON, with 25 MON reserved.
 
 ## Remaining implementation / activation sequence
 
