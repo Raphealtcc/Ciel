@@ -146,5 +146,17 @@ once(
 
 once("const strategyStats = { rangeScalp: modeStats(\"RANGE_SCALP\"), trendHold: modeStats(\"TREND_HOLD\"), legacy: modeStats(\"LEGACY\") };","const strategyStats = { corePullbackScalp: modeStats(\"CORE_PULLBACK_SCALP\"), coreTrendContinuation: modeStats(\"CORE_TREND_CONTINUATION\"), trendHold: modeStats(\"TREND_HOLD\"), rangeScalp: modeStats(\"RANGE_SCALP\"), legacy: modeStats(\"LEGACY\") };","report CORE_PULLBACK_SCALP, CORE_TREND_CONTINUATION, TREND_HOLD and RANGE_SCALP separately");
 
+once("lines.push(\"\", \"STRATEGY PERFORMANCE (CLOSED PAPER TRADES)\", \"Range scalps: \" + describeMode(data.strategyStats.rangeScalp), \"Trend holds: \" + describeMode(data.strategyStats.trendHold));","lines.push(\"\", \"STRATEGY PERFORMANCE (CLOSED PAPER TRADES)\", \"Core pullback scalps: \" + describeMode(data.strategyStats.corePullbackScalp), \"5m trend continuation: \" + describeMode(data.strategyStats.coreTrendContinuation), \"Trend holds: \" + describeMode(data.strategyStats.trendHold), \"Range scalps: \" + describeMode(data.strategyStats.rangeScalp));","print all four strategy buckets in /profits");
+once(
+  'mode: params.mode === "CORE_PULLBACK_SCALP" ? "CORE_PULLBACK_SCALP" : params.mode === "RANGE_SCALP" ? "RANGE_SCALP" : "TREND_HOLD",',
+  'mode: params.mode === "CORE_PULLBACK_SCALP" ? "CORE_PULLBACK_SCALP" : params.mode === "CORE_TREND_CONTINUATION" ? "CORE_TREND_CONTINUATION" : params.mode === "RANGE_SCALP" ? "RANGE_SCALP" : "TREND_HOLD",',
+  "persist 5m trend-continuation paper trades under their own strategy mode",
+);
+once(
+  'holdMinutes:candidate.holdMinutes || (candidate.mode === "CORE_PULLBACK_SCALP" ? 15 : candidate.mode === "RANGE_SCALP" ? 12 : 180), mode:candidate.mode',
+  'holdMinutes:candidate.holdMinutes || (candidate.mode === "CORE_PULLBACK_SCALP" ? 15 : candidate.mode === "CORE_TREND_CONTINUATION" ? 60 : candidate.mode === "RANGE_SCALP" ? 12 : 180), mode:candidate.mode',
+  "retain the 60-minute continuation hold in paper execution",
+);
+
 await writeFile(file,source);
 console.log("Adaptive core-market patch complete: BTC/ETH/SOL lead the scan, all other configured markets remain eligible, paper outcomes adjust ranking only after eight closed samples, and no D1 writes or risk-limit changes are introduced.");
