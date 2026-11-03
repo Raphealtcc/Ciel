@@ -120,13 +120,24 @@ once(
 );
 once(
   "  let forecastChecks = 0;\n  for (const candidate of candidates) {",
-  '  let forecastChecks=0,coreForecastChecks=0,otherForecastChecks=0;\n  const hasCoreTrendCandidates=candidates.some((candidate)=>coreMarketSet.has(candidate.symbol)&&candidate.mode!=="RANGE_SCALP"&&candidate.mode!=="CORE_PULLBACK_SCALP");\n  for (const candidate of candidates) {',
+  '  let forecastChecks=0,coreForecastChecks=0,otherForecastChecks=0;\n  const coreTrendCandidateCount=candidates.filter((candidate)=>coreMarketSet.has(candidate.symbol)&&candidate.mode!=="RANGE_SCALP"&&candidate.mode!=="CORE_PULLBACK_SCALP").length;\n  for (const candidate of candidates) {',
   "reserve forecast-review capacity for other watchlist markets"
 );
 once(
   '    if (forecastChecks >= 6 && !isScalpMode) continue;\n    if (!isScalpMode) forecastChecks++;',
-  '    if (!isScalpMode) { if(forecastChecks>=6) continue; if(hasCoreTrendCandidates&&coreMarketSet.has(candidate.symbol)&&coreForecastChecks>=3) continue; if(hasCoreTrendCandidates&&!coreMarketSet.has(candidate.symbol)&&otherForecastChecks>=3) continue; forecastChecks++; if(coreMarketSet.has(candidate.symbol))coreForecastChecks++; else otherForecastChecks++; }',
+  '    if (!isScalpMode) { if(forecastChecks>=6) continue; if(coreTrendCandidateCount>0&&coreMarketSet.has(candidate.symbol)&&coreForecastChecks>=Math.min(3,coreTrendCandidateCount)) continue; if(coreTrendCandidateCount>0&&!coreMarketSet.has(candidate.symbol)&&otherForecastChecks>=6-Math.min(3,coreTrendCandidateCount)) continue; forecastChecks++; if(coreMarketSet.has(candidate.symbol))coreForecastChecks++; else otherForecastChecks++; }',
   "cap core trend reviews at three so other coins retain review capacity"
+);
+
+once(
+  'const marker = await env.CIEL_STATE.get("ciel:telegram:webhook:auto-registration").catch(() => null);',
+  'const marker = await env.CIEL_STATE.get("ciel:telegram:webhook:auto-registration").catch(() => null);\n        const advisorScanRaw = await env.CIEL_STATE.get("ciel:advisor:last-scan").catch(() => null);\n        let advisorScan = null; try { advisorScan = advisorScanRaw ? JSON.parse(advisorScanRaw) : null; } catch { advisorScan = null; }',
+  "expose the latest advisor scan through protected diagnostics",
+);
+once(
+  'telegramWebhookRegistrationMarkerPresent: Boolean(marker), feed:',
+  'telegramWebhookRegistrationMarkerPresent: Boolean(marker), advisorScan, feed:',
+  "include strategy rejection and adaptive-learning summaries in diagnostics",
 );
 
 await writeFile(file,source);
