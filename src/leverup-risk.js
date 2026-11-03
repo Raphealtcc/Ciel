@@ -1,8 +1,8 @@
 // Independent portfolio risk gate for LeverUp. Fail closed on incomplete account/market data.
 export const LEVERUP_RISK_DEFAULTS = Object.freeze({
   totalAllocationMon: 50, reserveMon: 25, minLeverage: 50,
-  maxConcurrentPositions: 1, maxDailyRealizedLossMon: 1,
-  maxRollingDrawdownMon: 2, maxAggregateStopRiskMon: 1,
+  maxConcurrentPositions: 1, maxDailyRealizedLossMon: 9,
+  maxRollingDrawdownMon: 5, maxAggregateStopRiskMon: 5,
   feeBufferPct: 25, slippageBufferPct: 25,
 });
 const finitePositive = (v) => Number.isFinite(Number(v)) && Number(v) > 0;

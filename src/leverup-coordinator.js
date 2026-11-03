@@ -140,6 +140,9 @@ async function readPortfolioRiskFromLedger(db, now) {
       .bind(dayStartSeconds).all(),
     db.prepare("SELECT net_pnl_after_fees_raw FROM leverup_settlement_reconciliations ORDER BY close_time DESC LIMIT 300").all(),
   ]);
+  const [activeEntries] = await Promise.all([
+    db.prepare("SELECT payload_json FROM leverup_execution_intents WHERE action = 0 AND status IN ('EXECUTED','SUBMITTED','PENDING','UNCERTAIN')").all(),
+  ]);
   const toMon = (raw) => Number(BigInt(raw || "0")) / 1e18;
   const dailyRealizedLossMon = (daily.results || []).reduce((sum, row) => sum + Math.max(0, -toMon(row.net_pnl_after_fees_raw)), 0);
   let equity = 0, peak = 0, rollingDrawdownMon = 0;
@@ -148,7 +151,16 @@ async function readPortfolioRiskFromLedger(db, now) {
     peak = Math.max(peak, equity);
     rollingDrawdownMon = Math.max(rollingDrawdownMon, peak - equity);
   }
-  return { dailyRealizedLossMon, rollingDrawdownMon, source: "leverup_settlement_reconciliations" };
+  // Reserve stop-risk for every open or not-yet-reconciled entry. If the intent
+  // is still pending/uncertain, keep its risk reserved rather than treating it as zero.
+  const aggregateStopRiskMon = (activeEntries.results || []).reduce((sum, row) => {
+    try {
+      const payload = JSON.parse(row.payload_json || "{}");
+      const risk = Number(payload.stopRiskMon ?? payload.plan?.stopRiskMon ?? 0);
+      return sum + (Number.isFinite(risk) && risk > 0 ? risk : 0);
+    } catch { return sum; }
+  }, 0);
+  return { dailyRealizedLossMon, rollingDrawdownMon, aggregateStopRiskMon, source: "leverup_settlement_reconciliations+active_execution_intents" };
 }
 
 export async function executeLeverUpEntry({ env, db, candidate, signalId, snapshot, plan, now = Date.now(), dependencies = {} }) {
@@ -169,12 +181,12 @@ export async function executeLeverUpEntry({ env, db, candidate, signalId, snapsh
     availableWmonMon: wmonBalance, requestedMarginMon: margin, entryBudgetMon: entryBudget,
     currentOpenPositions: snapshot.indexedPositions || [],
     maxConcurrentPositions: env.LEVERUP_MAX_CONCURRENT_POSITIONS ?? 1,
-    proposedStopRiskMon: stopRiskMon, aggregateStopRiskMon: 0,
-    maxAggregateStopRiskMon: env.LEVERUP_MAX_AGGREGATE_STOP_RISK_MON ?? 1,
+    proposedStopRiskMon: stopRiskMon, aggregateStopRiskMon: portfolioRisk.aggregateStopRiskMon,
+    maxAggregateStopRiskMon: env.LEVERUP_MAX_AGGREGATE_STOP_RISK_MON ?? 5,
     dailyRealizedLossMon: portfolioRisk.dailyRealizedLossMon,
-    maxDailyRealizedLossMon: env.LEVERUP_MAX_DAILY_LOSS_MON ?? 1,
+    maxDailyRealizedLossMon: env.LEVERUP_MAX_DAILY_LOSS_MON ?? 9,
     rollingDrawdownMon: portfolioRisk.rollingDrawdownMon,
-    maxRollingDrawdownMon: env.LEVERUP_MAX_DRAWDOWN_MON ?? 2,
+    maxRollingDrawdownMon: env.LEVERUP_MAX_DRAWDOWN_MON ?? 5,
     staleFeed: now - Number(snapshot.checkedAt || now) > 30_000, executionUncertain: false, killSwitchActive: false,
   });
   if (!risk.allowed) return { status: "REJECTED_RISK", reasons: risk.reasons, risk };
