@@ -35,7 +35,7 @@ The staging `wrangler.jsonc` now contains the two confirmed public addresses and
 
 | Name | Type | Value / purpose |
 | --- | --- | --- |
-| `LEVERUP_TRADER_ADDRESS` | Plain text | `0x77DF3ae15b994131797905e59675da3544C90DFF` |
+| `LEVERUP_TRADER_ADDRESS` | Plain text | `0xd422fc040ad9294d553150Cf5646Ab0B1729E443` |
 | `LEVERUP_AGENT_ADDRESS` | Plain text | `0x77DF3ae15b994131797905e59675da3544C90DFF` |
 | `LEVERUP_LIVE_TRADING` | Plain text | `false` |
 | `LEVERUP_KILL_SWITCH` | Plain text | `true` |
