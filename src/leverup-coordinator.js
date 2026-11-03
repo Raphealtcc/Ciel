@@ -108,12 +108,18 @@ export async function submitLeverUpIntent({
       signerPrivateKey: env.LEVERUP_AGENT_PRIVATE_KEY, action, nonce, deadline, actionValues,
       feeToken, antiDdosFee, preflight, fetchImpl: dependencies.fetchImpl,
     });
-    await updateIntent(db, signalId, "SUBMITTED", { intentHash: result.intentHash,
-      payload: { ...payload, action, actionValues: serializable(actionValues), intentDigest: result.intent?.actionDataHash || null } });
+    try {
+      await updateIntent(db, signalId, "SUBMITTED", { intentHash: result.intentHash,
+        payload: { ...payload, action, actionValues: serializable(actionValues), intentDigest: result.intent?.actionDataHash || null } });
+    } catch (ledgerError) {
+      // The order may already be live. Keep the pre-submit UNCERTAIN claim and never replay it.
+      return { status: "UNCERTAIN", submitted: true, intentHash: result.intentHash, signalId,
+        reason: "SUBMISSION_ACCEPTED_BUT_D1_STATUS_WRITE_FAILED: " + String(ledgerError?.message || ledgerError).slice(0, 180) };
+    }
     return { status: "SUBMITTED", submitted: true, intentHash: result.intentHash, signalId };
   } catch (error) {
     const message = String(error?.message || error).slice(0, 300);
-    await updateIntent(db, signalId, markedUncertain ? "UNCERTAIN" : "REJECTED", { lastError: message });
+    await updateIntent(db, signalId, markedUncertain ? "UNCERTAIN" : "REJECTED", { lastError: message }).catch(() => void 0);
     return { status: markedUncertain ? "UNCERTAIN" : "REJECTED", submitted: false, signalId, reason: message };
   }
 }
