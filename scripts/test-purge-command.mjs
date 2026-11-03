@@ -49,4 +49,45 @@ assert.equal(blocked.status, "LIVE_DISABLED");
 assert.equal(blocked.openPositionCount, 1);
 assert.equal(blocked.submitted, 0);
 
-console.log("PASS: paper purge symbol targeting, mark-based P&L settlement, stale-mark protection, and live kill-gate.");
+let liveSubmitCalls = 0;
+const fakeDb = {
+  prepare(sql) {
+    return {
+      bind() {
+        return {
+          async run() { return { meta: { changes: 1 } }; },
+          async first() { return { status: "PREPARED", intent_hash: null }; },
+        };
+      },
+    };
+  },
+};
+const emergency = await purgeLeverUpPositions({
+  env: {
+    LEVERUP_TRADER_ADDRESS: "0x" + "11".repeat(20),
+    LEVERUP_AGENT_ADDRESS: "0x" + "22".repeat(20),
+    LEVERUP_AGENT_PRIVATE_KEY: "0x" + "33".repeat(32),
+    LEVERUP_LIVE_TRADING: "true",
+    LEVERUP_KILL_SWITCH: "true",
+  },
+  db: fakeDb,
+  symbol: "BTC",
+  now: 20000,
+  dependencies: {
+    fetchPairs: async () => [{ symbol: "BTC", base: "0x" + "33".repeat(20) }],
+    fetchOpenPositions: async () => [],
+    readPositions: async () => [{ positionHash: "0x" + "44".repeat(32), qty: 1n, isLong: true, pairBase: "0x" + "33".repeat(20) }],
+    readPair: async () => ({ slippageConfig: { enabled: true, slippageLongP: 10, slippageShortP: 10 } }),
+    readAuthorization: async () => ({ authorized: true, canMarketClose: true }),
+    fetchAntiDdos: async () => ({ config: [] }),
+    readBalances: async () => ({}),
+    readNonce: async () => 10n,
+    submit: async () => { liveSubmitCalls++; return { intentHash: "0x" + "55".repeat(32) }; },
+  },
+});
+assert.equal(emergency.status, "SUBMITTED");
+assert.equal(emergency.submitted, 1);
+assert.equal(emergency.killSwitchBypassedForRiskReducingClose, true);
+assert.equal(liveSubmitCalls, 1, "emergency path may submit only the market-close action");
+
+console.log("PASS: paper purge targeting/accounting, stale-mark protection, live-off gate, and kill-switch-safe close-only submission.");
