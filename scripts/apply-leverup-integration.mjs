@@ -11,7 +11,7 @@ function once(before, after, label) {
   console.log("Applied LeverUp advisor integration: " + label);
 }
 
-const importLine = 'import { prepareLeverUpAdvisorPlan, formatLeverUpAdvisorLine } from "../src/leverup-advisor.js";';
+const importLine = 'import { prepareLeverUpAdvisorPlan, formatLeverUpAdvisorLine, runLeverUpDiagnostics } from "../src/leverup-advisor.js";';
 if (!source.includes(importLine)) source = importLine + "\n" + source;
 
 once(
@@ -24,6 +24,13 @@ once(
   '      await notify(env, setupMessage(position, candidate, reviewed, prices.MON, forecast, quality.market, intraday) + paperLine, [',
   '      const leverUpLine = formatLeverUpAdvisorLine(leverUpPlan);\n      await notify(env, setupMessage(position, candidate, reviewed, prices.MON, forecast, quality.market, intraday) + paperLine + "\\n\\n" + leverUpLine, [',
   "attach real LeverUp preflight, collateral and fee status to the CIEL trade card",
+);
+
+
+once(
+  "    if (url.pathname === \"/health\") {",
+  "    if (url.pathname === \"/api/leverup/diagnostics\") {\\n      try { return json2(await runLeverUpDiagnostics({ env })); }\\n      catch (error) { return json2({ ok: false, mode: \"READ_ONLY_DRY_RUN\", error: String(error?.message || error).slice(0, 240), orderSubmitted: false }, 503); }\\n    }\\n    if (url.pathname === \"/health\") {",
+  "expose read-only LeverUp wallet, authorization and local-signing diagnostics",
 );
 
 await writeFile(file, source);
