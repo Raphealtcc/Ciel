@@ -8,6 +8,12 @@ import {
 } from "viem";
 import { LEVERUP_1CT, OneClickAction, selectFeeToken } from "./leverup-1ct.js";
 
+// Minimal read-only ERC-20 ABI used for trader balance and allowance diagnostics.
+const ERC20_READ_ABI = [
+  { type: "function", name: "balanceOf", stateMutability: "view", inputs: [{ name: "account", type: "address" }], outputs: [{ name: "", type: "uint256" }] },
+  { type: "function", name: "allowance", stateMutability: "view", inputs: [{ name: "owner", type: "address" }, { name: "spender", type: "address" }], outputs: [{ name: "", type: "uint256" }] },
+];
+
 export const LEVERUP_API = "https://service.leverup.xyz";
 export const MIN_EXECUTION_LEVERAGE = 50;
 export const LEVERUP_TOKENS = Object.freeze({
