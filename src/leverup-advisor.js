@@ -11,6 +11,16 @@ const errorMessage = (error) => String(error?.message || error || "Unknown Lever
 const monAmount = (raw) => { try { return (Number(BigInt(raw || "0")) / 1e18).toFixed(4); } catch { return "unavailable"; } };
 const jsonSafe = (value) => JSON.parse(JSON.stringify(value, (_key, item) => typeof item === "bigint" ? item.toString() : item));
 
+export function leverUpCollateralUsdForLeverage({ leverage, minimumNotionalUsd, collateralAt50xUsd = 0.43, collateralAt100xUsd = 0.23 }) {
+  const lev = Number(leverage), notional = Number(minimumNotionalUsd);
+  const at50 = Number(collateralAt50xUsd), at100 = Number(collateralAt100xUsd);
+  if (![lev, notional, at50, at100].every(Number.isFinite) || lev < 50 || notional <= 0 || at50 <= 0 || at100 <= 0) {
+    throw new Error("LEVERUP_COLLATERAL_SCHEDULE_INPUT_INVALID");
+  }
+  const base = lev <= 50 ? at50 : lev >= 100 ? at100 : at50 + (at100 - at50) * ((lev - 50) / 50);
+  return base * (notional / 20);
+}
+
 function accountSummary(snapshot) {
   const wmon = snapshot?.accountTokenStates?.[WMON], auth = snapshot?.agentAuthorization;
   return {
@@ -56,8 +66,9 @@ export async function prepareLeverUpAdvisorPlan({
   if (!Number.isFinite(minimumLeverage) || minimumLeverage < 50) return result("BLOCKED_LEVERAGE_POLICY",
     "Configured LeverUp minimum leverage is below 50x.");
 
-  const ratioValue = Number(env?.LEVERUP_WMON_COLLATERAL_RATIO);
-  const collateralRatio = Number.isFinite(ratioValue) && ratioValue > 0 && ratioValue <= 1 ? ratioValue : null;
+  // The operator-provided venue minima are USD collateral amounts, not a protocol CR.
+  // Derive an equivalent ratio after reading the live minimum notional and selected leverage.
+  let collateralRatio = null;
   let snapshot;
   try {
     const readSnapshot = dependencies.readSnapshot || readLeverUpAccountSnapshot;
@@ -78,12 +89,6 @@ export async function prepareLeverUpAdvisorPlan({
       "The trader already has an open LeverUp position. CIEL will not add exposure until it is reconciled or closed.", { account });
     await savePreflight(env, signalId, blocked); return blocked;
   }
-  if (!collateralRatio) {
-    const blocked = result("BLOCKED_COLLATERAL_RATIO_UNVERIFIED",
-      "Live WMON collateral ratio is not configured. CIEL will not estimate margin from an example or assume 100% collateral value.", { account });
-    await savePreflight(env, signalId, blocked); return blocked;
-  }
-
   try {
     const tiers = snapshot.pairView?.leverageMargins || [];
     const marketMaxLeverage = Math.max(0, ...tiers.map((tier) => Number(tier.maxLeverage)));
@@ -97,7 +102,15 @@ export async function prepareLeverUpAdvisorPlan({
 
     const minimumNotionalUsd = Number(minimumNotionalRaw) / 1e18;
     const monUsdPrice = Number(snapshot.monUsdPriceRaw) / 1e18;
-    const minimumMarginMon = calculateMinimumCollateralMon({ minimumNotionalUsd, leverage: leverageForMinimum, monUsdPrice, collateralRatio });
+    const minimumCollateralUsd = leverUpCollateralUsdForLeverage({
+      leverage: leverageForMinimum, minimumNotionalUsd,
+      collateralAt50xUsd: env?.LEVERUP_COLLATERAL_50X_USD ?? 0.43,
+      collateralAt100xUsd: env?.LEVERUP_COLLATERAL_100X_USD ?? 0.23,
+    });
+    collateralRatio = minimumNotionalUsd / (leverageForMinimum * minimumCollateralUsd);
+    if (!(collateralRatio > 0 && collateralRatio <= 1)) throw new Error("DERIVED_COLLATERAL_RATIO_OUT_OF_RANGE");
+    snapshot.collateralRatio = collateralRatio;
+    const minimumMarginMon = minimumCollateralUsd / monUsdPrice;
     const totalAllocationMon = Number(env?.LEVERUP_TOTAL_ALLOCATION_MON || 50);
     const reserveMon = Number(env?.LEVERUP_RESERVE_MON ?? totalAllocationMon * 0.5);
     const allocationCeiling = Math.max(0, totalAllocationMon - reserveMon);

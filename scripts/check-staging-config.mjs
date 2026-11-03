@@ -34,6 +34,8 @@ assert.equal(config.vars.LEVERUP_MAX_CONCURRENT_POSITIONS, "1");
 assert.equal(config.vars.LEVERUP_MAX_DAILY_LOSS_MON, "1");
 assert.equal(config.vars.LEVERUP_MAX_DRAWDOWN_MON, "2");
 assert.equal(config.vars.LEVERUP_MAX_AGGREGATE_STOP_RISK_MON, "1");
+assert.equal(config.vars.LEVERUP_COLLATERAL_100X_USD, "0.23");
+assert.equal(config.vars.LEVERUP_COLLATERAL_50X_USD, "0.43");
 assert.equal(config.vars.LEVERUP_WMON_COLLATERAL_RATIO, undefined, "Do not invent a live collateral ratio");
 const webhook = new URL(config.vars.TELEGRAM_WEBHOOK_URL);
 assert.equal(webhook.protocol, "https:");

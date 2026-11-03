@@ -19,6 +19,7 @@ const baseSnapshot = (ratio) => ({
 const env = {
   LEVERUP_PREFLIGHT_ENABLED: "true", LEVERUP_LIVE_TRADING: "false", LEVERUP_KILL_SWITCH: "true",
   LEVERUP_MIN_LEVERAGE: "50", LEVERUP_TOTAL_ALLOCATION_MON: "50", LEVERUP_RESERVE_MON: "25",
+  LEVERUP_COLLATERAL_50X_USD: "0.43", LEVERUP_COLLATERAL_100X_USD: "0.23",
   LEVERUP_TRADER_ADDRESS: trader, LEVERUP_AGENT_ADDRESS: agent,
   CIEL_STATE: { put: async () => {} }, DB: { prepare: () => ({}) },
 };
@@ -49,15 +50,16 @@ const dependencies = {
     seenPersist = { signalId, preflight, options }; return "ledger-id";
   },
 };
-const noRatio = await prepareLeverUpAdvisorPlan({
-  env: { ...env }, candidate, reviewed, signalId: "SIG-NO-RATIO", now: 1_800_000_000_000,
-  dependencies: { readSnapshot: async ({ collateralRatio }) => baseSnapshot(collateralRatio) },
-});
-assert.equal(noRatio.status, "BLOCKED_COLLATERAL_RATIO_UNVERIFIED");
-assert.equal(noRatio.account.wmonBalanceMon, "50.0000");
+const collateral50 = (await import("../src/leverup-advisor.js")).leverUpCollateralUsdForLeverage;
+assert.equal(collateral50({ leverage: 50, minimumNotionalUsd: 20 }), 0.43);
+assert.equal(collateral50({ leverage: 75, minimumNotionalUsd: 20 }), 0.33);
+assert.equal(collateral50({ leverage: 100, minimumNotionalUsd: 20 }), 0.23);
+assert.equal(collateral50({ leverage: 150, minimumNotionalUsd: 20 }), 0.23);
+assert.equal(collateral50({ leverage: 75, minimumNotionalUsd: 40 }), 0.66);
+assert.throws(() => collateral50({ leverage: 25, minimumNotionalUsd: 20 }), /SCHEDULE_INPUT_INVALID/);
 
 const ready = await prepareLeverUpAdvisorPlan({
-  env: { ...env, LEVERUP_WMON_COLLATERAL_RATIO: "0.95" }, candidate, reviewed,
+  env: { ...env }, candidate, reviewed,
   signalId: "SIG-READY", now: 1_800_000_000_000, dependencies,
 });
 assert.equal(ready.status, "PREFLIGHT_PASS_LIVE_DISABLED");
@@ -73,21 +75,21 @@ assert.equal(ready.ledgerPersisted, true);
 assert.ok(formatLeverUpAdvisorLine(ready).includes("DRY RUN ONLY"));
 
 const below50 = await prepareLeverUpAdvisorPlan({
-  env: { ...env, LEVERUP_WMON_COLLATERAL_RATIO: "0.95" }, candidate: { ...candidate, leverage: 25 },
+  env: { ...env }, candidate: { ...candidate, leverage: 25 },
   reviewed, signalId: "SIG-25", now: 1_800_000_000_000, dependencies,
 });
 assert.equal(below50.status, "BLOCKED_PREFLIGHT");
 assert.match(below50.reason, /BELOW_50X/);
 
 const existing = await prepareLeverUpAdvisorPlan({
-  env: { ...env, LEVERUP_WMON_COLLATERAL_RATIO: "0.95" }, candidate, reviewed,
+  env: { ...env }, candidate, reviewed,
   signalId: "SIG-OPEN", now: 1_800_000_000_000,
   dependencies: { readSnapshot: async ({ collateralRatio }) => ({ ...baseSnapshot(collateralRatio), indexedPositions: [{ positionHash: "0xabc" }] }) },
 });
 assert.equal(existing.status, "BLOCKED_EXISTING_POSITION");
 
 const notApproved = await prepareLeverUpAdvisorPlan({
-  env: { ...env, LEVERUP_WMON_COLLATERAL_RATIO: "0.95" }, candidate, reviewed: { verdict: "WAIT" },
+  env: { ...env }, candidate, reviewed: { verdict: "WAIT" },
   signalId: "SIG-WAIT", now: 1_800_000_000_000, dependencies,
 });
 assert.equal(notApproved.status, "NOT_APPROVED");
