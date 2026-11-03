@@ -180,7 +180,6 @@ export function evaluateLeverUpPositionAction({ position, currentPriceRaw, now =
     now >= Number(position.timestamp || 0) * 1000 + Number(maxHoldMinutes) * 60_000;
   if (earliest > nowSeconds) return { action: "WAIT", reason: "MINIMUM_HOLD_NOT_REACHED" };
   if (stopHit) return { action: "MARKET_CLOSE", reason: "STOP_LOSS_TRIGGERED" };
-  if (targetHit) return { action: "MARKET_CLOSE", reason: "TAKE_PROFIT_TRIGGERED" };
   if (expired) return { action: "MARKET_CLOSE", reason: "MAX_HOLD_TIME_REACHED" };
   if (entry > 0n) {
     for (let i = 0; i < partialTakeProfits.length; i++) {
@@ -196,6 +195,7 @@ export function evaluateLeverUpPositionAction({ position, currentPriceRaw, now =
       }
     }
   }
+  if (targetHit) return { action: "MARKET_CLOSE", reason: "TAKE_PROFIT_TRIGGERED" };
   return { action: "HOLD", reason: "NO_EXIT_TRIGGER" };
 }
 
@@ -207,7 +207,61 @@ async function readEntryMetadata(db) {
   });
 }
 
+export async function reconcilePendingLeverUpIntents({ env, db, now = Date.now(), dependencies = {} }) {
+  if (!db?.prepare) return { checked: 0, reconciled: 0, skipped: 0, uncertain: 0 };
+  const pending = await db.prepare("SELECT * FROM leverup_execution_intents WHERE status IN ('SUBMITTED','PENDING') AND intent_hash IS NOT NULL ORDER BY created_at_ms ASC LIMIT 25").all();
+  const rows = pending.results || [];
+  if (!rows.length) return { checked: 0, reconciled: 0, skipped: 0, uncertain: 0 };
+  const fetchImpl = dependencies.fetchImpl || fetch;
+  const statusReader = dependencies.getStatus || getIntentStatusOnce;
+  const apiReader = dependencies.fetchOpenPositions || fetchOpenPositions;
+  const trader = String(env?.LEVERUP_TRADER_ADDRESS || "");
+  let open = [];
+  try { open = await apiReader(trader, { fetchImpl }); } catch { /* retain pending; indexing/API may lag */ }
+  let reconciled = 0, skipped = 0, uncertain = 0;
+  for (const row of rows) {
+    try {
+      const state = await statusReader(LEVERUP_1CT.baseUrl, row.intent_hash, { fetchImpl });
+      let payload = {};
+      try { payload = JSON.parse(row.payload_json || "{}"); } catch {}
+      if (state.skipped) {
+        await updateIntent(db, row.signal_id, "SKIPPED", { payload: { ...payload, intentStatus: state } });
+        skipped++; continue;
+      }
+      if (!state.executed) {
+        await updateIntent(db, row.signal_id, "PENDING", { payload: { ...payload, lastStatusCheckAt: now } });
+        continue;
+      }
+      const pairBase = String(row.pair_base || payload.plan?.preflight?.pairBase || "").toLowerCase();
+      const isLong = payload.candidate?.side === "LONG";
+      const indexed = open.find((p) => String(p.pairBase || p.pair?.base || "").toLowerCase() === pairBase &&
+        (p.isLong == null || Boolean(p.isLong) === isLong));
+      if (Number(row.action) === OneClickAction.MARKET_OPEN) {
+        if (!indexed) {
+          await updateIntent(db, row.signal_id, "PENDING", { payload: { ...payload, intentStatus: state, indexingLag: true } });
+          continue;
+        }
+        payload.positionHash = indexed.positionHash || indexed.position?.positionHash || null;
+        payload.executedAt = now;
+        await updateIntent(db, row.signal_id, "EXECUTED", { payload });
+        reconciled++; continue;
+      }
+      if (Number(row.action) === OneClickAction.MARKET_CLOSE || Number(row.action) === OneClickAction.PARTIAL_CLOSE) {
+        await updateIntent(db, row.signal_id, "EXECUTED", { payload: { ...payload, intentStatus: state, executedAt: now } });
+        reconciled++; continue;
+      }
+      await updateIntent(db, row.signal_id, "RECONCILED", { payload: { ...payload, intentStatus: state } });
+      reconciled++;
+    } catch (error) {
+      await updateIntent(db, row.signal_id, "PENDING", { lastError: String(error?.message || error).slice(0, 220) }).catch(() => void 0);
+      uncertain++;
+    }
+  }
+  return { checked: rows.length, reconciled, skipped, uncertain };
+}
+
 export async function runLeverUpPositionManager({ env, db, now = Date.now(), dependencies = {} }) {
+  const reconciliation = await reconcilePendingLeverUpIntents({ env, db, now, dependencies });
   const traderAddress = String(env?.LEVERUP_TRADER_ADDRESS || "");
   const agentAddress = String(env?.LEVERUP_AGENT_ADDRESS || "");
   if (!/^0x[0-9a-fA-F]{40}$/.test(traderAddress) || !/^0x[0-9a-fA-F]{40}$/.test(agentAddress)) {
@@ -277,5 +331,5 @@ export async function runLeverUpPositionManager({ env, db, now = Date.now(), dep
     });
     if (result.submitted) submitted++;
   }
-  return { status: liveEnabled(env) ? "LIVE_MONITORING" : "READ_ONLY_MONITORING", checked: evaluated, submitted, snapshots, openPositionCount: positionMap.size };
+  return { status: liveEnabled(env) ? "LIVE_MONITORING" : "READ_ONLY_MONITORING", checked: evaluated, submitted, snapshots, openPositionCount: positionMap.size, reconciliation };
 }
