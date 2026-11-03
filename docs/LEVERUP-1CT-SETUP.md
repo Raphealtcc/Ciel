@@ -48,7 +48,7 @@ The staging `wrangler.jsonc` now contains the two confirmed public addresses and
 | `LEVERUP_WMON_COLLATERAL_RATIO` | Plain text | Intentionally unset until verified live from LeverUp's order panel/API |
 | `LEVERUP_MAX_TRADE_MARGIN_MON` | Plain text | Intentionally unset; no per-trade budget has been authorized |
 
-The Cloudflare account connection is available again. The additive migration `0002_leverup_execution_ledger.sql` has been applied to the isolated `ciel-paper-staging` D1 database and its three tables plus two indexes were verified. No Worker deployment or wallet transaction was performed.
+The additive migrations `0002_leverup_execution_ledger.sql` and `0003_leverup_execution_coordination.sql` are applied to the isolated `ciel-paper-staging` D1 database; all five LeverUp tables were verified. On 2026-11-03, the main-branch read-only CIEL/LeverUp preflight bundle was deployed to the isolated `ciel2` Worker (version `09e69cf9-4a29-4643-bdf7-cf0ab8f74dfa`, deployment `294ad345-78d7-4cea-868a-b4014dc5b694`). The public health endpoint returned HTTP 200, and the protected diagnostics endpoint returned HTTP 401 when called without authorization. All six existing secret bindings, D1, KV, Durable Object namespaces, exports, and the one-minute cron schedule were preserved. Live trading remains `false`, the kill switch remains `true`, and no wallet approval or order was submitted. The approval helper remains isolated in source and is not yet wired into a live order lifecycle.
 
 ## Wallet and token setup
 
