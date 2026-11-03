@@ -82,8 +82,8 @@ once(
 );
 
 once(
-  '      "/profits \\u2014 automatic 50x paper-trading balance and P&L",',
-  '      "/profits \\u2014 automatic 50x paper-trading balance and P&L",\n      "/purge \\u2014 close all paper and live positions; /purge BTC closes BTC only",',
+  '      "/test \\u2014 verify Telegram delivery",',
+  '      "/test \\u2014 verify Telegram delivery",\n      "/purge \\u2014 close all paper and live positions; /purge BTC closes BTC only",',
   "document purge command in Telegram help",
 );
 
