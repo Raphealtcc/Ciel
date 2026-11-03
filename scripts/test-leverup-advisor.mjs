@@ -65,6 +65,9 @@ assert.equal(seenPlanArgs.maxTradeMarginMon, ready.minimumMarginMon, "unset per-
 assert.equal(seenPlanArgs.reserveMon, 25);
 assert.ok(seenPlanArgs.stopLossPriceRaw > 0n && seenPlanArgs.takeProfitPriceRaw > 0n);
 assert.equal(seenPersist.options.decision, "PASS");
+assert.ok(Math.abs(ready.coordination.risk.aggregateStopRiskMon - Number(ready.marginMonUsed) * ready.selectedLeverage * candidate.stopPct / 100) < 1e-8,
+  "stop-risk must include the actual leverage multiplier, not just the underlying price percentage");
+assert.equal(ready.coordination.status, "REJECTED", "the 1 MON aggregate stop-risk ceiling must reject this 0.4% stop at 100x");
 assert.equal(ready.ledgerPersisted, true);
 assert.ok(formatLeverUpAdvisorLine(ready).includes("DRY RUN ONLY"));
 

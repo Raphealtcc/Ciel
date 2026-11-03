@@ -152,7 +152,7 @@ export async function prepareLeverUpAdvisorPlan({
         });
         const wmonBalanceMon = Number(BigInt(snapshot.accountTokenStates[WMON].balance)) / 1e18;
         const entryBudgetMon = Number(BigInt(plan.amountInRaw)) / 1e18;
-        const stopRiskMon = Number(plan.marginMonUsed) * stopPct / 100;
+        const stopRiskMon = Number(plan.marginMonUsed) * Number(plan.selectedLeverage) * stopPct / 100;
         coordination = await prepareLeverUpExecution({
           signal: { id: signalId },
           preflight: { status: "PREFLIGHT_PASS_LIVE_DISABLED", selectedLeverage: plan.selectedLeverage,
