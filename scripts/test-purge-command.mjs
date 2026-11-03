@@ -30,7 +30,7 @@ assert.equal(all.closedCount, 1);
 assert.equal(state.trades.find(x => x.symbol === "ETH").status, "CLOSED");
 const staleState = { availableBalanceMon: 1, trades: [{ signalId: "x", symbol: "SOL", status: "OPEN", marginMon: 1, leverage: 50, entryPrice: 10, entryMonUsd: 1 }] };
 const staleStorage = { async get(){return structuredClone(staleState);}, async put(_k,v){Object.assign(staleState,v);}, async transaction(fn){return fn();} };
-const stale = await purgePaperTrades({ storage: staleStorage, accountKey: "paper", prices: { SOL: 11, MON: 1 }, now: 50000, lastTickAt: 10000, symbol: "SOL" });
+const stale = await purgePaperTrades({ storage: staleStorage, accountKey: "paper", prices: { SOL: 11, MON: 1 }, now: 200000, lastTickAt: 10000, symbol: "SOL" });
 assert.equal(stale.closedCount, 0);
 assert.equal(stale.skippedCount, 1);
 assert.equal(staleState.trades[0].status, "OPEN");
