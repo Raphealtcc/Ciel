@@ -60,13 +60,22 @@ assert.ok(!serialized.includes("REPLACE_WITH_NEW_ACCOUNT_"), "No staging resourc
 assert.ok(!serialized.includes("fb55e85b-af9b-45b3-ba43-6c7f7996dfa8"), "Source D1 ID must not appear in staging config");
 assert.ok(!serialized.includes("8b5c4b6078ce43a8aec4d9343855a70f"), "Source KV ID must not appear in staging config");
 
-const migration = config.migrations?.[0];
-assert.equal(migration?.tag, "v1");
-assert.deepEqual(new Set(migration?.new_sqlite_classes || []), new Set(["HyperliquidFeed", "TradingEngine"]));
-assert.equal(migration?.new_classes, undefined, "Fresh staging namespaces must use SQLite-backed DO classes");
+const durableObjectExports = config.exports || {};
+assert.deepEqual(
+  Object.keys(durableObjectExports).sort(),
+  ["HyperliquidFeed", "TradingEngine"],
+  "Every provisioned Durable Object class must be declared in exports"
+);
+for (const className of ["HyperliquidFeed", "TradingEngine"]) {
+  assert.deepEqual(durableObjectExports[className], {
+    type: "durable-object",
+    storage: "sqlite"
+  }, className + " must retain its existing SQLite namespace");
+}
+assert.equal(config.migrations, undefined, "Do not mix legacy migrations with declarative Durable Object exports");
 
 const bindings = new Set(config.durable_objects.bindings.map((item) => item.name));
 assert.ok(bindings.has("HYPERLIQUID_FEED"));
 assert.ok(bindings.has("TRADING_ENGINE"));
 
-console.log("PASS: ciel2 replacement Worker uses the original production bot identity and webhook; previews cannot claim the shared bot; isolated D1/KV and SQLite-backed Durable Object migrations are preserved.");
+console.log("PASS: ciel2 replacement Worker uses the original production bot identity and webhook; previews cannot claim the shared bot; isolated D1/KV and existing SQLite Durable Object namespaces are preserved through declarative exports.");
