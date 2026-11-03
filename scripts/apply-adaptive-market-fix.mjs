@@ -160,5 +160,22 @@ once(
 
 once("(s.mode === \"CORE_PULLBACK_SCALP\" ? \"CORE PULLBACK SCALP\" : s.mode === \"RANGE_SCALP\" ? \"RANGE SCALP\" : \"TREND HOLD\")","(s.mode === \"CORE_PULLBACK_SCALP\" ? \"CORE PULLBACK SCALP\" : s.mode === \"CORE_TREND_CONTINUATION\" ? \"5M TREND CONTINUATION\" : s.mode === \"RANGE_SCALP\" ? \"RANGE SCALP\" : \"TREND HOLD\")","label 5m continuation correctly in the setup message");
 
+once("const priorReviewSql = candidate.mode === \"CORE_PULLBACK_SCALP\"\n      ? \"SELECT created_at_ms FROM advisor_ai_audit WHERE symbol=? AND model='CIEL deterministic core scalp guard' ORDER BY created_at_ms DESC LIMIT 1\"\n      : candidate.mode === \"RANGE_SCALP\"\n        ? \"SELECT created_at_ms FROM advisor_ai_audit WHERE symbol=? AND model='CIEL deterministic range guard' ORDER BY created_at_ms DESC LIMIT 1\"\n        : \"SELECT created_at_ms FROM advisor_ai_audit WHERE symbol=? AND model NOT IN ('CIEL Statistical Ensemble v1','CIEL Statistical Ensemble v1 + technical gate','CIEL deterministic range guard','CIEL deterministic core scalp guard','CIEL deterministic positioning gate','Hyperliquid market-quality gate') ORDER BY created_at_ms DESC LIMIT 1\";","const priorReviewSql = candidate.mode === \"CORE_PULLBACK_SCALP\"\n      ? \"SELECT created_at_ms FROM advisor_ai_audit WHERE symbol=? AND model='CIEL deterministic core scalp guard' ORDER BY created_at_ms DESC LIMIT 1\"\n      : candidate.mode === \"CORE_TREND_CONTINUATION\"\n        ? \"SELECT created_at_ms FROM advisor_ai_audit WHERE symbol=? AND model='CIEL deterministic core trend continuation guard' ORDER BY created_at_ms DESC LIMIT 1\"\n        : candidate.mode === \"RANGE_SCALP\"\n          ? \"SELECT created_at_ms FROM advisor_ai_audit WHERE symbol=? AND model='CIEL deterministic range guard' ORDER BY created_at_ms DESC LIMIT 1\"\n          : \"SELECT created_at_ms FROM advisor_ai_audit WHERE symbol=? AND model NOT IN ('CIEL Statistical Ensemble v1','CIEL Statistical Ensemble v1 + technical gate','CIEL deterministic range guard','CIEL deterministic core scalp guard','CIEL deterministic core trend continuation guard','CIEL deterministic positioning gate','Hyperliquid market-quality gate') ORDER BY created_at_ms DESC LIMIT 1\";","give 5m continuation its own review cooldown");
+once(
+  'const reviewed = candidate.mode === "CORE_PULLBACK_SCALP"',
+  'const reviewed = candidate.mode === "CORE_TREND_CONTINUATION"\n      ? { verdict:"WAIT", reason:"Closed 5m EMA trend, breakout, retest, volume, freshness and market-quality gates passed; deterministic continuation review avoids duplicate Gemini calls.", flags:["LOCAL_CORE_TREND_CONTINUATION"], model:"CIEL deterministic core trend continuation guard", queries:[], sources:[] }\n      : candidate.mode === "CORE_PULLBACK_SCALP"',
+  "use deterministic local review for validated 5m continuation candidates",
+);
+once(
+  '"LOCAL_RANGE_SCALP_REVIEW", "LOCAL_CORE_PULLBACK_SCALP"',
+  '"LOCAL_RANGE_SCALP_REVIEW", "LOCAL_CORE_PULLBACK_SCALP", "LOCAL_CORE_TREND_CONTINUATION"',
+  "allow the deterministic continuation review through existing forecast and market-quality gates",
+);
+once(
+  '!["CIEL deterministic range guard","CIEL deterministic core scalp guard"].includes(reviewed.model)',
+  '!["CIEL deterministic range guard","CIEL deterministic core scalp guard","CIEL deterministic core trend continuation guard"].includes(reviewed.model)',
+  "mark 5m continuation as deterministic technical confirmation rather than missing AI confirmation",
+);
+
 await writeFile(file,source);
 console.log("Adaptive core-market patch complete: BTC/ETH/SOL lead the scan, all other configured markets remain eligible, paper outcomes adjust ranking only after eight closed samples, and no D1 writes or risk-limit changes are introduced.");
