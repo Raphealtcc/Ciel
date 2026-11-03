@@ -108,6 +108,9 @@ export async function submitLeverUpIntent({
       signerPrivateKey: env.LEVERUP_AGENT_PRIVATE_KEY, action, nonce, deadline, actionValues,
       feeToken, antiDdosFee, preflight, fetchImpl: dependencies.fetchImpl,
     });
+    if (!/^0x[0-9a-fA-F]{64}$/.test(String(result.intentHash || ""))) {
+      return { status: "UNCERTAIN", submitted: true, signalId, reason: "SUBMISSION_RESPONSE_MISSING_VALID_INTENT_HASH" };
+    }
     try {
       await updateIntent(db, signalId, "SUBMITTED", { intentHash: result.intentHash,
         payload: { ...payload, action, actionValues: serializable(actionValues), intentDigest: result.intent?.actionDataHash || null } });
