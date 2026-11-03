@@ -237,11 +237,19 @@ export async function reconcilePendingLeverUpIntents({ env, db, now = Date.now()
       const indexed = open.find((p) => String(p.pairBase || p.pair?.base || "").toLowerCase() === pairBase &&
         (p.isLong == null || Boolean(p.isLong) === isLong));
       if (Number(row.action) === OneClickAction.MARKET_OPEN) {
-        if (!indexed) {
+        if (!indexed || !pairBase) {
           await updateIntent(db, row.signal_id, "PENDING", { payload: { ...payload, intentStatus: state, indexingLag: true } });
           continue;
         }
-        payload.positionHash = indexed.positionHash || indexed.position?.positionHash || null;
+        const client = dependencies.publicClient || createLeverUpPublicClient(env?.LEVERUP_RPC_URL || "https://rpc.monad.xyz");
+        const chainPositions = await (dependencies.readPositions || readPositionsV4)(trader, pairBase, { publicClient: client });
+        const chainMatch = (chainPositions || []).find((p) =>
+          String(p.positionHash || "").toLowerCase() === String(indexed.positionHash || indexed.position?.positionHash || "").toLowerCase());
+        if (!chainMatch) {
+          await updateIntent(db, row.signal_id, "PENDING", { payload: { ...payload, intentStatus: state, indexingLag: true, indexedPositionHash: indexed.positionHash || null } });
+          continue;
+        }
+        payload.positionHash = chainMatch.positionHash;
         payload.executedAt = now;
         await updateIntent(db, row.signal_id, "EXECUTED", { payload });
         reconciled++; continue;
@@ -260,8 +268,44 @@ export async function reconcilePendingLeverUpIntents({ env, db, now = Date.now()
   return { checked: rows.length, reconciled, skipped, uncertain };
 }
 
+async function reconcileClosedSettlements({ env, db, now, dependencies = {} }) {
+  if (!db?.prepare) return { checked: 0, reconciled: 0 };
+  const throttleKey = "ciel:leverup:settlement:last-check:v1";
+  const lastCheck = Number(await env?.CIEL_STATE?.get(throttleKey).catch(() => "0") || 0);
+  if (lastCheck && now - lastCheck < 60_000) return { checked: 0, reconciled: 0, throttled: true };
+  await env?.CIEL_STATE?.put(throttleKey, String(now), { expirationTtl: 3600 }).catch(() => void 0);
+  const history = await (dependencies.fetchHistory || fetchAllPositionsPaginated)(
+    String(env?.LEVERUP_TRADER_ADDRESS || ""), { fetchImpl: dependencies.fetchImpl || fetch, size: 100, maxPages: 10 });
+  const entries = await readEntryMetadata(db);
+  let reconciled = 0;
+  for (const closed of history.filter((p) => p?.status === "CLOSED" && p?.closeInfo && p?.positionHash)) {
+    const existing = await db.prepare("SELECT position_hash FROM leverup_settlement_reconciliations WHERE position_hash = ?")
+      .bind(closed.positionHash).first();
+    if (existing) continue;
+    const latest = await db.prepare("SELECT * FROM leverup_position_fee_snapshots WHERE position_hash = ? ORDER BY observed_at_ms DESC LIMIT 1")
+      .bind(closed.positionHash).first();
+    const entry = entries.find((x) => String(x.positionHash || "").toLowerCase() === String(closed.positionHash).toLowerCase());
+    const lastSnapshot = latest ? {
+      fundingFeeRaw: latest.funding_fee_raw, holdingFeeRaw: latest.holding_fee_raw,
+    } : null;
+    const settlement = reconcileClosedPosition(closed, lastSnapshot, entry?.plan?.preflight || null, {
+      marginTokenDecimals: 18, marginTokenPriceUsd: null,
+    });
+    await persistSettlementReconciliation(db, settlement, {
+      intentSignalId: entry?.signalId || null, source: "LeverUp closed-position history",
+      estimatedProtocolCosts: entry?.plan?.preflight?.estimatedProtocolCosts || null,
+    });
+    if (entry?.signalId) await updateIntent(db, entry.signalId, "RECONCILED", {
+      payload: { ...entry, settlement: serializable(settlement), reconciledAt: now },
+    });
+    reconciled++;
+  }
+  return { checked: history.length, reconciled };
+}
+
 export async function runLeverUpPositionManager({ env, db, now = Date.now(), dependencies = {} }) {
   const reconciliation = await reconcilePendingLeverUpIntents({ env, db, now, dependencies });
+  const settlements = await reconcileClosedSettlements({ env, db, now, dependencies }).catch((error) => ({ error: String(error?.message || error).slice(0, 200) }));
   const traderAddress = String(env?.LEVERUP_TRADER_ADDRESS || "");
   const agentAddress = String(env?.LEVERUP_AGENT_ADDRESS || "");
   if (!/^0x[0-9a-fA-F]{40}$/.test(traderAddress) || !/^0x[0-9a-fA-F]{40}$/.test(agentAddress)) {
@@ -270,7 +314,7 @@ export async function runLeverUpPositionManager({ env, db, now = Date.now(), dep
   const fetchImpl = dependencies.fetchImpl || fetch;
   const client = dependencies.publicClient || createLeverUpPublicClient(env?.LEVERUP_RPC_URL || "https://rpc.monad.xyz");
   const apiPositions = await (dependencies.fetchOpenPositions || fetchOpenPositions)(traderAddress, { fetchImpl });
-  if (!apiPositions.length) return { status: liveEnabled(env) ? "LIVE_MONITORING" : "READ_ONLY_MONITORING", checked: 0, submitted: 0 };
+  if (!apiPositions.length) return { status: liveEnabled(env) ? "LIVE_MONITORING" : "READ_ONLY_MONITORING", checked: 0, submitted: 0, reconciliation, settlements };
   const pairBases = [...new Set(apiPositions.map((p) => String(p.pairBase || p.pair?.base || "").toLowerCase()).filter((x) => /^0x[0-9a-f]{40}$/.test(x)))];
   if (!pairBases.length) throw new Error("OPEN_POSITION_PAIR_BASE_MISSING");
   const [prices, antiDdos, auth, entries] = await Promise.all([
@@ -331,5 +375,5 @@ export async function runLeverUpPositionManager({ env, db, now = Date.now(), dep
     });
     if (result.submitted) submitted++;
   }
-  return { status: liveEnabled(env) ? "LIVE_MONITORING" : "READ_ONLY_MONITORING", checked: evaluated, submitted, snapshots, openPositionCount: positionMap.size, reconciliation };
+  return { status: liveEnabled(env) ? "LIVE_MONITORING" : "READ_ONLY_MONITORING", checked: evaluated, submitted, snapshots, openPositionCount: positionMap.size, reconciliation, settlements };
 }
