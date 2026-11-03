@@ -11,9 +11,10 @@ function once(before, after, label) {
   console.log("Applied LeverUp advisor integration: " + label);
 }
 
-const importLine = 'import { prepareLeverUpAdvisorPlan, formatLeverUpAdvisorLine, runLeverUpDiagnostics } from "../src/leverup-advisor.js";
-import { runLeverUpPositionManager } from "../src/leverup-coordinator.js";';
+const importLine = 'import { prepareLeverUpAdvisorPlan, formatLeverUpAdvisorLine, runLeverUpDiagnostics } from "../src/leverup-advisor.js";';
+const coordinatorImport = 'import { runLeverUpPositionManager } from "../src/leverup-coordinator.js";';
 if (!source.includes(importLine)) source = importLine + "\n" + source;
+if (!source.includes(coordinatorImport)) source = coordinatorImport + "\n" + source;
 
 once(
   '    const id = crypto.randomUUID().replace(/-/g, "").slice(0, 10).toUpperCase(), direction = candidate.side === "LONG" ? 1 : -1;\n    const stop = candidate.entry * (1 - direction * candidate.stopPct / 100), target = candidate.entry * (1 + direction * candidate.targetPct / 100), expires = now + 15 * 6e4;',
