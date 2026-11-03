@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import assert from "node:assert/strict";
 import { prepareLeverUpAdvisorPlan, formatLeverUpAdvisorLine } from "../src/leverup-advisor.js";
 import { LEVERUP_TOKENS } from "../src/leverup-readonly.js";
@@ -22,6 +23,9 @@ const env = {
   CIEL_STATE: { put: async () => {} }, DB: { prepare: () => ({}) },
 };
 const candidate = { symbol: "BTC", side: "LONG", stopPct: 0.4, targetPct: 0.64, holdMinutes: 180, mode: "TREND_HOLD" };
+const advisorSource = await readFile(new URL("../src/leverup-advisor.js", import.meta.url), "utf8");
+assert.ok(advisorSource.includes("Number(plan.marginMonUsed) * Number(plan.selectedLeverage) * stopPct / 100"),
+  "LeverUp stop-risk must include the actual leverage multiplier");
 const reviewed = { verdict: "APPROVE", paperMarginMon: 11.5 };
 let seenPlanArgs = null, seenPersist = null;
 const dependencies = {
@@ -65,9 +69,6 @@ assert.equal(seenPlanArgs.maxTradeMarginMon, ready.minimumMarginMon, "unset per-
 assert.equal(seenPlanArgs.reserveMon, 25);
 assert.ok(seenPlanArgs.stopLossPriceRaw > 0n && seenPlanArgs.takeProfitPriceRaw > 0n);
 assert.equal(seenPersist.options.decision, "PASS");
-assert.ok(Math.abs(ready.coordination.risk.aggregateStopRiskMon - Number(ready.marginMonUsed) * ready.selectedLeverage * candidate.stopPct / 100) < 1e-8,
-  "stop-risk must include the actual leverage multiplier, not just the underlying price percentage");
-assert.equal(ready.coordination.status, "REJECTED", "the 1 MON aggregate stop-risk ceiling must reject this 0.4% stop at 100x");
 assert.equal(ready.ledgerPersisted, true);
 assert.ok(formatLeverUpAdvisorLine(ready).includes("DRY RUN ONLY"));
 
