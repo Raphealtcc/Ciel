@@ -163,14 +163,18 @@ export async function prepareLeverUpAdvisorPlan({
     } catch (error) { console.error("LeverUp preflight D1 ledger write failed: " + errorMessage(error)); }
     let dryRunSigning = { status: "NOT_CONFIGURED" };
     let coordination = { status: "NOT_RUN" };
-    if (authorized && env?.LEVERUP_AGENT_PRIVATE_KEY && dryRunMode) {
+    if (authorized && dryRunMode) {
+      if (env?.LEVERUP_AGENT_PRIVATE_KEY) {
+        try {
+          dryRunSigning = await signIntentDryRun({
+            env, traderAddress, agentAddress, agentAuthorization: snapshot.agentAuthorization,
+            action: OneClickAction.MARKET_OPEN, nonce: plan.nonce, deadline: plan.deadline,
+            actionValues: plan.actionValues, feeToken: plan.feeToken, antiDdosFee: plan.antiDdosFee,
+            preflight: plan.preflight, now,
+          });
+        } catch (error) { dryRunSigning = { status: "FAILED", reason: errorMessage(error) }; }
+      }
       try {
-        dryRunSigning = await signIntentDryRun({
-          env, traderAddress, agentAddress, agentAuthorization: snapshot.agentAuthorization,
-          action: OneClickAction.MARKET_OPEN, nonce: plan.nonce, deadline: plan.deadline,
-          actionValues: plan.actionValues, feeToken: plan.feeToken, antiDdosFee: plan.antiDdosFee,
-          preflight: plan.preflight, now,
-        });
         const wmonBalanceMon = Number(BigInt(snapshot.accountTokenStates[WMON].balance)) / 1e18;
         const entryBudgetMon = Number(BigInt(plan.amountInRaw)) / 1e18;
         const stopRiskMon = Number(plan.marginMonUsed) * Number(plan.selectedLeverage) * stopPct / 100;
@@ -181,7 +185,7 @@ export async function prepareLeverUpAdvisorPlan({
           account: { wmonBalanceMon, openPositions: snapshot.indexedPositions || [], staleFeed: false },
           portfolio: {}, env, store: env.CIEL_STATE, now,
         });
-      } catch (error) { dryRunSigning = { status: "FAILED", reason: errorMessage(error) }; }
+      } catch (error) { coordination = { status: "REJECTED", reason: errorMessage(error), risk: { reasons: ["PORTFOLIO_RISK_EVALUATION_FAILED"] } }; }
     }
     if (authorized && liveMode) {
       coordination = await executeLeverUpEntry({ env, db: env.DB, candidate, signalId, snapshot, plan, now, dependencies });
