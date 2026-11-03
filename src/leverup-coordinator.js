@@ -118,6 +118,25 @@ export async function submitLeverUpIntent({
   }
 }
 
+async function readPortfolioRiskFromLedger(db, now) {
+  if (!db?.prepare) throw new Error("LEVERUP_RISK_LEDGER_UNAVAILABLE");
+  const dayStartSeconds = Math.floor(Date.UTC(new Date(now).getUTCFullYear(), new Date(now).getUTCMonth(), new Date(now).getUTCDate()) / 1000);
+  const [daily, history] = await Promise.all([
+    db.prepare("SELECT net_pnl_after_fees_raw FROM leverup_settlement_reconciliations WHERE close_time >= ? ORDER BY close_time ASC")
+      .bind(dayStartSeconds).all(),
+    db.prepare("SELECT net_pnl_after_fees_raw FROM leverup_settlement_reconciliations ORDER BY close_time ASC LIMIT 300").all(),
+  ]);
+  const toMon = (raw) => Number(BigInt(raw || "0")) / 1e18;
+  const dailyRealizedLossMon = (daily.results || []).reduce((sum, row) => sum + Math.max(0, -toMon(row.net_pnl_after_fees_raw)), 0);
+  let equity = 0, peak = 0, rollingDrawdownMon = 0;
+  for (const row of history.results || []) {
+    equity += toMon(row.net_pnl_after_fees_raw);
+    peak = Math.max(peak, equity);
+    rollingDrawdownMon = Math.max(rollingDrawdownMon, peak - equity);
+  }
+  return { dailyRealizedLossMon, rollingDrawdownMon, source: "leverup_settlement_reconciliations" };
+}
+
 export async function executeLeverUpEntry({ env, db, candidate, signalId, snapshot, plan, now = Date.now(), dependencies = {} }) {
   if (!liveEnabled(env)) return { status: "LIVE_DISABLED", submitted: false };
   if (!snapshot?.agentAuthorization?.authorized || !snapshot.agentAuthorization.canMarketOpen) {
@@ -137,8 +156,10 @@ export async function executeLeverUpEntry({ env, db, candidate, signalId, snapsh
     maxConcurrentPositions: env.LEVERUP_MAX_CONCURRENT_POSITIONS ?? 1,
     proposedStopRiskMon: stopRiskMon, aggregateStopRiskMon: 0,
     maxAggregateStopRiskMon: env.LEVERUP_MAX_AGGREGATE_STOP_RISK_MON ?? 1,
-    dailyRealizedLossMon: 0, maxDailyRealizedLossMon: env.LEVERUP_MAX_DAILY_LOSS_MON ?? 1,
-    rollingDrawdownMon: 0, maxRollingDrawdownMon: env.LEVERUP_MAX_DRAWDOWN_MON ?? 2,
+    dailyRealizedLossMon: (await readPortfolioRiskFromLedger(db, now)).dailyRealizedLossMon,
+    maxDailyRealizedLossMon: env.LEVERUP_MAX_DAILY_LOSS_MON ?? 1,
+    rollingDrawdownMon: (await readPortfolioRiskFromLedger(db, now)).rollingDrawdownMon,
+    maxRollingDrawdownMon: env.LEVERUP_MAX_DRAWDOWN_MON ?? 2,
     staleFeed: now - Number(snapshot.checkedAt || now) > 30_000, executionUncertain: false, killSwitchActive: false,
   });
   if (!risk.allowed) return { status: "REJECTED_RISK", reasons: risk.reasons, risk };

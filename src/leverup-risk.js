@@ -35,7 +35,10 @@ export function evaluateLeverUpPortfolioRisk({ requestedLeverage, totalAllocatio
   if (currentOpenPositions.length >= n(maxConcurrentPositions)) reasons.push("MAX_CONCURRENT_POSITIONS_REACHED");
   const totalStopRisk = n(aggregateStopRiskMon) + Math.max(0, n(proposedStopRiskMon) || 0);
   if (totalStopRisk > n(maxAggregateStopRiskMon)) reasons.push("AGGREGATE_STOP_RISK_LIMIT_EXCEEDED");
-  if (n(dailyRealizedLossMon) >= n(maxDailyRealizedLossMon)) reasons.push("DAILY_REALIZED_LOSS_LIMIT_REACHED");
-  if (n(rollingDrawdownMon) >= n(maxRollingDrawdownMon)) reasons.push("ROLLING_DRAWDOWN_LIMIT_REACHED");
+  const proposedRisk = Math.max(0, n(proposedStopRiskMon) || 0);
+  if (n(dailyRealizedLossMon) >= n(maxDailyRealizedLossMon) ||
+      n(dailyRealizedLossMon) + proposedRisk > n(maxDailyRealizedLossMon)) reasons.push("DAILY_REALIZED_LOSS_LIMIT_REACHED_OR_PROJECTED");
+  if (n(rollingDrawdownMon) >= n(maxRollingDrawdownMon) ||
+      n(rollingDrawdownMon) + proposedRisk > n(maxRollingDrawdownMon)) reasons.push("ROLLING_DRAWDOWN_LIMIT_REACHED_OR_PROJECTED");
   return { allowed: reasons.length === 0, reasons, usableAllocationMon: usable, remainingAllocationMon: Math.max(0, usable - Math.max(0, n(requestedMarginMon) || 0)), aggregateStopRiskMon: totalStopRisk };
 }
