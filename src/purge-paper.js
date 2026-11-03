@@ -1,7 +1,7 @@
 export function normalizePurgeSymbol(value) {
   const raw = String(value || "").trim().toUpperCase();
   if (!raw) return null;
-  const normalized = raw.replace(/\\.(P|PERP)$/,"").replace(/[-_/](USD|USDT|USDC|PERP)$/,"").replace(/(USDT|USDC|USD|PERP)$/,"").replace(/[^A-Z0-9]/g,"");
+  const normalized = raw.replace(/\.(P|PERP)$/,"").replace(/[-_/](USD|USDT|USDC|PERP)$/,"").replace(/(USDT|USDC|USD|PERP)$/,"").replace(/[^A-Z0-9]/g,"");
   if (!normalized) throw new Error("PURGE_SYMBOL_INVALID");
   return normalized;
 }

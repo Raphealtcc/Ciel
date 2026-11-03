@@ -363,7 +363,7 @@ export function collectLeverUpPairBases(apiPositions = [], entries = []) {
 
 function normalizeLeverUpPurgeSymbol(value) {
   return String(value || "").trim().toUpperCase()
-    .replace(/\\.(P|PERP)$/,"")
+    .replace(/\.(P|PERP)$/,"")
     .replace(/[-_/](USD|USDT|USDC|PERP)$/,"")
     .replace(/(USDT|USDC|USD|PERP)$/,"")
     .replace(/[^A-Z0-9]/g,"");
