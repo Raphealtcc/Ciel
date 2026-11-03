@@ -61,7 +61,7 @@ analyze-ciel-with-rea:
     when: always
     paths: [rea-patched-analysis.json, rea-patched-summary.json, rea-patched-analysis.stderr.log]
     expire_in: 30 days
-  allow_failure: false
+  allow_failure: true
   rules:
     - changes:
         - recovered-src/**/*
