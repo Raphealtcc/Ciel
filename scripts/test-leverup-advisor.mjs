@@ -77,6 +77,8 @@ assert.ok(seenPlanArgs.stopLossPriceRaw > 0n && seenPlanArgs.takeProfitPriceRaw 
 assert.equal(seenPersist.options.decision, "PASS");
 assert.equal(ready.ledgerPersisted, true);
 assert.ok(formatLeverUpAdvisorLine(ready).includes("DRY RUN ONLY"));
+assert.ok(formatLeverUpAdvisorLine(ready).includes("PORTFOLIO RISK BLOCKED"),
+  "the $1 MON stop-risk cap must be reported when the 0.4% stop implies higher risk");
 
 const below50 = await prepareLeverUpAdvisorPlan({
   env: { ...env }, candidate: { ...candidate, leverage: 25 },
