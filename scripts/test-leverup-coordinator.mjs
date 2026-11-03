@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { calculateLeverUpEntryBudget, evaluateLeverUpPortfolioRisk } from "../src/leverup-risk.js";
-import { prepareLeverUpExecution, reconcileLeverUpIntent } from "../src/leverup-coordinator.js";
+import { prepareLeverUpExecution, reconcileLeverUpIntent, collectLeverUpPairBases } from "../src/leverup-coordinator.js";
 const b50 = calculateLeverUpEntryBudget({minimumCollateralUsd:.45,leverage:50,monUsdPrice:.02,openFeeUsd:.01,closeFeeUsd:.01});
 const b100 = calculateLeverUpEntryBudget({minimumCollateralUsd:.23,leverage:100,monUsdPrice:.02});
 assert.equal(b50.collateralUsd,.45); assert.equal(b100.collateralUsd,.23);
@@ -31,4 +31,9 @@ let reads=0;
 const rec=await reconcileLeverUpIntent({intentHash:"0x"+"ab".repeat(32),pollStatus:async()=>({executed:true}),readPositions:async()=>{reads++;return [{positionHash:"0x1"}]}});
 assert.equal(rec.status,"RECONCILED"); assert.equal(reads,1);
 await assert.rejects(()=>reconcileLeverUpIntent({intentHash:"bad",pollStatus:async()=>({}),readPositions:async()=>[]}),/INVALID_INTENT_HASH/);
+
+const fallbackBases = collectLeverUpPairBases([], [{ pairBase: "0x" + "12".repeat(20) }]);
+assert.deepEqual(fallbackBases, ["0x" + "12".repeat(20)], "on-chain pair discovery must retain the pair base from active D1 entries");
+const combinedBases = collectLeverUpPairBases([{ pairBase: "0x" + "34".repeat(20) }], [{ pairBase: "0x" + "12".repeat(20) }]);
+assert.deepEqual(combinedBases.sort(), ["0x" + "12".repeat(20), "0x" + "34".repeat(20)].sort());
 console.log("PASS: collateral budget incl. fees/buffers, portfolio risk gates, hard-off dry-run coordinator, intent reconciliation primitives.");

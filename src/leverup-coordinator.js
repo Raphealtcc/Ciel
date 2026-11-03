@@ -232,9 +232,10 @@ export function evaluateLeverUpPositionAction({ position, currentPriceRaw, now =
 
 async function readEntryMetadata(db) {
   if (!db?.prepare) return [];
-  const result = await db.prepare("SELECT signal_id,payload_json FROM leverup_execution_intents WHERE action = 0 AND status IN ('EXECUTED','RECONCILED','SUBMITTED','PENDING')").all();
+  const result = await db.prepare("SELECT signal_id,pair_base,payload_json,status FROM leverup_execution_intents WHERE action = 0 AND status IN ('EXECUTED','SUBMITTED','PENDING','UNCERTAIN')").all();
   return (result.results || []).map((row) => {
-    try { return { signalId: row.signal_id, ...JSON.parse(row.payload_json || "{}") }; } catch { return { signalId: row.signal_id }; }
+    try { return { signalId: row.signal_id, pairBase: row.pair_base || null, intentStatus: row.status, ...JSON.parse(row.payload_json || "{}") }; }
+    catch { return { signalId: row.signal_id, pairBase: row.pair_base || null, intentStatus: row.status }; }
   });
 }
 
@@ -263,21 +264,25 @@ export async function reconcilePendingLeverUpIntents({ env, db, now = Date.now()
         await updateIntent(db, row.signal_id, "PENDING", { payload: { ...payload, lastStatusCheckAt: now } });
         continue;
       }
-      const pairBase = String(row.pair_base || payload.plan?.preflight?.pairBase || "").toLowerCase();
+      const pairBase = String(row.pair_base || payload.plan?.preflight?.pairBase || payload.plan?.pairBase || "").toLowerCase();
       const isLong = payload.candidate?.side === "LONG";
       const indexed = open.find((p) => String(p.pairBase || p.pair?.base || "").toLowerCase() === pairBase &&
         (p.isLong == null || Boolean(p.isLong) === isLong));
       if (Number(row.action) === OneClickAction.MARKET_OPEN) {
-        if (!indexed || !pairBase) {
-          await updateIntent(db, row.signal_id, "PENDING", { payload: { ...payload, intentStatus: state, indexingLag: true } });
+        if (!/^0x[0-9a-f]{40}$/.test(pairBase)) {
+          await updateIntent(db, row.signal_id, "PENDING", { payload: { ...payload, intentStatus: state, pairBaseMissing: true } });
           continue;
         }
         const client = dependencies.publicClient || createLeverUpPublicClient(env?.LEVERUP_RPC_URL || "https://rpc.monad.xyz");
         const chainPositions = await (dependencies.readPositions || readPositionsV4)(trader, pairBase, { publicClient: client });
-        const chainMatch = (chainPositions || []).find((p) =>
-          String(p.positionHash || "").toLowerCase() === String(indexed.positionHash || indexed.position?.positionHash || "").toLowerCase());
+        const indexedHash = String(indexed?.positionHash || indexed?.position?.positionHash || "").toLowerCase();
+        const chainMatches = (chainPositions || []).filter((p) => {
+          if (indexedHash) return String(p.positionHash || "").toLowerCase() === indexedHash;
+          return Boolean(p.isLong) === isLong;
+        });
+        const chainMatch = chainMatches.length === 1 ? chainMatches[0] : null;
         if (!chainMatch) {
-          await updateIntent(db, row.signal_id, "PENDING", { payload: { ...payload, intentStatus: state, indexingLag: true, indexedPositionHash: indexed.positionHash || null } });
+          await updateIntent(db, row.signal_id, "PENDING", { payload: { ...payload, intentStatus: state, indexingLag: !indexed, chainMatchAmbiguous: chainMatches.length > 1 } });
           continue;
         }
         payload.positionHash = chainMatch.positionHash;
@@ -347,6 +352,13 @@ async function reconcileClosedSettlements({ env, db, now, dependencies = {} }) {
   return { checked: history.length, reconciled };
 }
 
+export function collectLeverUpPairBases(apiPositions = [], entries = []) {
+  return [...new Set([
+    ...apiPositions.map((p) => String(p?.pairBase || p?.pair?.base || "").toLowerCase()),
+    ...entries.map((entry) => String(entry?.pairBase || entry?.plan?.preflight?.pairBase || entry?.plan?.pairBase || "").toLowerCase()),
+  ].filter((base) => /^0x[0-9a-f]{40}$/.test(base)))];
+}
+
 export async function runLeverUpPositionManager({ env, db, now = Date.now(), dependencies = {} }) {
   const reconciliation = await reconcilePendingLeverUpIntents({ env, db, now, dependencies });
   const traderAddress = String(env?.LEVERUP_TRADER_ADDRESS || "");
@@ -356,19 +368,20 @@ export async function runLeverUpPositionManager({ env, db, now = Date.now(), dep
   }
   const fetchImpl = dependencies.fetchImpl || fetch;
   const client = dependencies.publicClient || createLeverUpPublicClient(env?.LEVERUP_RPC_URL || "https://rpc.monad.xyz");
-  const apiPositions = await (dependencies.fetchOpenPositions || fetchOpenPositions)(traderAddress, { fetchImpl });
-  if (!apiPositions.length) {
+  let apiPositions = [];
+  try { apiPositions = await (dependencies.fetchOpenPositions || fetchOpenPositions)(traderAddress, { fetchImpl }); }
+  catch { /* on-chain discovery below remains authoritative when the indexer is unavailable */ }
+  const entries = await readEntryMetadata(db);
+  const pairBases = collectLeverUpPairBases(apiPositions, entries);
+  if (!pairBases.length) {
     const settlements = await reconcileClosedSettlements({ env, db, now, dependencies })
       .catch((error) => ({ error: String(error?.message || error).slice(0, 200) }));
-    return { status: liveEnabled(env) ? "LIVE_MONITORING" : "READ_ONLY_MONITORING", checked: 0, submitted: 0, reconciliation, settlements };
+    return { status: liveEnabled(env) ? "LIVE_MONITORING" : "READ_ONLY_MONITORING", checked: 0, submitted: 0, reconciliation, settlements, discovery: "NO_KNOWN_PAIR_BASES" };
   }
-  const pairBases = [...new Set(apiPositions.map((p) => String(p.pairBase || p.pair?.base || "").toLowerCase()).filter((x) => /^0x[0-9a-f]{40}$/.test(x)))];
-  if (!pairBases.length) throw new Error("OPEN_POSITION_PAIR_BASE_MISSING");
-  const [prices, antiDdos, auth, entries] = await Promise.all([
+  const [prices, antiDdos, auth] = await Promise.all([
     (dependencies.fetchPrices || fetchLatestOraclePrices)(pairBases, { fetchImpl }),
     (dependencies.fetchAntiDdos || fetchAntiDdosConfig)({ fetchImpl }),
     (dependencies.readAuthorization || readAgentAuthorization)(traderAddress, agentAddress, { publicClient: client }),
-    readEntryMetadata(db),
   ]);
   const [positionsByPair, pairViews] = await Promise.all([
     Promise.all(pairBases.map(async (base) => [base, await (dependencies.readPositions || readPositionsV4)(traderAddress, base, { publicClient: client })])),
@@ -378,6 +391,20 @@ export async function runLeverUpPositionManager({ env, db, now = Date.now(), dep
   for (const [base, rows] of positionsByPair) for (const row of rows || []) {
     const position = normalizePositionAccrual(row);
     positionMap.set(position.positionHash.toLowerCase(), { ...position, pairBase: base });
+  }
+  // If the indexer has not published the opened position yet, associate only a unique
+  // on-chain pair+side match with its submitted CIEL entry. Ambiguous matches stay untouched.
+  for (const entry of entries) {
+    if (entry.positionHash) continue;
+    const base = String(entry.pairBase || entry.plan?.preflight?.pairBase || entry.plan?.pairBase || "").toLowerCase();
+    if (!/^0x[0-9a-f]{40}$/.test(base)) continue;
+    const matches = [...positionMap.entries()].filter(([, position]) =>
+      position.pairBase === base && Boolean(position.isLong) === (entry.candidate?.side === "LONG"));
+    if (matches.length !== 1) continue;
+    const [hash, position] = matches[0];
+    entry.positionHash = position.positionHash;
+    entry.executedAt = entry.executedAt || now;
+    await updateIntent(db, entry.signalId, "EXECUTED", { payload: entry });
   }
   const pairMap = new Map(pairViews);
   const feeTokens = (antiDdos.config || []).filter((x) => x.enabled && x.feeToken).map((x) => x.feeToken);
@@ -422,5 +449,8 @@ export async function runLeverUpPositionManager({ env, db, now = Date.now(), dep
     });
     if (result.submitted) submitted++;
   }
-  return { status: liveEnabled(env) ? "LIVE_MONITORING" : "READ_ONLY_MONITORING", checked: evaluated, submitted, snapshots, openPositionCount: positionMap.size, reconciliation, settlements: { skippedWhilePositionOpen: true } };
+  const settlements = positionMap.size === 0
+    ? await reconcileClosedSettlements({ env, db, now, dependencies }).catch((error) => ({ error: String(error?.message || error).slice(0, 200) }))
+    : { skippedWhilePositionOpen: true };
+  return { status: liveEnabled(env) ? "LIVE_MONITORING" : "READ_ONLY_MONITORING", checked: evaluated, submitted, snapshots, openPositionCount: positionMap.size, pairBasesChecked: pairBases.length, reconciliation, settlements };
 }
