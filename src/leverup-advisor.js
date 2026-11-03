@@ -285,7 +285,11 @@ export async function runLeverUpDiagnostics({ env, now = Date.now(), dependencie
     signerAddress: signing.signerAddress || null,
     signerMatchesConfiguredAgent: signing.signerAddress
       ? signing.signerAddress.toLowerCase() === agentAddress.toLowerCase() : null,
-    balancesAndAllowances, indexedPositions: snapshot.indexedPositions || [],
+    balancesAndAllowances,
+    nativeMonBalanceRaw: snapshot.nativeMonBalanceRaw ?? null,
+    nativeMonBalanceMon: snapshot.nativeMonBalanceMon ?? null,
+    nativeMonGasReady: Number(snapshot.nativeMonBalanceMon || 0) >= 0.02,
+    indexedPositions: snapshot.indexedPositions || [],
     onchainPositions: snapshot.onchainPositions || [],
     agentAuthorization: {
       authorized: Boolean(auth.authorized), agentAddress: auth.agentAddress || null,

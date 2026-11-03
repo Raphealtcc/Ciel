@@ -960,13 +960,14 @@ export async function readLeverUpAccountSnapshot({
     : [];
   const feeTokens = antiDdos.config.filter((item) => item.enabled && item.feeToken)
     .map((item) => item.feeToken);
-  const [accountTokenStates, agentAuthorization, lastAgentNonce] = traderAddress
+  const [accountTokenStates, agentAuthorization, lastAgentNonce, nativeMonBalance] = traderAddress
     ? await Promise.all([
       readTokenBalancesAndAllowances(traderAddress, [LEVERUP_TOKENS.WMON, LEVERUP_TOKENS.LVMON, LEVERUP_TOKENS.USDC, LEVERUP_TOKENS.LVUSD, ...feeTokens], { publicClient }),
       agentAddress ? readAgentAuthorization(traderAddress, agentAddress, { publicClient }) : Promise.resolve(null),
       agentAddress ? readLastAgentNonce(traderAddress, agentAddress, { publicClient }) : Promise.resolve(null),
+      publicClient.getBalance({ address: traderAddress }),
     ])
-    : [{}, null, null];
+    : [{}, null, null, 0n];
   return {
     checkedAt: Date.now(),
     blockNumber: blockNumber.toString(),
@@ -990,6 +991,8 @@ export async function readLeverUpAccountSnapshot({
     }])),
     agentAuthorization,
     lastAgentNonce: lastAgentNonce == null ? null : String(lastAgentNonce),
+    nativeMonBalanceRaw: String(nativeMonBalance),
+    nativeMonBalanceMon: Number(nativeMonBalance) / 1e18,
     antiDdosConfig: antiDdos,
     collateralRatio: collateralRatio ?? null,
   };
