@@ -21,6 +21,8 @@ assert.ok(bad<1&&bad>=0.9);
 assert.equal(adaptiveCandidateMultiplier(profitable,{symbol:"BTC",mode:"TREND_HOLD"}),1);
 assert.ok(source.includes('["BTC","ETH","SOL", ...configuredWatchSymbols(env.WATCH_SYMBOLS)]'));
 assert.ok(source.includes("orderedSymbols"));
+assert.ok(source.includes('const preferredGroup = Math.floor(now / CYCLE) % 3 === 2 ? "WATCHLIST" : "CORE"'));
+assert.ok(source.includes("coreMarkets:[\"BTC\",\"ETH\",\"SOL\"],preferredGroup"));
 assert.ok(source.includes("scanDiagnostics:scanDiagnostics.slice(-120)"));
 assert.ok(source.includes('"INSUFFICIENT_CLOSED_CANDLE_HISTORY"'));
 assert.ok(source.includes('"PULLBACK_RECLAIM_VOLUME_OR_FRESHNESS_GATE"'));
