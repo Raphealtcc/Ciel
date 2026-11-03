@@ -124,12 +124,12 @@ async function readPortfolioRiskFromLedger(db, now) {
   const [daily, history] = await Promise.all([
     db.prepare("SELECT net_pnl_after_fees_raw FROM leverup_settlement_reconciliations WHERE close_time >= ? ORDER BY close_time ASC")
       .bind(dayStartSeconds).all(),
-    db.prepare("SELECT net_pnl_after_fees_raw FROM leverup_settlement_reconciliations ORDER BY close_time ASC LIMIT 300").all(),
+    db.prepare("SELECT net_pnl_after_fees_raw FROM leverup_settlement_reconciliations ORDER BY close_time DESC LIMIT 300").all(),
   ]);
   const toMon = (raw) => Number(BigInt(raw || "0")) / 1e18;
   const dailyRealizedLossMon = (daily.results || []).reduce((sum, row) => sum + Math.max(0, -toMon(row.net_pnl_after_fees_raw)), 0);
   let equity = 0, peak = 0, rollingDrawdownMon = 0;
-  for (const row of history.results || []) {
+  for (const row of [...(history.results || [])].reverse()) {
     equity += toMon(row.net_pnl_after_fees_raw);
     peak = Math.max(peak, equity);
     rollingDrawdownMon = Math.max(rollingDrawdownMon, peak - equity);
