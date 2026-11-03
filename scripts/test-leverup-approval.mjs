@@ -1,0 +1,75 @@
+import assert from "node:assert/strict";
+import { privateKeyToAccount } from "viem/accounts";
+import { ensureLeverUpTokenAllowance } from "../src/leverup-approval.js";
+import { LEVERUP_1CT } from "../src/leverup-1ct.js";
+import { LEVERUP_TOKENS } from "../src/leverup-readonly.js";
+
+const traderKey = "0x" + "02".repeat(32);
+const trader = privateKeyToAccount(traderKey).address;
+const baseEnv = {
+  LEVERUP_TRADER_PRIVATE_KEY: traderKey,
+  LEVERUP_TRADER_ADDRESS: trader,
+  LEVERUP_AUTO_APPROVE: "true",
+  LEVERUP_LIVE_TRADING: "true",
+  LEVERUP_KILL_SWITCH: "false",
+};
+
+let allowance = 0n;
+let writes = [];
+const publicClient = {
+  readContract: async () => allowance,
+  waitForTransactionReceipt: async ({ hash }) => ({ status: "success", transactionHash: hash }),
+};
+const walletClient = {
+  account: { address: trader },
+  writeContract: async (args) => {
+    writes.push(args);
+    allowance = args.args[1];
+    return "0x" + String(writes.length).padStart(64, "0");
+  },
+};
+
+const approved = await ensureLeverUpTokenAllowance({
+  env: baseEnv, tokenAddress: LEVERUP_TOKENS.WMON, requiredAmount: 123n,
+  publicClient, walletClient,
+});
+assert.equal(approved.status, "APPROVED");
+assert.equal(approved.spender, LEVERUP_1CT.diamond);
+assert.equal(approved.allowance, "123");
+assert.equal(writes.length, 1);
+assert.equal(writes[0].args[1], 123n);
+
+writes = [];
+const sufficient = await ensureLeverUpTokenAllowance({
+  env: baseEnv, tokenAddress: LEVERUP_TOKENS.WMON, requiredAmount: 100n,
+  publicClient, walletClient,
+});
+assert.equal(sufficient.status, "ALREADY_SUFFICIENT");
+assert.equal(writes.length, 0);
+
+allowance = 10n;
+writes = [];
+const resetThenApprove = await ensureLeverUpTokenAllowance({
+  env: baseEnv, tokenAddress: LEVERUP_TOKENS.WMON, requiredAmount: 50n,
+  publicClient, walletClient,
+});
+assert.equal(resetThenApprove.status, "APPROVED");
+assert.deepEqual(writes.map((write) => write.args[1]), [0n, 50n]);
+
+await assert.rejects(() => ensureLeverUpTokenAllowance({
+  env: { ...baseEnv, LEVERUP_LIVE_TRADING: "false" },
+  tokenAddress: LEVERUP_TOKENS.WMON, requiredAmount: 1n, publicClient, walletClient,
+}), /AUTO_APPROVAL_REQUIRES_EXPLICIT_LIVE_MODE/);
+await assert.rejects(() => ensureLeverUpTokenAllowance({
+  env: { ...baseEnv, LEVERUP_KILL_SWITCH: "true" },
+  tokenAddress: LEVERUP_TOKENS.WMON, requiredAmount: 1n, publicClient, walletClient,
+}), /AUTO_APPROVAL_REQUIRES_EXPLICIT_LIVE_MODE/);
+await assert.rejects(() => ensureLeverUpTokenAllowance({
+  env: { ...baseEnv, LEVERUP_TRADER_ADDRESS: "0x3333333333333333333333333333333333333333" },
+  tokenAddress: LEVERUP_TOKENS.WMON, requiredAmount: 1n, publicClient, walletClient,
+}), /TRADER_SIGNER_KEY_DOES_NOT_MATCH/);
+await assert.rejects(() => ensureLeverUpTokenAllowance({
+  env: baseEnv, tokenAddress: "0x3333333333333333333333333333333333333333",
+  requiredAmount: 1n, publicClient, walletClient,
+}), /TOKEN_NOT_ALLOWLISTED/);
+console.log("PASS: exact allowance, no-op when sufficient, zero-reset compatibility, signer identity, token allowlist and live/kill-switch gates.");
