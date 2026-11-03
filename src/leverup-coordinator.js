@@ -82,7 +82,10 @@ export async function submitLeverUpIntent({
   notionalUsd = null, payload = {}, now = Date.now(), dependencies = {}, allowRiskReducingClose = false,
 }) {
   const closeOnly = Number(action) === OneClickAction.MARKET_CLOSE || Number(action) === OneClickAction.PARTIAL_CLOSE;
-  const emergencyCloseEnabled = allowRiskReducingClose && closeOnly && String(env?.LEVERUP_LIVE_TRADING).toLowerCase() === "true";
+  const emergencyCloseEnabled = allowRiskReducingClose && closeOnly && (
+    String(env?.LEVERUP_LIVE_TRADING).toLowerCase() === "true" ||
+    String(env?.LEVERUP_PURGE_LIVE_ENABLED).toLowerCase() === "true"
+  );
   if (!liveEnabled(env) && !emergencyCloseEnabled) return { status: "LIVE_DISABLED", submitted: false };
   if (!signalId || !Number.isInteger(Number(action))) throw new Error("LEVERUP_INTENT_INPUT_INVALID");
   const claim = await claimIntent(db, { signalId, action, pairBase, leverage, marginMon, notionalUsd,
@@ -440,7 +443,8 @@ export async function purgeLeverUpPositions({ env, db, symbol = null, now = Date
     status: readErrors.length ? "PARTIAL_DISCOVERY_NO_POSITIONS" : "NO_OPEN_POSITIONS",
     requestedSymbol, checked: bases.length, submitted: 0, openPositionCount: 0, readErrors,
   };
-  if (String(env?.LEVERUP_LIVE_TRADING).toLowerCase() !== "true") {
+  const purgeLiveEnabled = String(env?.LEVERUP_PURGE_LIVE_ENABLED).toLowerCase() === "true";
+  if (String(env?.LEVERUP_LIVE_TRADING).toLowerCase() !== "true" && !purgeLiveEnabled) {
     return { status: "LIVE_DISABLED", requestedSymbol, checked: bases.length, submitted: 0, openPositionCount: positions.length,
       positions: positions.map((p) => ({ symbol: p.purgeSymbol, positionHash: p.positionHash })) };
   }
@@ -490,6 +494,7 @@ export async function purgeLeverUpPositions({ env, db, symbol = null, now = Date
     status: submitted === positions.length ? "SUBMITTED" : (submitted ? "PARTIAL" : "NO_CLOSES_SUBMITTED"),
     requestedSymbol, checked: bases.length, submitted, openPositionCount: positions.length,
     killSwitchBypassedForRiskReducingClose: String(env?.LEVERUP_KILL_SWITCH).toLowerCase() === "true",
+    purgeOnlyMode: purgeLiveEnabled && String(env?.LEVERUP_LIVE_TRADING).toLowerCase() !== "true",
     results, readErrors,
   };
 }
