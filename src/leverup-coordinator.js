@@ -454,6 +454,7 @@ export async function purgeLeverUpPositions({ env, db, symbol = null, now = Date
   }
   const feeTokens = (antiDdos.config || []).filter((item) => item.enabled && item.feeToken).map((item) => item.feeToken);
   const balances = await (dependencies.readBalances || readTokenBalancesAndAllowances)(traderAddress, feeTokens, { publicClient: client });
+  let nextNonce = BigInt(await (dependencies.readNonce || readLastAgentNonce)(traderAddress, agentAddress, { publicClient: client })) + 1n;
   let submitted = 0;
   const results = [];
   for (const position of positions) {
@@ -467,11 +468,12 @@ export async function purgeLeverUpPositions({ env, db, symbol = null, now = Date
       const slippage = BigInt(position.isLong ? pairView.slippageConfig.slippageLongP : pairView.slippageConfig.slippageShortP);
       const actionValues = [position.positionHash, slippage];
       const fee = selectFeeToken(oneClickAction, antiDdos.config, balances, [], { requireAllowance: false });
-      const nonce = await (dependencies.readNonce || readLastAgentNonce)(traderAddress, agentAddress, { publicClient: client });
+      const nonce = nextNonce;
+      nextNonce += 1n;
       const signalId = "manual-purge-" + position.positionHash.toLowerCase();
       const result = await submitLeverUpIntent({
         env, db, signalId, action: oneClickAction, actionValues, traderAddress, agentAddress,
-        agentAuthorization: auth, nonce: (BigInt(nonce) + 1n).toString(), deadline: Math.floor(now / 1000) + 300,
+        agentAuthorization: auth, nonce: nonce.toString(), deadline: Math.floor(now / 1000) + 300,
         feeToken: fee.feeToken, antiDdosFee: fee.antiDdosFee,
         allowanceRequirements: fee.feeToken.toLowerCase() === ZERO.toLowerCase() ? [] : [{ tokenAddress: fee.feeToken, amount: fee.antiDdosFee }],
         pairBase: position.pairBase,
