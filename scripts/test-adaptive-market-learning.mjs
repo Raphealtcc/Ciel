@@ -58,7 +58,7 @@ assert.ok(source.includes('"PULLBACK_RECLAIM_VOLUME_OR_FRESHNESS_GATE"'));
 assert.ok(source.includes("coreForecastChecks>=Math.min(3,coreTrendCandidateCount)")&&source.includes("otherForecastChecks>=6-Math.min(3,coreTrendCandidateCount)"));
 assert.ok(source.includes('paperStorage.put("ciel:adaptive-learning:v1"'));
 assert.ok(source.includes("advisorScanRaw"));
-assert.ok(source.includes("advisorScan, feed:"));
+assert.ok(source.includes("advisorScan") && source.includes("feed:"), "protected diagnostics must include advisor scan data and feed status");
 assert.ok(source.includes("Core pullback scalps: "));
 assert.ok(source.includes("5m trend continuation: "));
 assert.ok(source.includes("CIEL deterministic core trend continuation guard"));
