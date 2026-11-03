@@ -25,6 +25,11 @@ assert.ok(source.includes('const preferredGroup = Math.floor(now / CYCLE) % 3 ==
 assert.ok(source.includes("coreMarkets:[\"BTC\",\"ETH\",\"SOL\"],preferredGroup"));
 assert.ok(source.includes("scanDiagnostics:scanDiagnostics.slice(-120)"));
 assert.ok(source.includes('"INSUFFICIENT_CLOSED_CANDLE_HISTORY"'));
+assert.ok(source.includes("function analyzeCoreTrendContinuation"));
+assert.ok(source.includes("CORE_TREND_CONTINUATION"));
+assert.ok(source.includes("5M_TREND_CONTINUATION+BREAKOUT_RETEST"));
+assert.ok(source.includes("corePullbackScalp: modeStats(\"CORE_PULLBACK_SCALP\")"));
+assert.ok(source.includes("coreTrendContinuation: modeStats(\"CORE_TREND_CONTINUATION\")"));
 assert.ok(source.includes('"PULLBACK_RECLAIM_VOLUME_OR_FRESHNESS_GATE"'));
 assert.ok(source.includes("coreForecastChecks>=Math.min(3,coreTrendCandidateCount)")&&source.includes("otherForecastChecks>=6-Math.min(3,coreTrendCandidateCount)"));
 assert.ok(source.includes('paperStorage.put("ciel:adaptive-learning:v1"'));
