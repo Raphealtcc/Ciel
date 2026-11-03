@@ -5,6 +5,7 @@ export async function prepareLeverUpExecution({ signal, preflight, account, port
   if (!signalId) throw new Error("SIGNAL_ID_REQUIRED");
   if (!preflight || preflight.status !== "PREFLIGHT_PASS_LIVE_DISABLED") return { status: "REJECTED", signalId, reason: "PREFLIGHT_NOT_PASSED" };
   if (String(env?.LEVERUP_LIVE_TRADING).toLowerCase() !== "false" || String(env?.LEVERUP_KILL_SWITCH).toLowerCase() !== "true") return { status: "REJECTED", signalId, reason: "UNSAFE_EXECUTION_CONFIGURATION" };
+  // Dry-run evaluates strategy/risk but never treats the deliberately-on live kill switch as a failed simulation.
   const risk = evaluateLeverUpPortfolioRisk({
     requestedLeverage: preflight.selectedLeverage || preflight.inferredLeverage,
     totalAllocationMon: env?.LEVERUP_TOTAL_ALLOCATION_MON ?? 50,
@@ -23,7 +24,7 @@ export async function prepareLeverUpExecution({ signal, preflight, account, port
     maxRollingDrawdownMon: env?.LEVERUP_MAX_DRAWDOWN_MON ?? 2,
     staleFeed: Boolean(account?.staleFeed),
     executionUncertain: Boolean(account?.executionUncertain),
-    killSwitchActive: String(env?.LEVERUP_KILL_SWITCH).toLowerCase() !== "false",
+    killSwitchActive: false,
   });
   const record = { schemaVersion: 1, signalId, status: risk.allowed ? "DRY_RUN_APPROVED" : "REJECTED", createdAt: now, risk, preflight, liveSubmissionPerformed: false };
   if (store?.put) await store.put("ciel:leverup:execution:v1:" + signalId, JSON.stringify(record), { expirationTtl: 604800 });
