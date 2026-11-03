@@ -69,13 +69,13 @@ once(
   "keep BTC ETH SOL in the scan even when WATCH_SYMBOLS omits them"
 );
 once(
-  "  const candidates = [];\\n  for (const sym of symbols) {",
-  '  const candidates = [];\\n  const scanDiagnostics = [];\\n  const coreMarketSet = new Set(["BTC","ETH","SOL"]);\\n  const orderedSymbols = symbols.slice().sort((a,b) => Number(coreMarketSet.has(b))-Number(coreMarketSet.has(a)) || a.localeCompare(b));\\n  for (const sym of orderedSymbols) {',
+  "  const candidates = [];\n  for (const sym of symbols) {",
+  '  const candidates = [];\n  const scanDiagnostics = [];\n  const coreMarketSet = new Set(["BTC","ETH","SOL"]);\n  const orderedSymbols = symbols.slice().sort((a,b) => Number(coreMarketSet.has(b))-Number(coreMarketSet.has(a)) || a.localeCompare(b));\n  for (const sym of orderedSymbols) {',
   "evaluate core markets first without removing other watchlist markets"
 );
 once(
   '    if (sym === "MON" || requiredPaperMargin === null || paperCash + 1e-9 < requiredPaperMargin || openPaperSymbols.has(sym)) continue;',
-  '    if (sym === "MON") { scanDiagnostics.push({symbol:sym,reason:"NON_TRADEABLE_BASE_ASSET"}); continue; }\\n    if (requiredPaperMargin === null) { scanDiagnostics.push({symbol:sym,reason:"BELOW_50X_OR_UNSUPPORTED_LEVERAGE_TIER"}); continue; }\\n    if (paperCash + 1e-9 < requiredPaperMargin) { scanDiagnostics.push({symbol:sym,reason:"INSUFFICIENT_FREE_MARGIN",requiredPaperMargin,availablePaperMargin:paperCash}); continue; }\\n    if (openPaperSymbols.has(sym)) { scanDiagnostics.push({symbol:sym,reason:"POSITION_ALREADY_OPEN"}); continue; }',
+  '    if (sym === "MON") { scanDiagnostics.push({symbol:sym,reason:"NON_TRADEABLE_BASE_ASSET"}); continue; }\n    if (requiredPaperMargin === null) { scanDiagnostics.push({symbol:sym,reason:"BELOW_50X_OR_UNSUPPORTED_LEVERAGE_TIER"}); continue; }\n    if (paperCash + 1e-9 < requiredPaperMargin) { scanDiagnostics.push({symbol:sym,reason:"INSUFFICIENT_FREE_MARGIN",requiredPaperMargin,availablePaperMargin:paperCash}); continue; }\n    if (openPaperSymbols.has(sym)) { scanDiagnostics.push({symbol:sym,reason:"POSITION_ALREADY_OPEN"}); continue; }',
   "record eligibility, margin and open-position rejection reasons"
 );
 
@@ -110,7 +110,7 @@ once(oldCandidateBuild,newCandidateBuild,"expose independent trend and scalp rej
 
 once(
   '  candidates.sort((x, y) => eventIntel?.marketImpact === "BROAD_RISK_OFF" ? Number(y.side === "SHORT") - Number(x.side === "SHORT") || y.confidence - x.confidence : y.confidence - x.confidence);',
-  '  const adaptiveLearning = buildAdaptiveLearningProfile(paperState?.trades || [], now);\\n  for (const candidate of candidates) { candidate.adaptiveMultiplier=adaptiveCandidateMultiplier(adaptiveLearning,candidate); candidate.adaptiveScore=Number(candidate.confidence)*candidate.adaptiveMultiplier; }\\n  if (paperStorage) { const priorLearning=await paperStorage.get("ciel:adaptive-learning:v1").catch(()=>null); if(priorLearning?.fingerprint!==adaptiveLearning.fingerprint) await paperStorage.put("ciel:adaptive-learning:v1",adaptiveLearning).catch((error)=>console.error("Adaptive paper-learning persistence failed: "+String(error).slice(0,160))); }\\n  candidates.sort((x,y)=>Number(coreMarketSet.has(y.symbol))-Number(coreMarketSet.has(x.symbol)) || (eventIntel?.marketImpact==="BROAD_RISK_OFF"?Number(y.side==="SHORT")-Number(x.side==="SHORT"):0) || Number(y.adaptiveScore||y.confidence)-Number(x.adaptiveScore||x.confidence) || Number(y.confidence)-Number(x.confidence));',
+  '  const adaptiveLearning = buildAdaptiveLearningProfile(paperState?.trades || [], now);\n  for (const candidate of candidates) { candidate.adaptiveMultiplier=adaptiveCandidateMultiplier(adaptiveLearning,candidate); candidate.adaptiveScore=Number(candidate.confidence)*candidate.adaptiveMultiplier; }\n  if (paperStorage) { const priorLearning=await paperStorage.get("ciel:adaptive-learning:v1").catch(()=>null); if(priorLearning?.fingerprint!==adaptiveLearning.fingerprint) await paperStorage.put("ciel:adaptive-learning:v1",adaptiveLearning).catch((error)=>console.error("Adaptive paper-learning persistence failed: "+String(error).slice(0,160))); }\n  candidates.sort((x,y)=>Number(coreMarketSet.has(y.symbol))-Number(coreMarketSet.has(x.symbol)) || (eventIntel?.marketImpact==="BROAD_RISK_OFF"?Number(y.side==="SHORT")-Number(x.side==="SHORT"):0) || Number(y.adaptiveScore||y.confidence)-Number(x.adaptiveScore||x.confidence) || Number(y.confidence)-Number(x.confidence));',
   "prioritize core markets and apply learned outcome weights to ranking only"
 );
 once(
@@ -119,12 +119,12 @@ once(
   "persist bounded scan diagnostics and learning summary in existing KV state"
 );
 once(
-  "  let forecastChecks = 0;\\n  for (const candidate of candidates) {",
-  '  let forecastChecks=0,coreForecastChecks=0,otherForecastChecks=0;\\n  const hasCoreTrendCandidates=candidates.some((candidate)=>coreMarketSet.has(candidate.symbol)&&candidate.mode!=="RANGE_SCALP"&&candidate.mode!=="CORE_PULLBACK_SCALP");\\n  for (const candidate of candidates) {',
+  "  let forecastChecks = 0;\n  for (const candidate of candidates) {",
+  '  let forecastChecks=0,coreForecastChecks=0,otherForecastChecks=0;\n  const hasCoreTrendCandidates=candidates.some((candidate)=>coreMarketSet.has(candidate.symbol)&&candidate.mode!=="RANGE_SCALP"&&candidate.mode!=="CORE_PULLBACK_SCALP");\n  for (const candidate of candidates) {',
   "reserve forecast-review capacity for other watchlist markets"
 );
 once(
-  '    if (forecastChecks >= 6 && !isScalpMode) continue;\\n    if (!isScalpMode) forecastChecks++;',
+  '    if (forecastChecks >= 6 && !isScalpMode) continue;\n    if (!isScalpMode) forecastChecks++;',
   '    if (!isScalpMode) { if(forecastChecks>=6) continue; if(hasCoreTrendCandidates&&coreMarketSet.has(candidate.symbol)&&coreForecastChecks>=3) continue; if(hasCoreTrendCandidates&&!coreMarketSet.has(candidate.symbol)&&otherForecastChecks>=3) continue; forecastChecks++; if(coreMarketSet.has(candidate.symbol))coreForecastChecks++; else otherForecastChecks++; }',
   "cap core trend reviews at three so other coins retain review capacity"
 );
