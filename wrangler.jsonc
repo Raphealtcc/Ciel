@@ -80,8 +80,8 @@
       { "name": "TRADING_ENGINE", "class_name": "TradingEngine" }
     ]
   },
-  "migrations": [{
-    "tag": "v1",
-    "new_sqlite_classes": ["HyperliquidFeed", "TradingEngine"]
-  }]
+  "exports": {
+    "HyperliquidFeed": { "type": "durable-object", "storage": "sqlite" },
+    "TradingEngine": { "type": "durable-object", "storage": "sqlite" }
+  }
 }
