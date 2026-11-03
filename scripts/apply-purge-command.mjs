@@ -70,7 +70,8 @@ once(
   '    for (const item of (paper?.closed || []).slice(0, 8)) lines.push("• " + item.side + " " + item.symbol + " | " + sign(item.pnlMon) + " MON | mark $" + fmt(item.exitPrice));\n' +
   '    if (paper?.skipped?.length) lines.push("Paper positions left open (no fresh mark): " + paper.skipped.map((x) => x.symbol).slice(0, 8).join(", "));\n' +
   '    lines.push("", "LEVERUP LIVE: " + (liveError ? "FAILED — " + liveError : (live?.status || "UNKNOWN") + " | " + (live?.submitted || 0) + " close intent(s) submitted | " + (live?.openPositionCount || 0) + " position(s) discovered"));\n' +
-  '    if (live?.status === "LIVE_DISABLED") lines.push("Live close was not submitted: LEVERUP_LIVE_TRADING is OFF.");\n' +
+  '    if (live?.status === "LIVE_DISABLED") lines.push("Live close was not submitted: both live trading and close-only purge permission are OFF.");\n' +
+  '    if (live?.purgeOnlyMode) lines.push("Manual live purge is enabled for closes only; normal live trading remains OFF.");\n' +
   '    if (live?.killSwitchBypassedForRiskReducingClose) lines.push("Emergency close-only path used; the kill switch still blocks new entries.");\n' +
   '    if (live?.readErrors?.length) lines.push("Live discovery errors: " + live.readErrors.length + " pair(s) could not be read.");\n' +
   '    lines.push("", "This command closes paper trades at the latest fresh Hyperliquid mark and submits market-close intents for live LeverUp positions. It does not open or reverse positions.");\n' +
