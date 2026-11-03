@@ -147,6 +147,7 @@ export async function executeLeverUpEntry({ env, db, candidate, signalId, snapsh
   const entryBudget = Number(BigInt(plan.amountInRaw)) / 1e18;
   const stopPct = Number(candidate.stopPct);
   const stopRiskMon = margin * Number(plan.selectedLeverage) * stopPct / 100;
+  const portfolioRisk = await readPortfolioRiskFromLedger(db, now);
   const risk = evaluateLeverUpPortfolioRisk({
     requestedLeverage: plan.selectedLeverage,
     totalAllocationMon: env.LEVERUP_TOTAL_ALLOCATION_MON ?? 50,
@@ -156,9 +157,9 @@ export async function executeLeverUpEntry({ env, db, candidate, signalId, snapsh
     maxConcurrentPositions: env.LEVERUP_MAX_CONCURRENT_POSITIONS ?? 1,
     proposedStopRiskMon: stopRiskMon, aggregateStopRiskMon: 0,
     maxAggregateStopRiskMon: env.LEVERUP_MAX_AGGREGATE_STOP_RISK_MON ?? 1,
-    dailyRealizedLossMon: (await readPortfolioRiskFromLedger(db, now)).dailyRealizedLossMon,
+    dailyRealizedLossMon: portfolioRisk.dailyRealizedLossMon,
     maxDailyRealizedLossMon: env.LEVERUP_MAX_DAILY_LOSS_MON ?? 1,
-    rollingDrawdownMon: (await readPortfolioRiskFromLedger(db, now)).rollingDrawdownMon,
+    rollingDrawdownMon: portfolioRisk.rollingDrawdownMon,
     maxRollingDrawdownMon: env.LEVERUP_MAX_DRAWDOWN_MON ?? 2,
     staleFeed: now - Number(snapshot.checkedAt || now) > 30_000, executionUncertain: false, killSwitchActive: false,
   });

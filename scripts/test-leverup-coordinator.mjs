@@ -8,6 +8,16 @@ assert.ok(b50.requiredMon > 22.5); assert.ok(b100.requiredMon > 11.5);
 assert.throws(()=>calculateLeverUpEntryBudget({minimumNotionalUsd:20,leverage:25,monUsdPrice:.02,collateralRatio:1}),/50X/);
 const safe=evaluateLeverUpPortfolioRisk({requestedLeverage:100,availableWmonMon:25,requestedMarginMon:1,entryBudgetMon:1,currentOpenPositions:[],proposedStopRiskMon:.2,killSwitchActive:false});
 assert.equal(safe.allowed,true);
+assert.equal(evaluateLeverUpPortfolioRisk({
+  requestedLeverage: 100, availableWmonMon: 25, requestedMarginMon: 1, entryBudgetMon: 1,
+  currentOpenPositions: [], proposedStopRiskMon: 0.2, dailyRealizedLossMon: 0.9,
+  maxDailyRealizedLossMon: 1, killSwitchActive: false,
+}).allowed, false, "projected stop loss must fit inside the remaining daily loss budget");
+assert.equal(evaluateLeverUpPortfolioRisk({
+  requestedLeverage: 100, availableWmonMon: 25, requestedMarginMon: 1, entryBudgetMon: 1,
+  currentOpenPositions: [], proposedStopRiskMon: 0.2, rollingDrawdownMon: 1.9,
+  maxRollingDrawdownMon: 2, killSwitchActive: false,
+}).allowed, false, "projected stop loss must fit inside the remaining drawdown budget");
 for (const patch of [{requestedLeverage:25},{availableWmonMon:0},{requestedMarginMon:26},{currentOpenPositions:[{}]},{staleFeed:true},{executionUncertain:true},{dailyRealizedLossMon:1},{rollingDrawdownMon:2},{proposedStopRiskMon:2}]) {
  const r=evaluateLeverUpPortfolioRisk({requestedLeverage:100,availableWmonMon:25,requestedMarginMon:1,entryBudgetMon:1,currentOpenPositions:[],proposedStopRiskMon:.1,killSwitchActive:false,...patch});
  assert.equal(r.allowed,false);
