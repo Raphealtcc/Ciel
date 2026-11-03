@@ -2,6 +2,8 @@ import {
   LEVERUP_TOKENS, readLeverUpAccountSnapshot, selectLeverageTier,
   calculateMinimumCollateralMon, buildMarketOpenPlan, persistLeverUpPreflight,
 } from "./leverup-readonly.js";
+import { OneClickAction, signIntentDryRun } from "./leverup-1ct.js";
+import { prepareLeverUpExecution } from "./leverup-coordinator.js";
 
 const WMON = LEVERUP_TOKENS.WMON.toLowerCase();
 const errorMessage = (error) => String(error?.message || error || "Unknown LeverUp preflight failure").slice(0, 220);
@@ -138,10 +140,32 @@ export async function prepareLeverUpAdvisorPlan({
         ledgerPersisted = true;
       }
     } catch (error) { console.error("LeverUp preflight D1 ledger write failed: " + errorMessage(error)); }
+    let dryRunSigning = { status: "NOT_CONFIGURED" };
+    let coordination = { status: "NOT_RUN" };
+    if (authorized && env?.LEVERUP_AGENT_PRIVATE_KEY) {
+      try {
+        dryRunSigning = await signIntentDryRun({
+          env, traderAddress, agentAddress, agentAuthorization: snapshot.agentAuthorization,
+          action: OneClickAction.MARKET_OPEN, nonce: plan.nonce, deadline: plan.deadline,
+          actionValues: plan.actionValues, feeToken: plan.feeToken, antiDdosFee: plan.antiDdosFee,
+          preflight: plan.preflight, now,
+        });
+        const wmonBalanceMon = Number(BigInt(snapshot.accountTokenStates[WMON].balance)) / 1e18;
+        const entryBudgetMon = Number(BigInt(plan.amountInRaw)) / 1e18;
+        const stopRiskMon = Number(plan.marginMonUsed) * stopPct / 100;
+        coordination = await prepareLeverUpExecution({
+          signal: { id: signalId },
+          preflight: { status: "PREFLIGHT_PASS_LIVE_DISABLED", selectedLeverage: plan.selectedLeverage,
+            inferredLeverage, marginMonUsed: plan.marginMonUsed, entryBudgetMon, stopRiskMon },
+          account: { wmonBalanceMon, openPositions: snapshot.indexedPositions || [], staleFeed: false },
+          portfolio: {}, env, store: env.CIEL_STATE, now,
+        });
+      } catch (error) { dryRunSigning = { status: "FAILED", reason: errorMessage(error) }; }
+    }
     const record = result(status, reason, {
       account, ledgerId, ledgerPersisted, inferredLeverage, selectedLeverage: plan.selectedLeverage,
       tierMaxLeverage: plan.tierMaxLeverage, marginMonUsed: plan.marginMonUsed, notionalUsd: plan.notionalUsd,
-      minimumMarginMon, reserveMon, maxTradeMarginMon,
+      minimumMarginMon, reserveMon, maxTradeMarginMon, dryRunSigning, coordination,
       estimatedProtocolCosts: plan.preflight?.estimatedProtocolCosts || null,
       preflight: plan.preflight || null, plan: jsonSafe(plan),
     });
