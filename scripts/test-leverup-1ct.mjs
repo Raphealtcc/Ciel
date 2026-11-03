@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { privateKeyToAccount } from "viem/accounts";
 import {
   LEVERUP_1CT,
   OneClickAction,
@@ -6,6 +7,7 @@ import {
   buildTypedIntent,
   selectFeeToken,
   signAndSubmitIntent,
+  signIntentDryRun,
 } from "../src/leverup-1ct.js";
 
 const trader = "0x1111111111111111111111111111111111111111";
@@ -143,4 +145,27 @@ await assert.rejects(() => signAndSubmitIntent({
 }), /AGENT_ACTION_PERMISSION_MISSING/);
 assert.equal(networkTouched, false, "missing open permission must block before network access");
 
-console.log("PASS: 1CT ABI encoding, dynamic offsets, EIP-712, fee-token selection, hard-off, kill-switch, fresh preflight and 50x execution floor.");
+const dryKey = `0x${"01".repeat(32)}`;
+const dryAgent = privateKeyToAccount(dryKey).address;
+const dryRun = await signIntentDryRun({
+  env: { LEVERUP_AGENT_PRIVATE_KEY: dryKey, LEVERUP_LIVE_TRADING: "false", LEVERUP_KILL_SWITCH: "true" },
+  traderAddress: trader, agentAddress: dryAgent,
+  agentAuthorization: { authorized: true, agentAddress: dryAgent, canMarketOpen: true },
+  action: OneClickAction.MARKET_OPEN, nonce: "1785312000124",
+  deadline: Math.floor(Date.now() / 1000) + 300,
+  actionValues: [pairBase, true, tokenIn, lvToken, 11n * 10n ** 18n, 10000000000n, 2n * 10n ** 18n, 0n, 0n, 0, 0n],
+  preflight: { preflightPassed: true, requestedLeverage: 50, marketMaxLeverage: 100, maxLeverageForNotional: 50, pairBase, status: "AVAILABLE", checkedAt: Date.now() },
+});
+assert.equal(dryRun.signed, true);
+assert.equal(dryRun.signerAddress.toLowerCase(), dryAgent.toLowerCase());
+assert.match(dryRun.signatureDigest, /^0x[0-9a-f]{64}$/);
+await assert.rejects(() => signIntentDryRun({
+  env: { LEVERUP_AGENT_PRIVATE_KEY: dryKey, LEVERUP_LIVE_TRADING: "false", LEVERUP_KILL_SWITCH: "true" },
+  traderAddress: trader, agentAddress: "0x5555555555555555555555555555555555555555",
+  agentAuthorization: { authorized: true, agentAddress: "0x5555555555555555555555555555555555555555", canMarketOpen: true },
+  action: OneClickAction.MARKET_OPEN, nonce: "1785312000125",
+  deadline: Math.floor(Date.now() / 1000) + 300,
+  actionValues: [pairBase, true, tokenIn, lvToken, 11n * 10n ** 18n, 10000000000n, 2n * 10n ** 18n, 0n, 0n, 0, 0n],
+  preflight: { preflightPassed: true, requestedLeverage: 50, marketMaxLeverage: 100, maxLeverageForNotional: 50, pairBase, status: "AVAILABLE", checkedAt: Date.now() },
+}), /LEVERUP_SIGNER_KEY_DOES_NOT_MATCH_AUTHORIZED_AGENT/);
+console.log("PASS: 1CT ABI encoding, dynamic offsets, EIP-712, fee-token selection, hard-off, kill-switch, fresh preflight and 50x execution floor and local-only signer address verification.");
