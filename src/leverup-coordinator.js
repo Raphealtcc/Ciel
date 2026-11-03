@@ -303,6 +303,8 @@ export async function reconcilePendingLeverUpIntents({ env, db, now = Date.now()
 
 async function reconcileClosedSettlements({ env, db, now, dependencies = {} }) {
   if (!db?.prepare) return { checked: 0, reconciled: 0 };
+  const unsettled = await db.prepare("SELECT COUNT(*) AS count FROM leverup_execution_intents WHERE action = 0 AND status IN ('EXECUTED','SUBMITTED','PENDING')").first();
+  if (!Number(unsettled?.count || 0)) return { checked: 0, reconciled: 0, noUnsettledEntries: true };
   const throttleKey = "ciel:leverup:settlement:last-check:v1";
   const lastCheck = Number(await env?.CIEL_STATE?.get(throttleKey).catch(() => "0") || 0);
   if (lastCheck && now - lastCheck < 60_000) return { checked: 0, reconciled: 0, throttled: true };
@@ -338,7 +340,6 @@ async function reconcileClosedSettlements({ env, db, now, dependencies = {} }) {
 
 export async function runLeverUpPositionManager({ env, db, now = Date.now(), dependencies = {} }) {
   const reconciliation = await reconcilePendingLeverUpIntents({ env, db, now, dependencies });
-  const settlements = await reconcileClosedSettlements({ env, db, now, dependencies }).catch((error) => ({ error: String(error?.message || error).slice(0, 200) }));
   const traderAddress = String(env?.LEVERUP_TRADER_ADDRESS || "");
   const agentAddress = String(env?.LEVERUP_AGENT_ADDRESS || "");
   if (!/^0x[0-9a-fA-F]{40}$/.test(traderAddress) || !/^0x[0-9a-fA-F]{40}$/.test(agentAddress)) {
@@ -347,7 +348,11 @@ export async function runLeverUpPositionManager({ env, db, now = Date.now(), dep
   const fetchImpl = dependencies.fetchImpl || fetch;
   const client = dependencies.publicClient || createLeverUpPublicClient(env?.LEVERUP_RPC_URL || "https://rpc.monad.xyz");
   const apiPositions = await (dependencies.fetchOpenPositions || fetchOpenPositions)(traderAddress, { fetchImpl });
-  if (!apiPositions.length) return { status: liveEnabled(env) ? "LIVE_MONITORING" : "READ_ONLY_MONITORING", checked: 0, submitted: 0, reconciliation, settlements };
+  if (!apiPositions.length) {
+    const settlements = await reconcileClosedSettlements({ env, db, now, dependencies })
+      .catch((error) => ({ error: String(error?.message || error).slice(0, 200) }));
+    return { status: liveEnabled(env) ? "LIVE_MONITORING" : "READ_ONLY_MONITORING", checked: 0, submitted: 0, reconciliation, settlements };
+  }
   const pairBases = [...new Set(apiPositions.map((p) => String(p.pairBase || p.pair?.base || "").toLowerCase()).filter((x) => /^0x[0-9a-f]{40}$/.test(x)))];
   if (!pairBases.length) throw new Error("OPEN_POSITION_PAIR_BASE_MISSING");
   const [prices, antiDdos, auth, entries] = await Promise.all([
@@ -408,5 +413,5 @@ export async function runLeverUpPositionManager({ env, db, now = Date.now(), dep
     });
     if (result.submitted) submitted++;
   }
-  return { status: liveEnabled(env) ? "LIVE_MONITORING" : "READ_ONLY_MONITORING", checked: evaluated, submitted, snapshots, openPositionCount: positionMap.size, reconciliation, settlements };
+  return { status: liveEnabled(env) ? "LIVE_MONITORING" : "READ_ONLY_MONITORING", checked: evaluated, submitted, snapshots, openPositionCount: positionMap.size, reconciliation, settlements: { skippedWhilePositionOpen: true } };
 }
