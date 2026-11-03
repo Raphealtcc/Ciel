@@ -8,6 +8,8 @@ verify-ciel-recovery:
     - node --check scripts/reassemble-recovered-worker.mjs
     - node --check scripts/apply-paper-tier-fix.mjs
     - node --check scripts/apply-core-scalp-fix.mjs
+    - node --check scripts/apply-d1-efficiency-fix.mjs
+    - node --check scripts/test-d1-efficiency.mjs
     - node --check scripts/apply-leverup-integration.mjs
     - node --check scripts/test-core-scalp.mjs
     - node --check scripts/test-leverup-advisor.mjs
