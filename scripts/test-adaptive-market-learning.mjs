@@ -6,7 +6,7 @@ const helperStart=source.indexOf("function buildAdaptiveLearningProfile");
 const advisorStart=source.indexOf("async function runAdvisorCycle",helperStart);
 assert.ok(helperStart>=0&&advisorStart>helperStart);
 const context=vm.createContext({__name(){}});
-vm.runInContext(source.slice(helperStart,advisorStart)+"\\nglobalThis.learningTests={buildAdaptiveLearningProfile,adaptiveCandidateMultiplier};",context);
+vm.runInContext(source.slice(helperStart,advisorStart)+"\nglobalThis.learningTests={buildAdaptiveLearningProfile,adaptiveCandidateMultiplier};",context);
 const {buildAdaptiveLearningProfile,adaptiveCandidateMultiplier}=context.learningTests;
 const now=1800000000000;
 const trade=(i,pnl,mode="CORE_PULLBACK_SCALP",symbol="BTC")=>({status:"CLOSED",closedAtMs:now-i*60000,signalId:"s"+i,symbol,mode,grossPnlMon:pnl,marginMon:10,bestFavorableMovePct:Math.max(0,pnl),closeReason:pnl>0?"TAKE_PROFIT":"STOP_LOSS"});
