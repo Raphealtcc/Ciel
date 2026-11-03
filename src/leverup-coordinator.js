@@ -372,7 +372,7 @@ function normalizeLeverUpPurgeSymbol(value) {
 function pairMatchesPurgeSymbol(pair, symbol) {
   if (!symbol) return true;
   const values = [pair?.symbol, pair?.pairName, pair?.name, pair?.ticker, pair?.baseSymbol,
-    pair?.pair?.symbol, pair?.pair?.name, pair?.baseToken?.symbol];
+    (typeof pair?.pair === "string" ? pair.pair : null), pair?.pair?.symbol, pair?.pair?.name, pair?.baseToken?.symbol];
   return values.some((value) => normalizeLeverUpPurgeSymbol(value) === symbol);
 }
 
