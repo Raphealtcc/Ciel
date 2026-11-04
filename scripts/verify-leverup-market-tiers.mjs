@@ -2,7 +2,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import vm from "node:vm";
 
 const DIAMOND = "0xea1b8E4aB7f14F7dCA68c5B214303B13078FC5ec";
-const RPC = process.env.LEVERUP_RPC_URL || "https://rpc.monad.xyz";
+const RPC = process.env.LEVERUP_RPC_URL || "https://rpc1.monad.xyz";
 const PAIRS_URL = "https://service.leverup.xyz/v1/pairs?size=100&block_chain=MONAD";
 const HYPERLIQUID_INFO = "https://api.hyperliquid.xyz/info";
 const WATCHLIST = [

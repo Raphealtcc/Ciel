@@ -80,7 +80,7 @@ export async function prepareLeverUpAdvisorPlan({
     const readSnapshot = dependencies.readSnapshot || readLeverUpAccountSnapshot;
     snapshot = await readSnapshot({
       traderAddress, agentAddress, symbol: String(candidate.symbol).toUpperCase(), collateralRatio,
-      rpcUrl: env?.LEVERUP_RPC_URL || "https://rpc.monad.xyz",
+      rpcUrl: env?.LEVERUP_RPC_URL || "https://rpc1.monad.xyz",
       ...(dependencies.fetchImpl ? { fetchImpl: dependencies.fetchImpl } : {}),
     });
   } catch (error) {
@@ -236,14 +236,17 @@ export function formatLeverUpAdvisorLine(record) {
 }
 
 
-export async function runLeverUpMarketPreflights({ env, traderAddress, agentAddress, now = Date.now(), dependencies = {} }) {
+export async function runLeverUpMarketPreflights({ env, traderAddress, agentAddress, now = Date.now(), dependencies = {}, baseSnapshot = null }) {
   const symbols = ["BTC", "ETH", "SOL"];
   const readSnapshot = dependencies.readMarketSnapshot || dependencies.readSnapshot || readLeverUpAccountSnapshot;
-  return Object.fromEntries(await Promise.all(symbols.map(async (symbol) => {
+  const results = {};
+  // Keep provider concurrency low. The public Monad RPC was rate-limiting the
+  // previous three-way fan-out; reuse the already-read BTC snapshot as well.
+  for (const symbol of symbols) {
     try {
-      const snapshot = await readSnapshot({
+      const snapshot = symbol === "BTC" && baseSnapshot ? { ...baseSnapshot } : await readSnapshot({
         traderAddress, agentAddress, symbol, collateralRatio: null,
-        rpcUrl: env?.LEVERUP_RPC_URL || "https://rpc.monad.xyz",
+        rpcUrl: env?.LEVERUP_RPC_URL || "https://rpc1.monad.xyz",
         ...(dependencies.fetchImpl ? { fetchImpl: dependencies.fetchImpl } : {}),
       });
       if (snapshot.market?.executionVenue === "HYPERLIQUID") throw new Error("MARKET_NOT_EXECUTED_BY_LEVERUP");
@@ -263,9 +266,7 @@ export async function runLeverUpMarketPreflights({ env, traderAddress, agentAddr
         collateralAt100xUsd: env?.LEVERUP_COLLATERAL_100X_USD ?? 0.23,
       });
       const collateralRatio = minimumNotionalUsd / (leverage * minimumCollateralUsd);
-      if (!(collateralRatio > 0 && collateralRatio <= 1) || !(monUsdPrice > 0)) {
-        throw new Error("LIVE_COLLATERAL_OR_ORACLE_DATA_INVALID");
-      }
+      if (!(collateralRatio > 0 && collateralRatio <= 1) || !(monUsdPrice > 0)) throw new Error("LIVE_COLLATERAL_OR_ORACLE_DATA_INVALID");
       snapshot.collateralRatio = collateralRatio;
       const minimumMarginMon = minimumCollateralUsd / monUsdPrice;
       const totalAllocationMon = Number(env?.LEVERUP_TOTAL_ALLOCATION_MON || 50);
@@ -274,9 +275,7 @@ export async function runLeverUpMarketPreflights({ env, traderAddress, agentAddr
       const configuredTradeCeiling = Number(env?.LEVERUP_MAX_TRADE_MARGIN_MON);
       const maxTradeMarginMon = Number.isFinite(configuredTradeCeiling) && configuredTradeCeiling > 0
         ? Math.min(configuredTradeCeiling, allocationCeiling) : allocationCeiling;
-      if (maxTradeMarginMon + 1e-9 < minimumMarginMon) {
-        throw new Error("VENUE_MINIMUM_MARGIN_EXCEEDS_CIEL_TRADE_ALLOCATION");
-      }
+      if (maxTradeMarginMon + 1e-9 < minimumMarginMon) throw new Error("VENUE_MINIMUM_MARGIN_EXCEEDS_CIEL_TRADE_ALLOCATION");
       const oracle = BigInt(snapshot.oraclePriceRaw);
       const buildPlan = dependencies.buildPlan || buildMarketOpenPlan;
       const plan = buildPlan({
@@ -300,7 +299,7 @@ export async function runLeverUpMarketPreflights({ env, traderAddress, agentAddr
       if (!autoApprovalConfigured && (wmonAllowanceShortfall > 0n || (feeApprovalRequired && feeAllowanceShortfall > 0n))) {
         throw new Error("TOKEN_ALLOWANCE_INSUFFICIENT_AND_AUTO_APPROVAL_DISABLED");
       }
-      return [symbol, {
+      results[symbol] = {
         status: "PASS", symbol, pairBase: snapshot.market?.base || snapshot.market?.pairBase,
         marketStatus: snapshot.market?.status || null,
         executionVenue: snapshot.market?.executionVenue || null,
@@ -315,11 +314,12 @@ export async function runLeverUpMarketPreflights({ env, traderAddress, agentAddr
         autoApprovalConfigured, approvalWillRunOnlyOnLiveEntry: true,
         orderSubmitted: false, approvalTransactionSubmitted: false,
         checkedAt: now, blockNumber: snapshot.blockNumber,
-      }];
+      };
     } catch (error) {
-      return [symbol, { status: "FAILED", symbol, reason: errorMessage(error), checkedAt: now, orderSubmitted: false }];
+      results[symbol] = { status: "FAILED", symbol, reason: errorMessage(error), checkedAt: now, orderSubmitted: false };
     }
-  })));
+  }
+  return results;
 }
 
 export async function runLeverUpDiagnostics({ env, now = Date.now(), dependencies = {} }) {
@@ -335,7 +335,7 @@ export async function runLeverUpDiagnostics({ env, now = Date.now(), dependencie
   const readSnapshot = dependencies.readSnapshot || readLeverUpAccountSnapshot;
   const snapshot = await readSnapshot({
     traderAddress, agentAddress, symbol: "BTC", collateralRatio: null,
-    rpcUrl: env?.LEVERUP_RPC_URL || "https://rpc.monad.xyz",
+    rpcUrl: env?.LEVERUP_RPC_URL || "https://rpc1.monad.xyz",
     ...(dependencies.fetchImpl ? { fetchImpl: dependencies.fetchImpl } : {}),
   });
   const auth = snapshot.agentAuthorization || {};
@@ -369,7 +369,7 @@ export async function runLeverUpDiagnostics({ env, now = Date.now(), dependencie
   }));
   const marketPreflights = dependencies.runMarketPreflights
     ? await dependencies.runMarketPreflights({ env, traderAddress, agentAddress, now })
-    : await runLeverUpMarketPreflights({ env, traderAddress, agentAddress, now, dependencies });
+    : await runLeverUpMarketPreflights({ env, traderAddress, agentAddress, now, dependencies, baseSnapshot: snapshot });
   const coordinator = dependencies.verifyCoordinator
     ? await dependencies.verifyCoordinator({ env, db: env?.DB, now })
     : await verifyLeverUpCoordinatorDryRun({ env, db: env?.DB, now });

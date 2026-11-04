@@ -14,7 +14,7 @@ const MONAD = defineChain({
   id: 143,
   name: "Monad",
   nativeCurrency: { name: "MON", symbol: "MON", decimals: 18 },
-  rpcUrls: { default: { http: ["https://rpc.monad.xyz"] } },
+  rpcUrls: { default: { http: ["https://rpc1.monad.xyz"] } },
 });
 
 const ERC20_APPROVAL_ABI = [
@@ -89,7 +89,7 @@ export async function ensureLeverUpTokenAllowance({
     throw new Error("LEVERUP_TRADER_SIGNER_KEY_DOES_NOT_MATCH_TRADER_ADDRESS");
   }
 
-  const rpcUrl = String(env?.LEVERUP_RPC_URL || "https://rpc.monad.xyz");
+  const rpcUrl = String(env?.LEVERUP_RPC_URL || "https://rpc1.monad.xyz");
   const reader = publicClient || createPublicClient({ chain: MONAD, transport: http(rpcUrl) });
   const signer = walletClient || createWalletClient({
     account, chain: MONAD, transport: http(rpcUrl),
