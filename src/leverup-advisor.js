@@ -367,7 +367,7 @@ export async function runLeverUpDiagnostics({ env, now = Date.now(), dependencie
     return [label, state ? { balanceRaw: state.balance, allowanceRaw: state.allowance } : null];
   }));
   const marketPreflights = dependencies.runMarketPreflights
-    ? await dependencies.runMarketPreflights({ env, traderAddress, agentAddress, now })
+    ? await dependencies.runMarketPreflights({ env, traderAddress, agentAddress, now, symbols })
     : await runLeverUpMarketPreflights({ env, traderAddress, agentAddress, now, dependencies, baseSnapshot: snapshot, symbols });
   const coordinator = skipCoordinator ? { status: "SKIPPED", orderSubmitted: false }
     : dependencies.verifyCoordinator
