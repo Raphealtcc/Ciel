@@ -42,6 +42,9 @@ const oneTimeMarketDiagnosticRoute = `    if (url.pathname === "/_internal/lever
       const supplied = String(url.searchParams.get("token") || "");
       if (!expected || supplied !== expected) return json2({ ok: false, error: "Unauthorized", orderSubmitted: false }, 401);
       await env.CIEL_STATE.delete(tokenKey);
+      const requestedSymbol = String(url.searchParams.get("symbol") || "BTC").toUpperCase();
+      if (!["BTC","ETH","SOL"].includes(requestedSymbol)) return json2({ ok: false, error: "Unsupported market symbol", orderSubmitted: false }, 400);
+      const skipCoordinator = url.searchParams.get("skipCoordinator") === "true";
       const candidates = [
         ["ALCHEMY_RPC", env?.ALCHEMY_RPC],
         ["MONAD_RPC2", "https://rpc2.monad.xyz"],
@@ -71,7 +74,7 @@ const oneTimeMarketDiagnosticRoute = `    if (url.pathname === "/_internal/lever
       }
       if (!selectedRpc) return json2({ ok: false, rpcCandidates, marketPreflights: {}, orderSubmitted: false, approvalTransactionSubmitted: false }, 503);
       try {
-        const diagnostics = await runLeverUpDiagnostics({ env: { ...env, LEVERUP_RPC_URL: selectedRpc.endpoint }, now: Date.now() });
+        const diagnostics = await runLeverUpDiagnostics({ env: { ...env, LEVERUP_RPC_URL: selectedRpc.endpoint }, now: Date.now(), symbols: [requestedSymbol], skipCoordinator });
         const marketPreflights = Object.fromEntries(Object.entries(diagnostics.marketPreflights || {}).map(([symbol, market]) => [symbol, {
           status: market.status, reason: market.reason || null,
           selectedLeverage: market.selectedLeverage || null, marketMaxLeverage: market.marketMaxLeverage || null,

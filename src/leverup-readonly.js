@@ -28,7 +28,7 @@ const monad = defineChain({
   id: 143,
   name: "Monad",
   nativeCurrency: { name: "Monad", symbol: "MON", decimals: 18 },
-  rpcUrls: { default: { http: ["https://monad-mainnet.drpc.org"] } },
+  rpcUrls: { default: { http: ["https://rpc2.monad.xyz"] } },
 });
 
 const POSITION_V4_ABI = [{
@@ -235,7 +235,7 @@ async function fetchJson(url, init = {}, fetchImpl = fetch) {
   try { return JSON.parse(body); } catch { throw new Error("LeverUp returned invalid JSON from " + url); }
 }
 
-export function createLeverUpPublicClient(rpcUrl = "https://monad-mainnet.drpc.org") {
+export function createLeverUpPublicClient(rpcUrl = "https://rpc2.monad.xyz") {
   return createPublicClient({ chain: monad, transport: http(rpcUrl, { timeout: 12_000 }) });
 }
 
@@ -343,7 +343,7 @@ export async function readPairByBaseV4(pairBase, { publicClient = createLeverUpP
   return normalizePairView(pair);
 }
 
-export async function readGlobalMinimumNotional({ rpcUrl = "https://monad-mainnet.drpc.org", fetchImpl = fetch, blockTag = "latest" } = {}) {
+export async function readGlobalMinimumNotional({ rpcUrl = "https://rpc2.monad.xyz", fetchImpl = fetch, blockTag = "latest" } = {}) {
   const response = await fetchImpl(rpcUrl, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -928,7 +928,7 @@ export function reconcileClosedPosition(closedPosition, lastLiveSnapshot = null,
 }
 
 export async function readLeverUpAccountSnapshot({
-  traderAddress, agentAddress, symbol, collateralRatio, rpcUrl = "https://monad-mainnet.drpc.org",
+  traderAddress, agentAddress, symbol, collateralRatio, rpcUrl = "https://rpc2.monad.xyz",
   fetchImpl = fetch, publicClient = createLeverUpPublicClient(rpcUrl),
 }) {
   const [pairs, antiDdos] = await Promise.all([

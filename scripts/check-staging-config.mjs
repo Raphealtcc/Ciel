@@ -23,7 +23,7 @@ assert.equal(config.vars.TELEGRAM_STAGING_BOT_ID, expectedBotId, "Telegram bot i
 assert.equal(config.vars.LEVERUP_TRADER_ADDRESS, traderAddress);
 assert.equal(config.vars.LEVERUP_AGENT_ADDRESS, agentAddress);
 assert.equal(config.vars.LEVERUP_AUTO_APPROVE, "true");
-assert.equal(config.vars.LEVERUP_RPC_URL, "https://monad-mainnet.drpc.org");
+assert.equal(config.vars.LEVERUP_RPC_URL, "https://rpc2.monad.xyz");
 assert.equal(config.vars.LEVERUP_PREFLIGHT_ENABLED, "true");
 assert.equal(config.vars.PAPER_TRADING_ENABLED, "false");
 assert.equal(config.previews.vars.PAPER_TRADING_ENABLED, "false");

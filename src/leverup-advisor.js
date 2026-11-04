@@ -236,7 +236,7 @@ export function formatLeverUpAdvisorLine(record) {
 }
 
 
-export async function runLeverUpMarketPreflights({ env, traderAddress, agentAddress, now = Date.now(), dependencies = {}, baseSnapshot = null }) {
+export async function runLeverUpMarketPreflights({ env, traderAddress, agentAddress, now = Date.now(), dependencies = {}, baseSnapshot = null, symbols = ["BTC", "ETH", "SOL"] }) {
   const symbols = ["BTC", "ETH", "SOL"];
   const readSnapshot = dependencies.readMarketSnapshot || dependencies.readSnapshot || readLeverUpAccountSnapshot;
   const results = {};
@@ -322,7 +322,7 @@ export async function runLeverUpMarketPreflights({ env, traderAddress, agentAddr
   return results;
 }
 
-export async function runLeverUpDiagnostics({ env, now = Date.now(), dependencies = {} }) {
+export async function runLeverUpDiagnostics({ env, now = Date.now(), dependencies = {}, symbols = ["BTC", "ETH", "SOL"], skipCoordinator = false }) {
   const traderAddress = String(env?.LEVERUP_TRADER_ADDRESS || "");
   const agentAddress = String(env?.LEVERUP_AGENT_ADDRESS || "");
   if (String(env?.LEVERUP_LIVE_TRADING).toLowerCase() !== "false" ||
@@ -334,7 +334,7 @@ export async function runLeverUpDiagnostics({ env, now = Date.now(), dependencie
   }
   const readSnapshot = dependencies.readSnapshot || readLeverUpAccountSnapshot;
   const snapshot = await readSnapshot({
-    traderAddress, agentAddress, symbol: "BTC", collateralRatio: null,
+    traderAddress, agentAddress, symbol: symbols[0] || "BTC", collateralRatio: null,
     rpcUrl: env?.LEVERUP_RPC_URL || "https://monad-mainnet.drpc.org",
     ...(dependencies.fetchImpl ? { fetchImpl: dependencies.fetchImpl } : {}),
   });
@@ -369,16 +369,17 @@ export async function runLeverUpDiagnostics({ env, now = Date.now(), dependencie
   }));
   const marketPreflights = dependencies.runMarketPreflights
     ? await dependencies.runMarketPreflights({ env, traderAddress, agentAddress, now })
-    : await runLeverUpMarketPreflights({ env, traderAddress, agentAddress, now, dependencies, baseSnapshot: snapshot });
-  const coordinator = dependencies.verifyCoordinator
-    ? await dependencies.verifyCoordinator({ env, db: env?.DB, now })
-    : await verifyLeverUpCoordinatorDryRun({ env, db: env?.DB, now });
+    : await runLeverUpMarketPreflights({ env, traderAddress, agentAddress, now, dependencies, baseSnapshot: snapshot, symbols });
+  const coordinator = skipCoordinator ? { status: "SKIPPED", orderSubmitted: false }
+    : dependencies.verifyCoordinator
+      ? await dependencies.verifyCoordinator({ env, db: env?.DB, now })
+      : await verifyLeverUpCoordinatorDryRun({ env, db: env?.DB, now });
   const diagnosticsOk = traderSigning.status === "PASS" && signing.status === "PASS" &&
     Boolean(auth.authorized && auth.canMarketOpen && auth.canMarketClose && auth.canPartialClose) &&
     Object.values(balancesAndAllowances).every((value) => value !== null) &&
-    Object.values(marketPreflights || {}).length === 3 &&
+    Object.values(marketPreflights || {}).length === symbols.length &&
     Object.values(marketPreflights || {}).every((market) => market.status === "PASS") &&
-    coordinator?.status === "PASS";
+    (skipCoordinator || coordinator?.status === "PASS");
   return jsonSafe({
     ok: diagnosticsOk, status: diagnosticsOk ? "READ_ONLY_CHECKS_PASS" : "READ_ONLY_CHECKS_INCOMPLETE",
     mode: "READ_ONLY_DRY_RUN", checkedAt: now, blockNumber: snapshot.blockNumber,
