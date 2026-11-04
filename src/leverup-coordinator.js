@@ -66,8 +66,10 @@ async function claimIntent(db, { signalId, action, pairBase, leverage, marginMon
     VALUES (?,?, 'PREPARED', ?, ?, ?, ?, ?, ?, ?, ?)`)
     .bind(signalId,idempotencyKey,pairBase || null,action,leverage || null,marginMon || null,notionalUsd || null,
       JSON.stringify(serializable(payload)),now,now).run();
+  const created = Number(inserted?.meta?.changes || 0) === 1;
+  if (created) return { created: true, row: null };
   const row = await db.prepare("SELECT * FROM leverup_execution_intents WHERE signal_id = ?").bind(signalId).first();
-  return { created: Number(inserted?.meta?.changes || 0) === 1, row };
+  return { created: false, row };
 }
 
 /**
@@ -129,6 +131,69 @@ export async function submitLeverUpIntent({
     const message = String(error?.message || error).slice(0, 300);
     await updateIntent(db, signalId, markedUncertain ? "UNCERTAIN" : "REJECTED", { lastError: message }).catch(() => void 0);
     return { status: markedUncertain ? "UNCERTAIN" : "REJECTED", submitted: false, signalId, reason: message };
+  }
+}
+
+
+/**
+ * Exercises the production D1 idempotency claim and status reconciliation path
+ * using a temporary risk-reducing intent. No allowance helper, signer, or submit
+ * function is called. The temporary row is deleted in a finally block.
+ */
+export async function verifyLeverUpCoordinatorDryRun({ env, db, now = Date.now(), dependencies = {} }) {
+  if (String(env?.LEVERUP_LIVE_TRADING).toLowerCase() !== "false" ||
+      String(env?.LEVERUP_KILL_SWITCH).toLowerCase() !== "true") {
+    return { status: "BLOCKED_SAFETY_CONFIGURATION", orderSubmitted: false };
+  }
+  if (!db?.prepare) return { status: "BLOCKED_D1_LEDGER_UNAVAILABLE", orderSubmitted: false };
+  const signalId = "ciel-diagnostic-" + now + "-" + crypto.randomUUID().replace(/-/g, "").slice(0, 12);
+  let claimed = false;
+  try {
+    const input = {
+      signalId, action: OneClickAction.MARKET_CLOSE, pairBase: null,
+      leverage: null, marginMon: null, notionalUsd: null,
+      payload: { diagnostic: true, orderSubmitted: false }, now,
+    };
+    const first = await claimIntent(db, input);
+    if (!first.created) throw new Error("DIAGNOSTIC_INTENT_CLAIM_FAILED");
+    claimed = true;
+    const duplicate = await claimIntent(db, input);
+    if (duplicate.created || duplicate.row?.status !== "PREPARED") {
+      throw new Error("DIAGNOSTIC_IDEMPOTENCY_CHECK_FAILED");
+    }
+    const fakeHash = "0x" + "ab".repeat(32);
+    await updateIntent(db, signalId, "SUBMITTED", {
+      intentHash: fakeHash,
+      payload: { diagnostic: true, orderSubmitted: false },
+    });
+    const reconciliation = await reconcilePendingLeverUpIntents({
+      env, db, now,
+      dependencies: {
+        getStatus: async () => ({ executed: true, skipped: false, diagnostic: true }),
+        fetchOpenPositions: async () => [],
+        ...dependencies,
+      },
+    });
+    const row = await db.prepare(
+      "SELECT status,intent_hash,payload_json FROM leverup_execution_intents WHERE signal_id = ?",
+    ).bind(signalId).first();
+    if (row?.status !== "EXECUTED" || row?.intent_hash !== fakeHash ||
+        JSON.parse(row?.payload_json || "{}").orderSubmitted !== false ||
+        reconciliation.reconciled !== 1) {
+      throw new Error("DIAGNOSTIC_STATUS_RECONCILIATION_FAILED");
+    }
+    return {
+      status: "PASS", orderSubmitted: false, intentClaimed: true,
+      duplicateBlocked: true, statusReconciled: true, temporaryRowCleaned: true,
+      reconciliation,
+    };
+  } catch (error) {
+    return { status: "FAILED", orderSubmitted: false, reason: String(error?.message || error).slice(0, 220) };
+  } finally {
+    if (claimed) {
+      await db.prepare("DELETE FROM leverup_execution_intents WHERE signal_id = ?")
+        .bind(signalId).run().catch(() => void 0);
+    }
   }
 }
 

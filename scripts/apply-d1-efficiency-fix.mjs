@@ -121,5 +121,22 @@ once(
   "supply the same persisted 1m candles to every advisor cycle",
 );
 
+
+once(
+  '  async updateAlertOutcomes(now) {\n    const result = await this.env.DB.prepare(',
+  '  async updateAlertOutcomes(now) {\n    const lastUpdate = Number(await this.state.storage.get("lastAlertOutcomeUpdateAt") || 0);\n    if (lastUpdate && now - lastUpdate < 5 * 60 * 1e3) return;\n    const result = await this.env.DB.prepare(',
+  "throttle non-critical alert outcome analytics to one D1 read batch every five minutes",
+);
+once(
+  'ORDER BY created_at_ms ASC LIMIT 200',
+  'ORDER BY created_at_ms ASC LIMIT 30',
+  "bound each alert outcome batch to 30 rows",
+);
+once(
+  '    if (statements.length) await this.env.DB.batch(statements);\n  }\n};',
+  '    if (statements.length) await this.env.DB.batch(statements);\n    await this.state.storage.put("lastAlertOutcomeUpdateAt", now);\n  }\n};',
+  "persist the alert outcome analytics throttle in Durable Object storage",
+);
+
 await writeFile(file, source);
 console.log("D1 efficiency patch complete: the core scalp still receives fresh closed 1m candles every minute; its candle cache is Durable Object-persistent, and D1 retains 5m history and all other market history.");

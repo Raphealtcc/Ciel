@@ -38,3 +38,11 @@ assert.ok(candlesRoute.includes("FROM market_samples WHERE symbol=?"), "the publ
 assert.ok(source.includes("const persistAllSamples = Math.floor(now / (6 * 60 * 1e3))"), "watchlist D1 samples must retain their current six-minute persistence cadence");
 assert.ok(source.includes("BENCHMARK_PRICE_SYMBOLS.has(row.symbol) || persistAllSamples"), "one-minute benchmark samples and wider-watchlist samples must both remain");
 console.log("PASS: CIEL keeps full one-minute core scalp candles in persistent DO state, retains the public candle endpoint, 5m candles, live context, alerts and market-sample history, while removing only duplicate D1 1m candle writes.");
+
+const outcomeStart = source.indexOf("  async updateAlertOutcomes(now) {");
+const outcomeEnd = source.indexOf("\n  }\n};", outcomeStart);
+assert.ok(outcomeStart >= 0 && outcomeEnd > outcomeStart, "alert outcome updater must exist");
+const outcomeUpdater = source.slice(outcomeStart, outcomeEnd);
+assert.ok(outcomeUpdater.includes("lastAlertOutcomeUpdateAt"), "alert analytics must be throttled durably in DO storage");
+assert.ok(outcomeUpdater.includes("now - lastUpdate < 5 * 60 * 1e3"), "alert analytics D1 reads must be at most once every five minutes");
+assert.ok(outcomeUpdater.includes("LIMIT 30"), "alert analytics batches must be bounded to 30 rows");

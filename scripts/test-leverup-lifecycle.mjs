@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { submitLeverUpIntent, evaluateLeverUpPositionAction } from "../src/leverup-coordinator.js";
+import { submitLeverUpIntent, evaluateLeverUpPositionAction, verifyLeverUpCoordinatorDryRun } from "../src/leverup-coordinator.js";
 
 class FakeD1 {
   rows = new Map();
@@ -15,6 +15,7 @@ class FakeD1 {
           db.rows.set(signal_id,{signal_id,idempotency_key,status:"PREPARED",pair_base,action,requested_leverage,margin_mon,notional_usd,payload_json,created_at_ms,updated_at_ms});
           return { meta: { changes: 1 } };
         }
+        if (sql.startsWith("DELETE FROM leverup_execution_intents")) { db.rows.delete(values[0]); return { meta: { changes: 1 } }; }
         if (sql.startsWith("UPDATE leverup_execution_intents SET")) {
           const fields = [...sql.matchAll(/([a-z_]+) = \?/g)].map((m) => m[1]);
           const signalId = values[values.length - 1];
@@ -28,6 +29,10 @@ class FakeD1 {
       async first() {
         if (sql.includes("WHERE signal_id = ?")) return db.rows.get(values[0]) || null;
         return null;
+      },
+      async all() {
+        if (sql.includes("WHERE status IN ('SUBMITTED','PENDING')")) return { results: [...db.rows.values()].filter((r) => ["SUBMITTED","PENDING"].includes(r.status) && r.intent_hash) };
+        return { results: [] };
       },
     };
   }
@@ -90,3 +95,14 @@ const held = evaluateLeverUpPositionAction({
 });
 assert.equal(held.action, "WAIT");
 console.log("PASS: hard-off gate, unique D1 idempotency claim, exact approval hook, one submit only, partial TP sizing, stop/target and min-hold exit logic.");
+
+const dryRunLedger = await verifyLeverUpCoordinatorDryRun({
+  env: { LEVERUP_LIVE_TRADING: "false", LEVERUP_KILL_SWITCH: "true" },
+  db, now: Date.now(),
+});
+assert.equal(dryRunLedger.status, "PASS");
+assert.equal(dryRunLedger.orderSubmitted, false);
+assert.equal(dryRunLedger.intentClaimed, true);
+assert.equal(dryRunLedger.duplicateBlocked, true);
+assert.equal(dryRunLedger.statusReconciled, true);
+assert.equal(db.rows.size, 1, "diagnostic intent must be deleted after verification; only the original lifecycle test row remains");
