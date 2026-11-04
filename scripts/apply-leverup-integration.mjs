@@ -35,6 +35,73 @@ once(
   "protect read-only LeverUp diagnostics with the existing Telegram webhook secret",
 );
 
+
+const oneTimeMarketDiagnosticRoute = \`    if (url.pathname === "/_internal/leverup-diagnostics-once" && request.method === "GET") {
+      const tokenKey = "ciel:leverup:diagnostics:one-time-token";
+      const expected = String(await env?.CIEL_STATE?.get(tokenKey) || "");
+      const supplied = String(url.searchParams.get("token") || "");
+      if (!expected || supplied !== expected) return json2({ ok: false, error: "Unauthorized", orderSubmitted: false }, 401);
+      await env.CIEL_STATE.delete(tokenKey);
+      const candidates = [
+        ["ALCHEMY_RPC", env?.ALCHEMY_RPC],
+        ["LEVERUP_RPC_URL", env?.LEVERUP_RPC_URL],
+        ["MONAD_RPC1", "https://rpc1.monad.xyz"],
+        ["MONAD_RPC", "https://rpc.monad.xyz"],
+      ];
+      const rpcCandidates = [];
+      let selectedRpc = null;
+      for (const [provider, endpoint] of candidates) {
+        if (!endpoint) continue;
+        let host = "unknown";
+        try { host = new URL(endpoint).hostname; } catch {}
+        try {
+          const response = await fetch(endpoint, {
+            method: "POST", headers: { "content-type": "application/json" },
+            body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_chainId", params: [] }),
+            signal: AbortSignal.timeout(5000),
+          });
+          const payload = await response.json();
+          const chainId = String(payload?.result || "").toLowerCase();
+          rpcCandidates.push({ provider, host, httpStatus: response.status, chainId, isMonadMainnet: response.ok && chainId === "0x8f" });
+          if (response.ok && chainId === "0x8f") { selectedRpc = { provider, endpoint, host, chainId }; break; }
+        } catch (error) {
+          rpcCandidates.push({ provider, host, error: String(error?.message || error).slice(0, 140) });
+        }
+      }
+      if (!selectedRpc) return json2({ ok: false, rpcCandidates, marketPreflights: {}, orderSubmitted: false, approvalTransactionSubmitted: false }, 503);
+      try {
+        const diagnostics = await runLeverUpDiagnostics({ env: { ...env, LEVERUP_RPC_URL: selectedRpc.endpoint }, now: Date.now() });
+        const marketPreflights = Object.fromEntries(Object.entries(diagnostics.marketPreflights || {}).map(([symbol, market]) => [symbol, {
+          status: market.status, reason: market.reason || null,
+          selectedLeverage: market.selectedLeverage || null, marketMaxLeverage: market.marketMaxLeverage || null,
+          minimumNotionalUsd: market.minimumNotionalUsd || null, minimumCollateralUsd: market.minimumCollateralUsd || null,
+          minimumMarginMon: market.minimumMarginMon || null, plannedMarginMon: market.plannedMarginMon || null,
+          plannedNotionalUsd: market.plannedNotionalUsd || null,
+          wmonAllowanceReady: market.wmonAllowanceShortfallRaw === "0",
+          autoApprovalConfigured: market.autoApprovalConfigured === true,
+          approvalWillRunOnlyOnLiveEntry: market.approvalWillRunOnlyOnLiveEntry === true,
+          orderSubmitted: false, approvalTransactionSubmitted: false,
+        }]));
+        return json2({
+          ok: diagnostics.ok, checkedAt: diagnostics.checkedAt,
+          rpc: { provider: selectedRpc.provider, host: selectedRpc.host, chainId: selectedRpc.chainId },
+          rpcCandidates, marketPreflights,
+          coordinator: { status: diagnostics.coordinator?.status || "NOT_CHECKED", reason: diagnostics.coordinator?.reason || null },
+          liveTradingEnabled: diagnostics.liveTradingEnabled, killSwitchActive: diagnostics.killSwitchActive,
+          orderSubmitted: false, approvalTransactionSubmitted: false,
+        });
+      } catch (error) {
+        return json2({ ok: false, rpcCandidates, rpc: { provider: selectedRpc.provider, host: selectedRpc.host, chainId: selectedRpc.chainId },
+          error: String(error?.message || error).slice(0, 220), orderSubmitted: false, approvalTransactionSubmitted: false }, 503);
+      }
+    }
+\`;
+once(
+  '    if (url.pathname === "/health") {',
+  oneTimeMarketDiagnosticRoute + '    if (url.pathname === "/health") {',
+  "add one-time token-protected read-only LeverUp market and RPC diagnostics",
+);
+
 once(
   '  async scheduled(_event, env, ctx) {\n    ctx.waitUntil(ensureTelegramWebhook(env));',
   '  async scheduled(_event, env, ctx) {\n    ctx.waitUntil(ensureTelegramWebhook(env));\n    if (String(env?.LEVERUP_PREFLIGHT_ENABLED).toLowerCase() === "true") {\n      ctx.waitUntil((async () => {\n        try {\n          const now = Date.now();\n          const diagnosticKey = "ciel:leverup:diagnostics:v1";\n          const last = Number(await env.CIEL_STATE.get(diagnosticKey + ":checkedAt") || 0);\n          if (!last || now - last >= 15 * 60 * 1000) {\n            let diagnostics;\n            try { diagnostics = await runLeverUpDiagnostics({ env, now }); }\n            catch (error) { diagnostics = { ok: false, mode: "READ_ONLY_DRY_RUN", error: String(error?.message || error).slice(0, 220), orderSubmitted: false }; }\n            await env.CIEL_STATE.put(diagnosticKey, JSON.stringify(diagnostics), { expirationTtl: 3600 });\n            await env.CIEL_STATE.put(diagnosticKey + ":checkedAt", String(now), { expirationTtl: 3600 });\n          }\n          const lifecycle = await runLeverUpPositionManager({ env, db: env.DB, now });\n          if (lifecycle.submitted) console.log("LeverUp position manager submitted " + lifecycle.submitted + " exit intent(s).");\n        } catch (error) {\n          console.error("LeverUp scheduled read/management cycle failed: " + String(error?.message || error).slice(0, 220));\n        }\n      })());\n    }',
