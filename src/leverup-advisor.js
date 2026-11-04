@@ -80,7 +80,7 @@ export async function prepareLeverUpAdvisorPlan({
     const readSnapshot = dependencies.readSnapshot || readLeverUpAccountSnapshot;
     snapshot = await readSnapshot({
       traderAddress, agentAddress, symbol: String(candidate.symbol).toUpperCase(), collateralRatio,
-      rpcUrl: env?.LEVERUP_RPC_URL || "https://rpc1.monad.xyz",
+      rpcUrl: env?.LEVERUP_RPC_URL || "https://monad-mainnet.drpc.org",
       ...(dependencies.fetchImpl ? { fetchImpl: dependencies.fetchImpl } : {}),
     });
   } catch (error) {
@@ -246,7 +246,7 @@ export async function runLeverUpMarketPreflights({ env, traderAddress, agentAddr
     try {
       const snapshot = symbol === "BTC" && baseSnapshot ? { ...baseSnapshot } : await readSnapshot({
         traderAddress, agentAddress, symbol, collateralRatio: null,
-        rpcUrl: env?.LEVERUP_RPC_URL || "https://rpc1.monad.xyz",
+        rpcUrl: env?.LEVERUP_RPC_URL || "https://monad-mainnet.drpc.org",
         ...(dependencies.fetchImpl ? { fetchImpl: dependencies.fetchImpl } : {}),
       });
       if (snapshot.market?.executionVenue === "HYPERLIQUID") throw new Error("MARKET_NOT_EXECUTED_BY_LEVERUP");
@@ -335,7 +335,7 @@ export async function runLeverUpDiagnostics({ env, now = Date.now(), dependencie
   const readSnapshot = dependencies.readSnapshot || readLeverUpAccountSnapshot;
   const snapshot = await readSnapshot({
     traderAddress, agentAddress, symbol: "BTC", collateralRatio: null,
-    rpcUrl: env?.LEVERUP_RPC_URL || "https://rpc1.monad.xyz",
+    rpcUrl: env?.LEVERUP_RPC_URL || "https://monad-mainnet.drpc.org",
     ...(dependencies.fetchImpl ? { fetchImpl: dependencies.fetchImpl } : {}),
   });
   const auth = snapshot.agentAuthorization || {};

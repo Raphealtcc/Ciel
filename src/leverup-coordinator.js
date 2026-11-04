@@ -359,7 +359,7 @@ export async function reconcilePendingLeverUpIntents({ env, db, now = Date.now()
           await updateIntent(db, row.signal_id, "PENDING", { payload: { ...payload, intentStatus: state, pairBaseMissing: true } });
           continue;
         }
-        const client = dependencies.publicClient || createLeverUpPublicClient(env?.LEVERUP_RPC_URL || "https://rpc1.monad.xyz");
+        const client = dependencies.publicClient || createLeverUpPublicClient(env?.LEVERUP_RPC_URL || "https://monad-mainnet.drpc.org");
         const chainPositions = await (dependencies.readPositions || readPositionsV4)(trader, pairBase, { publicClient: client });
         const indexedHash = String(indexed?.positionHash || indexed?.position?.positionHash || "").toLowerCase();
         const chainMatches = (chainPositions || []).filter((p) => {
@@ -469,7 +469,7 @@ export async function purgeLeverUpPositions({ env, db, symbol = null, now = Date
     return { status: "BLOCKED_WALLET_CONFIGURATION", checked: 0, submitted: 0 };
   }
   const fetchImpl = dependencies.fetchImpl || fetch;
-  const client = dependencies.publicClient || createLeverUpPublicClient(env?.LEVERUP_RPC_URL || "https://rpc1.monad.xyz");
+  const client = dependencies.publicClient || createLeverUpPublicClient(env?.LEVERUP_RPC_URL || "https://monad-mainnet.drpc.org");
   let pairs = [], apiPositions = [], pairDiscoveryError = null;
   try { pairs = await (dependencies.fetchPairs || fetchLeverUpPairs)({ fetchImpl }); }
   catch (error) { pairDiscoveryError = String(error?.message || error).slice(0, 180); }
@@ -592,7 +592,7 @@ export async function runLeverUpPositionManager({ env, db, now = Date.now(), dep
     return { status: "BLOCKED_WALLET_CONFIGURATION", checked: 0, submitted: 0 };
   }
   const fetchImpl = dependencies.fetchImpl || fetch;
-  const client = dependencies.publicClient || createLeverUpPublicClient(env?.LEVERUP_RPC_URL || "https://rpc1.monad.xyz");
+  const client = dependencies.publicClient || createLeverUpPublicClient(env?.LEVERUP_RPC_URL || "https://monad-mainnet.drpc.org");
   let apiPositions = [];
   try { apiPositions = await (dependencies.fetchOpenPositions || fetchOpenPositions)(traderAddress, { fetchImpl }); }
   catch { /* on-chain discovery below remains authoritative when the indexer is unavailable */ }
