@@ -36,7 +36,7 @@ once(
 );
 
 
-const oneTimeMarketDiagnosticRoute = \`    if (url.pathname === "/_internal/leverup-diagnostics-once" && request.method === "GET") {
+const oneTimeMarketDiagnosticRoute = `    if (url.pathname === "/_internal/leverup-diagnostics-once" && request.method === "GET") {
       const tokenKey = "ciel:leverup:diagnostics:one-time-token";
       const expected = String(await env?.CIEL_STATE?.get(tokenKey) || "");
       const supplied = String(url.searchParams.get("token") || "");
@@ -95,7 +95,7 @@ const oneTimeMarketDiagnosticRoute = \`    if (url.pathname === "/_internal/leve
           error: String(error?.message || error).slice(0, 220), orderSubmitted: false, approvalTransactionSubmitted: false }, 503);
       }
     }
-\`;
+`;
 once(
   '    if (url.pathname === "/health") {',
   oneTimeMarketDiagnosticRoute + '    if (url.pathname === "/health") {',
