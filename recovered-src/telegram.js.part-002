@@ -1,4 +1,7 @@
 cking ends and the latest observed mark is saved automatically.",
+      "/paperactive /paperdeactivate — toggle paper entries",
+      "/liveactive /livedeactivate — toggle live entries (kill switch applies)",
+      "/modes — show current trading modes",
       "/test \u2014 verify Telegram delivery",
       "/help \u2014 show these commands",
       "",

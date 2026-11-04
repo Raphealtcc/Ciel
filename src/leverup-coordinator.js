@@ -164,7 +164,9 @@ async function readPortfolioRiskFromLedger(db, now) {
 }
 
 export async function executeLeverUpEntry({ env, db, candidate, signalId, snapshot, plan, now = Date.now(), dependencies = {} }) {
-  if (!liveEnabled(env)) return { status: "LIVE_DISABLED", submitted: false };
+  const [liveOverride, entryOverride] = await Promise.all([env?.CIEL_STATE?.get("ciel:control:live-enabled"),env?.CIEL_STATE?.get("ciel:control:live-entry-enabled")]);
+  const effectiveEnv = liveOverride === null ? env : { ...env, LEVERUP_LIVE_TRADING: liveOverride };
+  if (!liveEnabled(effectiveEnv) || entryOverride === "false") return { status: "LIVE_DISABLED", submitted: false };
   if (!snapshot?.agentAuthorization?.authorized || !snapshot.agentAuthorization.canMarketOpen) {
     return { status: "REJECTED", reason: "AGENT_MARKET_OPEN_PERMISSION_MISSING" };
   }
@@ -196,7 +198,7 @@ export async function executeLeverUpEntry({ env, db, candidate, signalId, snapsh
     allowances.push({ tokenAddress: feeToken, amount: BigInt(plan.antiDdosFee) });
   }
   const result = await submitLeverUpIntent({
-    env, db, signalId, action: OneClickAction.MARKET_OPEN, actionValues: plan.actionValues,
+    env: effectiveEnv, db, signalId, action: OneClickAction.MARKET_OPEN, actionValues: plan.actionValues,
     traderAddress: snapshot.traderAddress, agentAddress: snapshot.agentAddress,
     agentAuthorization: snapshot.agentAuthorization, nonce: plan.nonce, deadline: plan.deadline,
     feeToken, antiDdosFee: plan.antiDdosFee, preflight: plan.preflight,
@@ -512,6 +514,8 @@ export async function purgeLeverUpPositions({ env, db, symbol = null, now = Date
 }
 
 export async function runLeverUpPositionManager({ env, db, now = Date.now(), dependencies = {} }) {
+  const liveOverride = await env?.CIEL_STATE?.get("ciel:control:live-enabled");
+  if (liveOverride !== null) env = { ...env, LEVERUP_LIVE_TRADING: liveOverride };
   const reconciliation = await reconcilePendingLeverUpIntents({ env, db, now, dependencies });
   const traderAddress = String(env?.LEVERUP_TRADER_ADDRESS || "");
   const agentAddress = String(env?.LEVERUP_AGENT_ADDRESS || "");
