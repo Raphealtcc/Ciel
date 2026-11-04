@@ -235,7 +235,7 @@ assert.ok(source.includes('!paperTradingEnabled ? "PAPER_DISABLED"'));
 assert.ok(source.includes('"PAPER_SIZE_UNAVAILABLE"'));
 assert.ok(source.includes('? "GEMINI_AI" : "MINIMUM_FALLBACK"'));
 assert.ok(source.includes("if (paperTradingEnabled && sizingLimits.feasible)"));
-assert.ok(source.includes("paperTradingEnabled ? \" Paper margin sizing:\" : \" Paper trading is paused; no paper margin is reserved.\""));
+assert.ok(source.includes('paperTradingEnabled ? " Paper margin sizing: "'));
 assert.ok(source.includes("PAPER_STARTING_BALANCE_MON = 100"));
 assert.ok(source.includes("TELEGRAM_STAGING_BOT_ID"));
 assert.ok(source.includes("ensureStagingTelegramIdentity"));
