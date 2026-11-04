@@ -24,6 +24,8 @@ assert.equal(config.vars.LEVERUP_TRADER_ADDRESS, traderAddress);
 assert.equal(config.vars.LEVERUP_AGENT_ADDRESS, agentAddress);
 assert.equal(config.vars.LEVERUP_AUTO_APPROVE, "true");
 assert.equal(config.vars.LEVERUP_PREFLIGHT_ENABLED, "true");
+assert.equal(config.vars.PAPER_TRADING_ENABLED, "false");
+assert.equal(config.previews.vars.PAPER_TRADING_ENABLED, "false");
 assert.equal(config.vars.LEVERUP_LIVE_TRADING, "false");
 assert.equal(config.vars.LEVERUP_KILL_SWITCH, "true");
 assert.equal(config.vars.LEVERUP_PURGE_LIVE_ENABLED, "true", "Only the explicit manual purge command may close live positions while the kill switch is on");
