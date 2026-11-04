@@ -126,8 +126,9 @@ __name(handleTradingModeCommand, "handleTradingModeCommand");
 async function handleCommand(env, text) {
   const command = (text.trim().split(/\s+/, 1)[0] || "").split("@")[0].toLowerCase();
   if (await handleTradingModeCommand(env, command)) return;
-  if (await handleAdvisorCommand(env, text)) return;
   const command = (text.trim().split(/\s+/, 1)[0] || "").split("@")[0].toLowerCase();
+  if (await handleTradingModeCommand(env, command)) return;
+  if (await handleAdvisorCommand(env, text)) return;
   if (command === "/start" || command === "/help") {
     await sendTelegram(env, [
       "\u{1F916} Ciel market advisor is online.",
