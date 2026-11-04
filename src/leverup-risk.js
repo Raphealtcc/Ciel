@@ -30,7 +30,8 @@ export function evaluateLeverUpPortfolioRisk({ requestedLeverage, totalAllocatio
   const usable = Math.max(0, n(totalAllocationMon) - n(reserveMon));
   if (!finitePositive(availableWmonMon)) reasons.push("AVAILABLE_WMON_BALANCE_UNKNOWN");
   if (!finitePositive(requestedMarginMon)) reasons.push("REQUESTED_MARGIN_INVALID");
-  if (finitePositive(requestedMarginMon) && n(requestedMarginMon) > usable) reasons.push("TRADE_EXCEEDS_USABLE_ALLOCATION");
+  const allocationCommitted = Math.max(finitePositive(requestedMarginMon) ? n(requestedMarginMon) : 0, finitePositive(entryBudgetMon) ? n(entryBudgetMon) : 0);
+  if (allocationCommitted > usable) reasons.push("TRADE_EXCEEDS_USABLE_ALLOCATION");
   if (finitePositive(availableWmonMon) && finitePositive(entryBudgetMon) && n(entryBudgetMon) > n(availableWmonMon)) reasons.push("INSUFFICIENT_WMON_FOR_MARGIN_FEES_AND_BUFFER");
   if (currentOpenPositions.length >= n(maxConcurrentPositions)) reasons.push("MAX_CONCURRENT_POSITIONS_REACHED");
   const totalStopRisk = n(aggregateStopRiskMon) + Math.max(0, n(proposedStopRiskMon) || 0);
@@ -40,5 +41,5 @@ export function evaluateLeverUpPortfolioRisk({ requestedLeverage, totalAllocatio
       n(dailyRealizedLossMon) + proposedRisk > n(maxDailyRealizedLossMon)) reasons.push("DAILY_REALIZED_LOSS_LIMIT_REACHED_OR_PROJECTED");
   if (n(rollingDrawdownMon) >= n(maxRollingDrawdownMon) ||
       n(rollingDrawdownMon) + proposedRisk > n(maxRollingDrawdownMon)) reasons.push("ROLLING_DRAWDOWN_LIMIT_REACHED_OR_PROJECTED");
-  return { allowed: reasons.length === 0, reasons, usableAllocationMon: usable, remainingAllocationMon: Math.max(0, usable - Math.max(0, n(requestedMarginMon) || 0)), aggregateStopRiskMon: totalStopRisk };
+  return { allowed: reasons.length === 0, reasons, usableAllocationMon: usable, allocationCommittedMon: allocationCommitted, remainingAllocationMon: Math.max(0, usable - allocationCommitted), aggregateStopRiskMon: totalStopRisk };
 }
