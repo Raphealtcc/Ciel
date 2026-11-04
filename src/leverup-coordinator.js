@@ -164,7 +164,9 @@ async function readPortfolioRiskFromLedger(db, now) {
 }
 
 export async function executeLeverUpEntry({ env, db, candidate, signalId, snapshot, plan, now = Date.now(), dependencies = {} }) {
-  const [liveOverride, entryOverride] = await Promise.all([env?.CIEL_STATE?.get("ciel:control:live-enabled"),env?.CIEL_STATE?.get("ciel:control:live-entry-enabled")]);
+  const [liveOverride, entryOverride] = env?.CIEL_STATE && typeof env.CIEL_STATE.get === "function"
+    ? await Promise.all([env.CIEL_STATE.get("ciel:control:live-enabled"), env.CIEL_STATE.get("ciel:control:live-entry-enabled")])
+    : [null, null];
   const effectiveEnv = liveOverride == null ? env : { ...env, LEVERUP_LIVE_TRADING: liveOverride };
   if (!liveEnabled(effectiveEnv) || entryOverride === "false") return { status: "LIVE_DISABLED", submitted: false };
   if (!snapshot?.agentAuthorization?.authorized || !snapshot.agentAuthorization.canMarketOpen) {
@@ -514,7 +516,9 @@ export async function purgeLeverUpPositions({ env, db, symbol = null, now = Date
 }
 
 export async function runLeverUpPositionManager({ env, db, now = Date.now(), dependencies = {} }) {
-  const liveOverride = await env?.CIEL_STATE?.get("ciel:control:live-enabled");
+  const liveOverride = env?.CIEL_STATE && typeof env.CIEL_STATE.get === "function"
+    ? await env.CIEL_STATE.get("ciel:control:live-enabled")
+    : null;
   if (liveOverride != null) env = { ...env, LEVERUP_LIVE_TRADING: liveOverride };
   const reconciliation = await reconcilePendingLeverUpIntents({ env, db, now, dependencies });
   const traderAddress = String(env?.LEVERUP_TRADER_ADDRESS || "");

@@ -43,7 +43,9 @@ async function savePreflight(env, signalId, record) {
 export async function prepareLeverUpAdvisorPlan({
   env, candidate, reviewed, signalId, now = Date.now(), technicalOnly = false, dependencies = {},
 }) {
-  const [liveOverride, liveEntryOverride] = await Promise.all([env?.CIEL_STATE?.get("ciel:control:live-enabled"),env?.CIEL_STATE?.get("ciel:control:live-entry-enabled")]);
+  const [liveOverride, liveEntryOverride] = env?.CIEL_STATE && typeof env.CIEL_STATE.get === "function"
+    ? await Promise.all([env.CIEL_STATE.get("ciel:control:live-enabled"), env.CIEL_STATE.get("ciel:control:live-entry-enabled")])
+    : [null, null];
   const liveConfigured = String(liveOverride ?? env?.LEVERUP_LIVE_TRADING).toLowerCase() === "true";
   const liveMode = liveConfigured && liveEntryOverride !== "false" && String(env?.LEVERUP_KILL_SWITCH).toLowerCase() === "false";
   const dryRunMode = !liveConfigured && String(env?.LEVERUP_KILL_SWITCH).toLowerCase() === "true";
