@@ -244,7 +244,7 @@ export async function runLeverUpMarketPreflights({ env, traderAddress, agentAddr
   // previous three-way fan-out; reuse the already-read BTC snapshot as well.
   for (const symbol of symbols) {
     try {
-      const snapshot = symbol === "BTC" && baseSnapshot ? { ...baseSnapshot } : await readSnapshot({
+      const snapshot = baseSnapshot && symbol === (baseSnapshot.market?.symbol || symbols[0]) ? { ...baseSnapshot } : await readSnapshot({
         traderAddress, agentAddress, symbol, collateralRatio: null,
         rpcUrl: env?.LEVERUP_RPC_URL || "https://monad-mainnet.drpc.org",
         ...(dependencies.fetchImpl ? { fetchImpl: dependencies.fetchImpl } : {}),
