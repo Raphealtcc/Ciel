@@ -43,6 +43,15 @@ assert.ok(source.includes("const persistAllSamples = Math.floor(now / (6 * 60 * 
 assert.ok(source.includes("BENCHMARK_PRICE_SYMBOLS.has(row.symbol) || persistAllSamples"), "one-minute benchmark samples and wider-watchlist samples must both remain");
 console.log("PASS: CIEL keeps full one-minute core scalp candles in persistent DO state, retains the public candle endpoint, 5m candles, live context, alerts and market-sample history, while removing only duplicate D1 1m candle writes.");
 
+const trendWriterStart = source.indexOf("  async writeCandleSnapshots(now) {");
+const trendWriterEnd = source.indexOf("  async hydrateHistoryFromD1(now) {", trendWriterStart);
+assert.ok(trendWriterStart >= 0 && trendWriterEnd > trendWriterStart, "native 5m snapshot writer must exist");
+const trendWriter = source.slice(trendWriterStart, trendWriterEnd);
+assert.ok(trendWriter.includes("this.coreTrendCandles[symbol]"), "native 5m core candles must be merged into DO state");
+assert.ok(trendWriter.includes("now - 5 * 60 * 60 * 1e3"), "cold-start cache must bootstrap five hours of 5m candles once");
+assert.ok(trendWriter.includes('this.state.storage.put("coreTrendCandles", this.coreTrendCandles)'), "native 5m cache must persist across DO restarts");
+assert.ok(trendWriter.includes("INSERT OR REPLACE INTO market_candles"), "native 5m history must remain archived in D1");
+
 const outcomeStart = source.indexOf("  async updateAlertOutcomes(now) {");
 const outcomeEnd = source.indexOf("\n  }\n};", outcomeStart);
 assert.ok(outcomeStart >= 0 && outcomeEnd > outcomeStart, "alert outcome updater must exist");
