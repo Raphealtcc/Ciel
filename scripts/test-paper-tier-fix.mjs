@@ -229,7 +229,13 @@ assert.ok(source.includes("automatic leverage-tiered paper-trading balance and P
 assert.ok(!source.includes("automatic 50x paper-trading balance and P&L"));
 assert.ok(source.includes('String(p.leverage) + "x notional estimate at 100% collateral ratio ≈ "'));
 assert.ok(source.includes("free balance is below the eligible market's minimum margin"));
-assert.ok(source.includes("const collateral = choosePaperMargin(reviewed.verdict === \"APPROVE\" ? reviewed.paperMarginMon : null, sizingLimits);"));
+assert.ok(source.includes("const selectedPaperMargin = paperTradingEnabled && sizingLimits.feasible ? choosePaperMargin("));
+assert.ok(source.includes("const collateral = Number.isFinite(selectedPaperMargin) ? selectedPaperMargin :"));
+assert.ok(source.includes('!paperTradingEnabled ? "PAPER_DISABLED"'));
+assert.ok(source.includes('"PAPER_SIZE_UNAVAILABLE"'));
+assert.ok(source.includes('? "GEMINI_AI" : "MINIMUM_FALLBACK"'));
+assert.ok(source.includes("if (paperTradingEnabled && sizingLimits.feasible)"));
+assert.ok(source.includes("paperTradingEnabled ? \" Paper margin sizing:\" : \" Paper trading is paused; no paper margin is reserved.\""));
 assert.ok(source.includes("PAPER_STARTING_BALANCE_MON = 100"));
 assert.ok(source.includes("TELEGRAM_STAGING_BOT_ID"));
 assert.ok(source.includes("ensureStagingTelegramIdentity"));
@@ -246,7 +252,7 @@ assert.ok(source.includes("historyBootstrapDone"));
 assert.ok(source.includes("ciel:intraday-pattern:v2:"));
 assert.ok(source.includes("Number(cached.historyDays)>=5"));
 assert.ok(source.includes("paperMarginMon"));
-assert.ok(source.includes("const marginSizingSource = reviewed.verdict === \"APPROVE\""));
+// The margin source now explicitly distinguishes paused paper, unavailable sizing, AI sizing and minimum fallback.
 assert.ok(source.includes("const perpAssets = universe.map((asset) => ({ symbol: String(asset?.name || \"\").trim().toUpperCase(), coin: String(asset?.name || \"\").trim() }))"));
 assert.ok(source.includes("missingBooks.slice(offset, offset + 4).map(async ({ symbol, coin }) => {"));
 assert.ok(source.includes('JSON.stringify({ type: "l2Book", coin })'));
