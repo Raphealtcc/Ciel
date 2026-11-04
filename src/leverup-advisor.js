@@ -237,7 +237,6 @@ export function formatLeverUpAdvisorLine(record) {
 
 
 export async function runLeverUpMarketPreflights({ env, traderAddress, agentAddress, now = Date.now(), dependencies = {}, baseSnapshot = null, symbols = ["BTC", "ETH", "SOL"] }) {
-  const symbols = ["BTC", "ETH", "SOL"];
   const readSnapshot = dependencies.readMarketSnapshot || dependencies.readSnapshot || readLeverUpAccountSnapshot;
   const results = {};
   // Keep provider concurrency low. The public Monad RPC was rate-limiting the
