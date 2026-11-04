@@ -81,6 +81,10 @@ assert.equal(minimumMarginForMarketLeverage(1001), 11);
 assert.equal(minimumMarginForMarketLeverage(25), null);
 assert.equal(minimumMarginForMarketLeverage(5), null);
 
+const equityOnly150 = paperMarginLimits(22, 150, 100, 50, 0.4, 0);
+assert.equal(equityOnly150.maxMarginMon, 25, "equity rising to 150 must not automatically increase sizing when starting balance remains 100");
+const starting150 = paperMarginLimits(22, 150, 150, 50, 0.4, 0);
+assert.equal(starting150.maxMarginMon, 37.5, "a 150 MON starting balance increases the 5% risk budget and therefore permitted paper margin");
 const limits50 = paperMarginLimits(22, 100, 100, 50, 0.4, 0);
 assert.equal(limits50.feasible, true);
 assert.equal(limits50.minMarginMon, 22);

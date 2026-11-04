@@ -123,7 +123,7 @@ export async function prepareLeverUpAdvisorPlan({
       ? Math.min(configuredTradeCeiling, allocationCeiling)
       : Math.min(minimumMarginMon, allocationCeiling);
     if (maxTradeMarginMon + 1e-9 < minimumMarginMon) throw new Error("VENUE_MINIMUM_MARGIN_EXCEEDS_CIEL_TRADE_ALLOCATION");
-    const aiMargin = Number(reviewed?.paperMarginMon);
+    const aiMargin = Number(reviewed?.liveMarginMon ?? env?.LEVERUP_MAX_TRADE_MARGIN_MON);
     const desiredMarginMon = Math.max(minimumMarginMon, Math.min(maxTradeMarginMon,
       Number.isFinite(aiMargin) && aiMargin > 0 ? aiMargin : minimumMarginMon));
 

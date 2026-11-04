@@ -19,7 +19,7 @@ const baseSnapshot = (ratio) => ({
 const env = {
   LEVERUP_PREFLIGHT_ENABLED: "true", LEVERUP_LIVE_TRADING: "false", LEVERUP_KILL_SWITCH: "true",
   LEVERUP_MIN_LEVERAGE: "50", LEVERUP_TOTAL_ALLOCATION_MON: "50", LEVERUP_RESERVE_MON: "25",
-  LEVERUP_COLLATERAL_50X_USD: "0.43", LEVERUP_COLLATERAL_100X_USD: "0.23",
+  LEVERUP_COLLATERAL_50X_USD: "0.43", LEVERUP_COLLATERAL_100X_USD: "0.23", LEVERUP_MAX_TRADE_MARGIN_MON: "25",
   LEVERUP_TRADER_ADDRESS: trader, LEVERUP_AGENT_ADDRESS: agent,
   CIEL_STATE: { put: async () => {} }, DB: { prepare: () => ({}) },
 };
@@ -27,7 +27,7 @@ const candidate = { symbol: "BTC", side: "LONG", stopPct: 0.4, targetPct: 0.64, 
 const advisorSource = await readFile(new URL("../src/leverup-advisor.js", import.meta.url), "utf8");
 assert.ok(advisorSource.includes("Number(plan.marginMonUsed) * Number(plan.selectedLeverage) * stopPct / 100"),
   "LeverUp stop-risk must include the actual leverage multiplier");
-const reviewed = { verdict: "APPROVE", paperMarginMon: 11.5 };
+const reviewed = { verdict: "APPROVE", paperMarginMon: 1, liveMarginMon: 12 };
 let seenPlanArgs = null, seenPersist = null;
 const dependencies = {
   readSnapshot: async ({ collateralRatio }) => baseSnapshot(collateralRatio),
@@ -70,8 +70,8 @@ assert.ok(Math.abs(seenPlanArgs.snapshot.collateralRatio - (20 / (100 * 0.23))) 
   "100x collateral ratio must be derived from the $0.23 minimum, not a hardcoded protocol ratio");
 assert.ok(Math.abs(ready.minimumMarginMon - (0.23 / 0.019038)) < 1e-6,
   "minimum WMON must be calculated from the $0.23 USD collateral and live MON/USD oracle");
-assert.ok(seenPlanArgs.desiredMarginMon >= ready.minimumMarginMon);
-assert.equal(seenPlanArgs.maxTradeMarginMon, ready.minimumMarginMon, "unset per-trade cap defaults to venue minimum only");
+assert.equal(seenPlanArgs.desiredMarginMon, 12, "LeverUp must use its independent live margin proposal, not the paper margin");
+assert.equal(seenPlanArgs.maxTradeMarginMon, 25, "live margin ceiling must use the configured LeverUp cap");
 assert.equal(seenPlanArgs.reserveMon, 25);
 assert.ok(seenPlanArgs.stopLossPriceRaw > 0n && seenPlanArgs.takeProfitPriceRaw > 0n);
 assert.equal(seenPersist.options.decision, "PASS");
