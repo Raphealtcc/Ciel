@@ -129,6 +129,6 @@ assert.equal(diag.signing.status, "PASS");
 assert.equal(diag.signerMatchesConfiguredAgent, true);
 assert.equal(diag.traderSignerMatchesConfiguredWallet, true);
 assert.equal(diag.traderSigning.status, "PASS");
-assert.equal(diag.orderSubmitted, false);
+assert.equal(diag.orderSubmitted, false);\nassert.deepEqual(Object.keys(diag.marketPreflights).sort(), ["BTC","ETH","SOL"]);\nassert.equal(diag.coordinator.status, "PASS");
 assert.equal(JSON.stringify(diag).includes(diagKey), false);
 console.log("PASS: CIEL-to-LeverUp preflight is read-only, 50x-minimum, reserve-aware, approval-gated, existing-position-safe, ledger-backed, and hard-locked from live execution, with read-only wallet and synthetic signer diagnostics.");

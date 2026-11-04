@@ -3,7 +3,7 @@ import {
   calculateMinimumCollateralMon, buildMarketOpenPlan, persistLeverUpPreflight,
 } from "./leverup-readonly.js";
 import { OneClickAction, signIntentDryRun } from "./leverup-1ct.js";
-import { prepareLeverUpExecution, executeLeverUpEntry } from "./leverup-coordinator.js";
+import { prepareLeverUpExecution, executeLeverUpEntry, verifyLeverUpCoordinatorDryRun } from "./leverup-coordinator.js";
 import { inspectLeverUpTraderSigner } from "./leverup-approval.js";
 
 const WMON = LEVERUP_TOKENS.WMON.toLowerCase();
@@ -235,6 +235,93 @@ export function formatLeverUpAdvisorLine(record) {
     " " + accountLine + " Live trading is OFF.";
 }
 
+
+export async function runLeverUpMarketPreflights({ env, traderAddress, agentAddress, now = Date.now(), dependencies = {} }) {
+  const symbols = ["BTC", "ETH", "SOL"];
+  const readSnapshot = dependencies.readMarketSnapshot || dependencies.readSnapshot || readLeverUpAccountSnapshot;
+  return Object.fromEntries(await Promise.all(symbols.map(async (symbol) => {
+    try {
+      const snapshot = await readSnapshot({
+        traderAddress, agentAddress, symbol, collateralRatio: null,
+        rpcUrl: env?.LEVERUP_RPC_URL || "https://rpc.monad.xyz",
+        ...(dependencies.fetchImpl ? { fetchImpl: dependencies.fetchImpl } : {}),
+      });
+      if (snapshot.market?.executionVenue === "HYPERLIQUID") throw new Error("MARKET_NOT_EXECUTED_BY_LEVERUP");
+      const tiers = snapshot.pairView?.leverageMargins || [];
+      const minimumNotionalRaw = BigInt(snapshot.minimumNotionalRaw || "0");
+      const minimumTier = selectLeverageTier(tiers, minimumNotionalRaw);
+      if (!minimumTier) throw new Error("NO_LEVERAGE_TIER_FOR_VENUE_MINIMUM");
+      const marketMaxLeverage = Math.max(...tiers.map((tier) => Number(tier.maxLeverage)));
+      const desiredLeverage = Number(env?.LEVERUP_DEFAULT_LEVERAGE || 100);
+      const leverage = Math.min(desiredLeverage, Number(minimumTier.maxLeverage), marketMaxLeverage);
+      if (!Number.isFinite(leverage) || leverage < 50) throw new Error("MARKET_OR_NOTIONAL_TIER_BELOW_50X");
+      const minimumNotionalUsd = Number(minimumNotionalRaw) / 1e18;
+      const monUsdPrice = Number(snapshot.monUsdPriceRaw) / 1e18;
+      const minimumCollateralUsd = leverUpCollateralUsdForLeverage({
+        leverage, minimumNotionalUsd,
+        collateralAt50xUsd: env?.LEVERUP_COLLATERAL_50X_USD ?? 0.43,
+        collateralAt100xUsd: env?.LEVERUP_COLLATERAL_100X_USD ?? 0.23,
+      });
+      const collateralRatio = minimumNotionalUsd / (leverage * minimumCollateralUsd);
+      if (!(collateralRatio > 0 && collateralRatio <= 1) || !(monUsdPrice > 0)) {
+        throw new Error("LIVE_COLLATERAL_OR_ORACLE_DATA_INVALID");
+      }
+      snapshot.collateralRatio = collateralRatio;
+      const minimumMarginMon = minimumCollateralUsd / monUsdPrice;
+      const totalAllocationMon = Number(env?.LEVERUP_TOTAL_ALLOCATION_MON || 50);
+      const reserveMon = Number(env?.LEVERUP_RESERVE_MON ?? totalAllocationMon * 0.5);
+      const allocationCeiling = Math.max(0, totalAllocationMon - reserveMon);
+      const configuredTradeCeiling = Number(env?.LEVERUP_MAX_TRADE_MARGIN_MON);
+      const maxTradeMarginMon = Number.isFinite(configuredTradeCeiling) && configuredTradeCeiling > 0
+        ? Math.min(configuredTradeCeiling, allocationCeiling) : allocationCeiling;
+      if (maxTradeMarginMon + 1e-9 < minimumMarginMon) {
+        throw new Error("VENUE_MINIMUM_MARGIN_EXCEEDS_CIEL_TRADE_ALLOCATION");
+      }
+      const oracle = BigInt(snapshot.oraclePriceRaw);
+      const buildPlan = dependencies.buildPlan || buildMarketOpenPlan;
+      const plan = buildPlan({
+        snapshot, desiredMarginMon: minimumMarginMon, maxTradeMarginMon,
+        inferredLeverage: leverage, side: "LONG", expectedHoldSeconds: 900,
+        reserveMon, stopLossPriceRaw: oracle * 9960n / 10_000n,
+        takeProfitPriceRaw: oracle * 10_080n / 10_000n,
+        requireExistingAllowance: false, now,
+      });
+      const wmon = snapshot.accountTokenStates?.[WMON] || {};
+      const wmonAllowance = BigInt(wmon.allowance || "0");
+      const wmonRequired = BigInt(plan.amountInRaw || "0");
+      const feeToken = String(plan.feeToken || "0x0000000000000000000000000000000000000000").toLowerCase();
+      const feeRequired = BigInt(plan.antiDdosFee || "0");
+      const feeState = snapshot.accountTokenStates?.[feeToken] || {};
+      const feeAllowance = BigInt(feeState.allowance || "0");
+      const feeApprovalRequired = feeToken !== "0x0000000000000000000000000000000000000000" && feeRequired > 0n;
+      const autoApprovalConfigured = String(env?.LEVERUP_AUTO_APPROVE).toLowerCase() === "true";
+      const wmonAllowanceShortfall = wmonAllowance >= wmonRequired ? 0n : wmonRequired - wmonAllowance;
+      const feeAllowanceShortfall = feeAllowance >= feeRequired ? 0n : feeRequired - feeAllowance;
+      if (!autoApprovalConfigured && (wmonAllowanceShortfall > 0n || (feeApprovalRequired && feeAllowanceShortfall > 0n))) {
+        throw new Error("TOKEN_ALLOWANCE_INSUFFICIENT_AND_AUTO_APPROVAL_DISABLED");
+      }
+      return [symbol, {
+        status: "PASS", symbol, pairBase: snapshot.market?.base || snapshot.market?.pairBase,
+        marketStatus: snapshot.market?.status || null,
+        executionVenue: snapshot.market?.executionVenue || null,
+        selectedLeverage: leverage, marketMaxLeverage, minimumTierMaxLeverage: Number(minimumTier.maxLeverage),
+        minimumNotionalUsd, minimumCollateralUsd, minimumMarginMon,
+        plannedMarginMon: Number(plan.marginMonUsed), plannedNotionalUsd: Number(plan.notionalUsd),
+        wmonBalanceMon: Number(BigInt(wmon.balance || "0")) / 1e18,
+        wmonAllowanceRaw: wmonAllowance.toString(), wmonRequiredAllowanceRaw: wmonRequired.toString(),
+        wmonAllowanceShortfallRaw: wmonAllowanceShortfall.toString(),
+        feeToken, feeAllowanceRaw: feeAllowance.toString(), feeRequiredAllowanceRaw: feeRequired.toString(),
+        feeAllowanceShortfallRaw: feeApprovalRequired ? feeAllowanceShortfall.toString() : "0",
+        autoApprovalConfigured, approvalWillRunOnlyOnLiveEntry: true,
+        orderSubmitted: false, approvalTransactionSubmitted: false,
+        checkedAt: now, blockNumber: snapshot.blockNumber,
+      }];
+    } catch (error) {
+      return [symbol, { status: "FAILED", symbol, reason: errorMessage(error), checkedAt: now, orderSubmitted: false }];
+    }
+  })));
+}
+
 export async function runLeverUpDiagnostics({ env, now = Date.now(), dependencies = {} }) {
   const traderAddress = String(env?.LEVERUP_TRADER_ADDRESS || "");
   const agentAddress = String(env?.LEVERUP_AGENT_ADDRESS || "");
@@ -280,9 +367,18 @@ export async function runLeverUpDiagnostics({ env, now = Date.now(), dependencie
     const state = snapshot.accountTokenStates?.[String(token).toLowerCase()];
     return [label, state ? { balanceRaw: state.balance, allowanceRaw: state.allowance } : null];
   }));
+  const marketPreflights = dependencies.runMarketPreflights
+    ? await dependencies.runMarketPreflights({ env, traderAddress, agentAddress, now })
+    : await runLeverUpMarketPreflights({ env, traderAddress, agentAddress, now, dependencies });
+  const coordinator = dependencies.verifyCoordinator
+    ? await dependencies.verifyCoordinator({ env, db: env?.DB, now })
+    : await verifyLeverUpCoordinatorDryRun({ env, db: env?.DB, now });
   const diagnosticsOk = traderSigning.status === "PASS" && signing.status === "PASS" &&
     Boolean(auth.authorized && auth.canMarketOpen && auth.canMarketClose && auth.canPartialClose) &&
-    Object.values(balancesAndAllowances).every((value) => value !== null);
+    Object.values(balancesAndAllowances).every((value) => value !== null) &&
+    Object.values(marketPreflights || {}).length === 3 &&
+    Object.values(marketPreflights || {}).every((market) => market.status === "PASS") &&
+    coordinator?.status === "PASS";
   return jsonSafe({
     ok: diagnosticsOk, status: diagnosticsOk ? "READ_ONLY_CHECKS_PASS" : "READ_ONLY_CHECKS_INCOMPLETE",
     mode: "READ_ONLY_DRY_RUN", checkedAt: now, blockNumber: snapshot.blockNumber,
