@@ -17,10 +17,10 @@ once(
 once('mon_collateral: collateral, leverage, margin_sizing_source: marginSizingSource, entry_mon_usd: prices.MON, manual_entry_at_ms: null };','mon_collateral: collateral, leverage, margin_sizing_source: marginSizingSource, paper_trading_enabled: paperTradingEnabled, entry_mon_usd: prices.MON, manual_entry_at_ms: null };',"paper flag on setup object");
 {
   const start = source.indexOf("      let paperResult = null;");
-  const end = source.indexOf("\\n      const paperLine", start);
+  const end = source.indexOf("\n      const paperLine", start);
   if (start < 0 || end < 0) throw new Error("paper entry block boundaries not found after preceding patches");
   const block = source.slice(start, end);
-  const call = block.match(/paperResult = await openPaperTrade\\(paperStorage, \\{[\\s\\S]*?\\}\\);/);
+  const call = block.match(/paperResult = await openPaperTrade\(paperStorage, \{[\s\S]*?\}\);/);
   if (!call) throw new Error("paper entry call not found after preceding patches");
   if (!block.includes("Automatic paper entry failed for ")) throw new Error("paper entry error handler not found");
   const gated = `      let paperResult = null;
