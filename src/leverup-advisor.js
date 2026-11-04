@@ -398,7 +398,7 @@ export async function runLeverUpDiagnostics({ env, now = Date.now(), dependencie
       canMarketOpen: Boolean(auth.canMarketOpen), canMarketClose: Boolean(auth.canMarketClose),
       canPartialClose: Boolean(auth.canPartialClose), authorizedAt: auth.authorizedAt || null,
     },
-    lastAgentNonce: snapshot.lastAgentNonce || null, signing,
+    lastAgentNonce: snapshot.lastAgentNonce || null, signing, marketPreflights, coordinator,
     liveTradingEnabled: false, killSwitchActive: true, orderSubmitted: false,
   });
 }

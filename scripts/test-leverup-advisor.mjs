@@ -122,13 +122,18 @@ const diag = await runLeverUpDiagnostics({
     lastAgentNonce: "0", blockNumber: "123", indexedPositions: [], onchainPositions: [],
     accountTokenStates: Object.fromEntries(Object.values(LEVERUP_TOKENS).map((token) =>
       [token.toLowerCase(), { balance: "1000000000000000000", allowance: "1000000000000000000" }])),
-  }) },
+  }),
+    runMarketPreflights: async () => Object.fromEntries(["BTC","ETH","SOL"].map((symbol) => [symbol,{status:"PASS",symbol,selectedLeverage:100,minimumMarginMon:1,orderSubmitted:false,approvalTransactionSubmitted:false}])),
+    verifyCoordinator: async () => ({status:"PASS",orderSubmitted:false,intentClaimed:true,duplicateBlocked:true,statusReconciled:true}),
+  },
 });
 assert.equal(diag.ok, true);
 assert.equal(diag.signing.status, "PASS");
 assert.equal(diag.signerMatchesConfiguredAgent, true);
 assert.equal(diag.traderSignerMatchesConfiguredWallet, true);
 assert.equal(diag.traderSigning.status, "PASS");
-assert.equal(diag.orderSubmitted, false);\nassert.deepEqual(Object.keys(diag.marketPreflights).sort(), ["BTC","ETH","SOL"]);\nassert.equal(diag.coordinator.status, "PASS");
+assert.equal(diag.orderSubmitted, false);
+assert.deepEqual(Object.keys(diag.marketPreflights).sort(), ["BTC","ETH","SOL"]);
+assert.equal(diag.coordinator.status, "PASS");
 assert.equal(JSON.stringify(diag).includes(diagKey), false);
 console.log("PASS: CIEL-to-LeverUp preflight is read-only, 50x-minimum, reserve-aware, approval-gated, existing-position-safe, ledger-backed, and hard-locked from live execution, with read-only wallet and synthetic signer diagnostics.");
