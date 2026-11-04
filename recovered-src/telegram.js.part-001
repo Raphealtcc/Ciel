@@ -113,22 +113,9 @@ function outcomeText(raw) {
   return (value >= 0 ? "+" : "") + value.toFixed(2) + "%";
 }
 __name(outcomeText, "outcomeText");
-async function handleTradingModeCommand(env, command) {
- const pk="ciel:control:paper-enabled", lk="ciel:control:live-enabled", ek="ciel:control:live-entry-enabled";
- const read=async(k,f)=>{const x=await env.CIEL_STATE.get(k);return x===null?f:x==="true";};
- if(command==="/modes"){const [paper,live,entries]=await Promise.all([read(pk,String(env.PAPER_TRADING_ENABLED||"false")==="true"),read(lk,String(env.LEVERUP_LIVE_TRADING||"false")==="true"),read(ek,true)]);await sendTelegram(env,["CIEL TRADING MODES","Paper entries: "+(paper?"ACTIVE":"INACTIVE"),"Live entries: "+(live&&entries&&String(env.LEVERUP_KILL_SWITCH).toLowerCase()==="false"?"ACTIVE":"INACTIVE"),"Live position management: "+(live&&String(env.LEVERUP_KILL_SWITCH).toLowerCase()==="false"?"ENABLED":"READ-ONLY"),"Kill switch: "+(String(env.LEVERUP_KILL_SWITCH).toLowerCase()==="true"?"ON":"OFF")].join("\n"));return true;}
- if(command==="/paperactive"||command==="/paperdeactivate"){const on=command==="/paperactive";await env.CIEL_STATE.put(pk,String(on));await sendTelegram(env,on?"Paper trading activated. New paper entries enabled; live unchanged.":"Paper trading deactivated. No new paper entries; existing paper positions and history are retained. Live unchanged.");return true;}
- if(command==="/livedeactivate"){await env.CIEL_STATE.put(ek,"false");await sendTelegram(env,"New live entries deactivated. Existing live positions remain under close/exit management; no positions were closed. Emergency kill switch remains independent.");return true;}
- if(command==="/liveactive"){if(String(env.LEVERUP_KILL_SWITCH).toLowerCase()!=="false"){await sendTelegram(env,"Live activation refused: LEVERUP_KILL_SWITCH is ON. Turn it OFF in Cloudflare only after confirming readiness, then retry. This command will not bypass it.");return true;}if(String(env.LEVERUP_PREFLIGHT_ENABLED).toLowerCase()!=="true"||!env.LEVERUP_TRADER_PRIVATE_KEY||!env.LEVERUP_AGENT_PRIVATE_KEY||!/^0x[0-9a-fA-F]{40}$/.test(String(env.LEVERUP_TRADER_ADDRESS||""))||!/^0x[0-9a-fA-F]{40}$/.test(String(env.LEVERUP_AGENT_ADDRESS||""))){await sendTelegram(env,"Live activation refused: LeverUp preflight, trader/agent keys, or wallet addresses are not fully configured.");return true;}await env.CIEL_STATE.put(lk,"true");await env.CIEL_STATE.put(ek,"true");await sendTelegram(env,"Live entries activated. Each candidate must still pass fresh preflight, allowance, balance, venue and portfolio-risk checks. Use /livedeactivate to stop new entries.");return true;}
- return false;
-}
-__name(handleTradingModeCommand, "handleTradingModeCommand");
 async function handleCommand(env, text) {
-  const command = (text.trim().split(/\s+/, 1)[0] || "").split("@")[0].toLowerCase();
-  if (await handleTradingModeCommand(env, command)) return;
-  const command = (text.trim().split(/\s+/, 1)[0] || "").split("@")[0].toLowerCase();
-  if (await handleTradingModeCommand(env, command)) return;
   if (await handleAdvisorCommand(env, text)) return;
+  const command = (text.trim().split(/\s+/, 1)[0] || "").split("@")[0].toLowerCase();
   if (command === "/start" || command === "/help") {
     await sendTelegram(env, [
       "\u{1F916} Ciel market advisor is online.",
