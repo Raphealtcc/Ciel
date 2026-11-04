@@ -19,13 +19,13 @@ once(
 
 once(
   '      this.state.storage.get("lastContextSnapshotPersistAt")',
-  '      this.state.storage.get("lastContextSnapshotPersistAt"),\n      this.state.storage.get("coreScalpCandles")',
+  '      this.state.storage.get("lastContextSnapshotPersistAt"),\n      this.state.storage.get("coreScalpCandles"),\n      this.state.storage.get("coreTrendCandles")',
   "restore the core scalp candle cache after Durable Object restarts",
 );
 
 once(
   '    this.lastContextSnapshotPersistAt = Number(values[21]) || 0;',
-  '    this.lastContextSnapshotPersistAt = Number(values[21]) || 0;\n    this.coreScalpCandles = values[22] || {};',
+  '    this.lastContextSnapshotPersistAt = Number(values[21]) || 0;\n    this.coreScalpCandles = values[22] || {};\n    this.coreTrendCandles = values[23] || {};',
   "hydrate the persisted core scalp candle cache",
 );
 
@@ -93,7 +93,7 @@ console.log("Applied D1 efficiency patch: keep closed 1m candles in Durable Obje
 
 once(
   "async function runAdvisorCycle(env, prices, now, lastTickAt, priceHistory, liveEvidence, paperStorage) {",
-  "async function runAdvisorCycle(env, prices, now, lastTickAt, priceHistory, liveEvidence, paperStorage, coreScalpCandles = {}) {",
+  "async function runAdvisorCycle(env, prices, now, lastTickAt, priceHistory, liveEvidence, paperStorage, coreScalpCandles = {}, coreTrendCandles = {}) {",
   "pass persistent in-memory candle history to the core scalp analyzer",
 );
 
@@ -107,17 +107,17 @@ const oldCandleReads = [
   "  }));"
 ].join("\n");
 const newCandleReads = [
-  "  const coreCandleResults = await Promise.all(coreScalpSymbols.map(async (symbol) => {",
-  '    const five = await env.DB.prepare("SELECT open_ts_ms,close_ts_ms,open_price,high_price,low_price,close_price,volume FROM market_candles WHERE symbol=? AND interval=\'5m\' AND close_ts_ms<=? ORDER BY open_ts_ms DESC LIMIT 60").bind(symbol,now).all();',
+  "  const coreCandleResults = coreScalpSymbols.map((symbol) => {",
   "    const one = Array.isArray(coreScalpCandles?.[symbol]) ? coreScalpCandles[symbol].slice(-60) : [];",
-  "    return [symbol,one,(five.results||[]).reverse()];",
-  "  }));"
+  "    const five = Array.isArray(coreTrendCandles?.[symbol]) ? coreTrendCandles[symbol].filter((row) => Number(row.close_ts_ms) <= now).slice(-60) : [];",
+  "    return [symbol,one,five];",
+  "  });"
 ].join("\n");
 once(oldCandleReads, newCandleReads, "read 1m candles from DO state and keep only native 5m history in D1");
 
 once(
   "runAdvisorCycle(this.env, this.latest, now, this.lastTickAt, this.history, this.liveMarketInputs(now), this.state.storage);",
-  "runAdvisorCycle(this.env, this.latest, now, this.lastTickAt, this.history, this.liveMarketInputs(now), this.state.storage, this.coreScalpCandles);",
+  "runAdvisorCycle(this.env, this.latest, now, this.lastTickAt, this.history, this.liveMarketInputs(now), this.state.storage, this.coreScalpCandles, this.coreTrendCandles);",
   "supply the same persisted 1m candles to every advisor cycle",
 );
 
@@ -137,6 +137,26 @@ once(
   '    if (statements.length) await this.env.DB.batch(statements);\n    await this.state.storage.put("lastAlertOutcomeUpdateAt", now);\n  }\n};',
   "persist the alert outcome analytics throttle in Durable Object storage",
 );
+
+
+const trendCandleMethodStart = source.indexOf("  async writeCandleSnapshots(now) {");
+const trendCandleMethodEnd = source.indexOf("  async hydrateHistoryFromD1(now) {", trendCandleMethodStart);
+if (trendCandleMethodStart < 0 || trendCandleMethodEnd <= trendCandleMethodStart) throw new Error("Could not locate native 5m candle snapshot writer.");
+let trendCandleMethod = source.slice(trendCandleMethodStart, trendCandleMethodEnd);
+function onceInMethod(from, to, description) {
+  const count = trendCandleMethod.split(from).length - 1;
+  if (count !== 1) throw new Error("Expected one match for " + description + "; found " + count);
+  trendCandleMethod = trendCandleMethod.replace(from, to);
+}
+onceInMethod('    const statements = [];', '    const statements = [];\\n    let coreTrendUpdated = false;', "track 5m cache updates");
+onceInMethod('req: { coin: symbol, interval: "5m", startTime, endTime }',
+  'req: { coin: symbol, interval: "5m", startTime: (["BTC","ETH","SOL"].includes(symbol) && (this.coreTrendCandles[symbol] || []).length < 40) ? now - 5 * 60 * 60 * 1e3 : startTime, endTime }',
+  "bootstrap 5h of 5m candles only when the core cache is cold");
+onceInMethod('          if (!latestClosed) return;',
+  '          if (!latestClosed) return;\\n          if (["BTC","ETH","SOL"].includes(symbol)) {\\n            const merged = new Map((Array.isArray(this.coreTrendCandles[symbol]) ? this.coreTrendCandles[symbol] : []).map((row) => [Number(row.open_ts_ms), row]));\\n            for (const candle of valid) {\\n              if (candle.closeAt > now) continue;\\n              merged.set(candle.openAt, { open_ts_ms: candle.openAt, close_ts_ms: candle.closeAt, open_price: candle.open, high_price: candle.high, low_price: candle.low, close_price: candle.close, volume: candle.volume });\\n            }\\n            this.coreTrendCandles[symbol] = [...merged.values()].sort((left, right) => left.open_ts_ms - right.open_ts_ms).slice(-60);\\n            coreTrendUpdated = true;\\n          }',
+  "merge fresh closed 5m candles into the persistent DO cache");
+onceInMethod('    }\\n  }\\n', '    }\\n    if (coreTrendUpdated) await this.state.storage.put("coreTrendCandles", this.coreTrendCandles).catch((error) => console.error("Core trend candle state persistence failed: " + String(error).slice(0,160)));\\n  }\\n', "persist the 5m cache once per snapshot batch");
+source = source.slice(0, trendCandleMethodStart) + trendCandleMethod + source.slice(trendCandleMethodEnd);
 
 await writeFile(file, source);
 console.log("D1 efficiency patch complete: the core scalp still receives fresh closed 1m candles every minute; its candle cache is Durable Object-persistent, and D1 retains 5m history and all other market history.");

@@ -22,9 +22,13 @@ const advisor = source.slice(advisorStart, advisorEnd);
 assert.ok(advisor.includes("coreScalpCandles = {}"), "advisor cycle must accept the DO candle cache");
 assert.ok(advisor.includes("coreScalpCandles?.[symbol]"), "core scalp must use the same 1m candle rows");
 assert.ok(!advisor.includes("interval=\'1m\'"), "core scalp must not read the duplicated 1m candle table from D1");
-assert.ok(advisor.includes("interval=\'5m\'"), "native 5m confirmation candles must remain in D1");
+assert.ok(advisor.includes("coreTrendCandles?.[symbol]"), "native 5m confirmation candles must come from the persistent DO cache");
+assert.ok(!advisor.includes("FROM market_candles"), "the minute-by-minute advisor cycle must not reread 5m candles from D1");
 
-assert.ok(source.includes("this.liveMarketInputs(now), this.state.storage, this.coreScalpCandles"), "the feed must pass its candle cache to the advisor");
+assert.ok(source.includes("this.liveMarketInputs(now), this.state.storage, this.coreScalpCandles, this.coreTrendCandles"), "the feed must pass both persistent candle caches to the advisor");
+assert.ok(source.includes('this.state.storage.get("coreTrendCandles")'), "the DO must restore the 5m cache");
+assert.ok(source.includes('this.state.storage.put("coreTrendCandles", this.coreTrendCandles)'), "the DO must persist the 5m cache");
+assert.ok(source.includes("coreTrendCandles?.[symbol]"), "5m candles must be served from DO state");
 assert.ok(source.includes("const refreshCandles = now - this.lastCandleSnapshotAt >= 5 * 60 * 1e3;"), "native 5m candle snapshots must retain their cadence");
 assert.ok(source.includes("const refreshContext = now - this.lastContextWriteAt >= 2 * 60 * 1e3;"), "live derivatives context must retain its two-minute refresh");
 assert.ok(source.includes("const persistContextSnapshots = !this.lastContextSnapshotPersistAt || now - this.lastContextSnapshotPersistAt >= 15 * 60 * 1e3;"), "historical derivatives snapshots must retain their 15-minute cadence");
