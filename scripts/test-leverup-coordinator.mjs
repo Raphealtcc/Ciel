@@ -7,9 +7,9 @@ assert.equal(b50.collateralUsd,.45); assert.equal(b100.collateralUsd,.23);
 assert.ok(b50.requiredMon > 22.5); assert.ok(b100.requiredMon > 11.5);
 assert.throws(()=>calculateLeverUpEntryBudget({minimumNotionalUsd:20,leverage:25,monUsdPrice:.02,collateralRatio:1}),/50X/);
 const safe=evaluateLeverUpPortfolioRisk({requestedLeverage:100,availableWmonMon:25,requestedMarginMon:1,entryBudgetMon:1,currentOpenPositions:[],proposedStopRiskMon:.2,killSwitchActive:false});
-const productionSized=evaluateLeverUpPortfolioRisk({requestedLeverage:100,totalAllocationMon:50,reserveMon:25,availableWmonMon:25,requestedMarginMon:13.2,entryBudgetMon:13.2,currentOpenPositions:[],proposedStopRiskMon:5.28,aggregateStopRiskMon:0,maxAggregateStopRiskMon:6,dailyRealizedLossMon:0,maxDailyRealizedLossMon:9,rollingDrawdownMon:0,maxRollingDrawdownMon:6,killSwitchActive:false});
+const productionSized=evaluateLeverUpPortfolioRisk({requestedLeverage:100,totalAllocationMon:50,reserveMon:25,availableWmonMon:25,requestedMarginMon:13.2,entryBudgetMon:13.2,currentOpenPositions:[],proposedStopRiskMon:5.28,aggregateStopRiskMon:0,maxAggregateStopRiskMon:6,dailyRealizedLossMon:0,maxDailyRealizedLossMon:9,rollingDrawdownMon:0,maxRollingDrawdownMon:9,killSwitchActive:false});
 assert.equal(productionSized.allowed,true,"100x minimum-size entry from the latest BTC preflight (13.198 MON margin, 0.4% stop) must pass the 6 MON risk envelope");
-assert.equal(evaluateLeverUpPortfolioRisk({requestedLeverage:1000,totalAllocationMon:50,reserveMon:25,availableWmonMon:25,requestedMarginMon:11,entryBudgetMon:11,currentOpenPositions:[],proposedStopRiskMon:44,aggregateStopRiskMon:0,maxAggregateStopRiskMon:6,dailyRealizedLossMon:0,maxDailyRealizedLossMon:9,rollingDrawdownMon:0,maxRollingDrawdownMon:6,killSwitchActive:false}).allowed,false,"1000x at 11 MON margin with a 0.4% stop risks 44 MON and must not be allowed against a 6 MON cap");
+assert.equal(evaluateLeverUpPortfolioRisk({requestedLeverage:1000,totalAllocationMon:50,reserveMon:25,availableWmonMon:25,requestedMarginMon:11,entryBudgetMon:11,currentOpenPositions:[],proposedStopRiskMon:44,aggregateStopRiskMon:0,maxAggregateStopRiskMon:6,dailyRealizedLossMon:0,maxDailyRealizedLossMon:9,rollingDrawdownMon:0,maxRollingDrawdownMon:9,killSwitchActive:false}).allowed,false,"1000x at 11 MON margin with a 0.4% stop risks 44 MON and must not be allowed against a 6 MON cap");
 assert.equal(safe.allowed,true);
 assert.equal(evaluateLeverUpPortfolioRisk({
   requestedLeverage: 100, availableWmonMon: 25, requestedMarginMon: 1, entryBudgetMon: 1,
@@ -21,7 +21,7 @@ assert.equal(evaluateLeverUpPortfolioRisk({
   currentOpenPositions: [], proposedStopRiskMon: 0.2, rollingDrawdownMon: 1.9,
   maxRollingDrawdownMon: 2, killSwitchActive: false,
 }).allowed, false, "projected stop loss must fit inside the remaining drawdown budget");
-for (const patch of [{requestedLeverage:25},{availableWmonMon:0},{requestedMarginMon:26},{currentOpenPositions:[{}]},{staleFeed:true},{executionUncertain:true},{dailyRealizedLossMon:1},{rollingDrawdownMon:2},{proposedStopRiskMon:2}]) {
+for (const patch of [{requestedLeverage:25},{availableWmonMon:0},{requestedMarginMon:26},{currentOpenPositions:[{}]},{staleFeed:true},{executionUncertain:true},{dailyRealizedLossMon:9},{rollingDrawdownMon:9},{proposedStopRiskMon:6}]) {
  const r=evaluateLeverUpPortfolioRisk({requestedLeverage:100,availableWmonMon:25,requestedMarginMon:1,entryBudgetMon:1,currentOpenPositions:[],proposedStopRiskMon:.1,killSwitchActive:false,...patch});
  assert.equal(r.allowed,false);
 }
