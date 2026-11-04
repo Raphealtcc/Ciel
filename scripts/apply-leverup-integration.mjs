@@ -44,6 +44,7 @@ const oneTimeMarketDiagnosticRoute = `    if (url.pathname === "/_internal/lever
       await env.CIEL_STATE.delete(tokenKey);
       const candidates = [
         ["ALCHEMY_RPC", env?.ALCHEMY_RPC],
+        ["MONAD_RPC2", "https://rpc2.monad.xyz"],
         ["LEVERUP_RPC_URL", env?.LEVERUP_RPC_URL],
         ["MONAD_RPC1", "https://rpc1.monad.xyz"],
         ["MONAD_RPC", "https://rpc.monad.xyz"],
