@@ -15,9 +15,28 @@ once(
 'const rationale = candidate.reason + " " + forecastSummary + " " + reviewSummary + timingSummary + " Margin sizing: " + marginSizingSource + " selected " + collateral.toFixed(3) + " MON inside a " + sizingLimits.minMarginMon + "–" + sizingLimits.maxMarginMon + " MON range; per-trade stop-risk cap " + sizingLimits.tradeRiskBudgetMon.toFixed(2) + " MON, portfolio cap " + sizingLimits.portfolioRiskBudgetMon.toFixed(2) + " MON. Strategy " + candidate.mode + "; technical strength model v3: " + (candidate.confidence * 100).toFixed(0) + "/100 across " + (candidate.scoreComponents || []).join("+") + "; not a win probability." + (technicalOnly ? " Technical-only fallback; confirmation incomplete." : "");',
 'const rationale = candidate.reason + " " + forecastSummary + " " + reviewSummary + timingSummary + (paperTradingEnabled ? " Paper margin sizing: " + marginSizingSource + " selected " + collateral.toFixed(3) + " MON inside a " + sizingLimits.minMarginMon + "–" + sizingLimits.maxMarginMon + " MON range." : " Paper trading is paused; no paper margin is reserved. Live margin is selected independently from LeverUp account, venue and portfolio data.") + " Strategy " + candidate.mode + "; technical strength model v3: " + (candidate.confidence * 100).toFixed(0) + "/100 across " + (candidate.scoreComponents || []).join("+") + "; not a win probability." + (technicalOnly ? " Technical-only fallback; confirmation incomplete." : "");',"proposal copy");
 once('mon_collateral: collateral, leverage, margin_sizing_source: marginSizingSource, entry_mon_usd: prices.MON, manual_entry_at_ms: null };','mon_collateral: collateral, leverage, margin_sizing_source: marginSizingSource, paper_trading_enabled: paperTradingEnabled, entry_mon_usd: prices.MON, manual_entry_at_ms: null };',"paper flag on setup object");
-once(
-'      let paperResult = null;\n      try {\n        paperResult = await openPaperTrade(paperStorage, { signalId:id, symbol:candidate.symbol, side:candidate.side, entryPrice:candidate.entry, stopPrice:stop, targetPrice:target, stopPct:candidate.stopPct, targetPct:candidate.targetPct, confidence:candidate.confidence, strategy:candidate.strategy, entryMonUsd:prices.MON, marginMon:collateral, leverage, holdMinutes:candidate.holdMinutes || (candidate.mode === "RANGE_SCALP" ? 12 : 180), mode:candidate.mode, regime:candidate.regime, now });\n      } catch (error) {\n        console.error("Automatic paper entry failed for " + candidate.symbol + ": " + String(error).slice(0, 250));\n      }',
-'      let paperResult = null;\n      if (paperTradingEnabled && sizingLimits.feasible) {\n        try {\n          paperResult = await openPaperTrade(paperStorage, { signalId:id, symbol:candidate.symbol, side:candidate.side, entryPrice:candidate.entry, stopPrice:stop, targetPrice:target, stopPct:candidate.stopPct, targetPct:candidate.targetPct, confidence:candidate.confidence, strategy:candidate.strategy, entryMonUsd:prices.MON, marginMon:collateral, leverage, holdMinutes:candidate.holdMinutes || (candidate.mode === "RANGE_SCALP" ? 12 : 180), mode:candidate.mode, regime:candidate.regime, now });\n        } catch (error) {\n          console.error("Automatic paper entry failed for " + candidate.symbol + ": " + String(error).slice(0, 250));\n        }\n      } else if (paperTradingEnabled) { paperResult = { opened: false, reason: "Paper sizing unavailable; live candidate processing was not blocked." }; }',"paper entry gate");
+{
+  const start = source.indexOf("      let paperResult = null;");
+  const end = source.indexOf("\\n      const paperLine", start);
+  if (start < 0 || end < 0) throw new Error("paper entry block boundaries not found after preceding patches");
+  const block = source.slice(start, end);
+  const call = block.match(/paperResult = await openPaperTrade\\(paperStorage, \\{[\\s\\S]*?\\}\\);/);
+  if (!call) throw new Error("paper entry call not found after preceding patches");
+  if (!block.includes("Automatic paper entry failed for ")) throw new Error("paper entry error handler not found");
+  const gated = `      let paperResult = null;
+      if (paperTradingEnabled && sizingLimits.feasible) {
+        try {
+          ${call[0]}
+        } catch (error) {
+          console.error("Automatic paper entry failed for " + candidate.symbol + ": " + String(error).slice(0, 250));
+        }
+      } else if (paperTradingEnabled) {
+        paperResult = { opened: false, reason: "Paper sizing unavailable; live candidate processing was not blocked." };
+      }`;
+  source = source.slice(0, start) + gated + source.slice(end);
+  console.log("Applied paper/live isolation: gate only the paper ledger entry");
+}
+
 once('const paperLine = paperResult?.opened','const paperLine = !paperTradingEnabled ? "\\n\\n🧪 PAPER TRADING PAUSED — no new paper entries will open. Existing paper positions will continue to be managed; historical trades remain available to adaptive learning." : paperResult?.opened',"paper pause notification");
 once('"AI-sized paper margin (" + (p.margin_sizing_source || "MINIMUM_FALLBACK") + "): " + p.mon_collateral.toFixed(3) + " MON at live MON $"','p.paper_trading_enabled === false ? "Paper trading: PAUSED; no simulated margin reserved." : "AI-sized paper margin (" + (p.margin_sizing_source || "MINIMUM_FALLBACK") + "): " + p.mon_collateral.toFixed(3) + " MON at live MON $"',"hide paused margin");
 await writeFile(file,source);
