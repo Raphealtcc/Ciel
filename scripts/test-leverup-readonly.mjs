@@ -190,6 +190,31 @@ assert.ok(BigInt(plan.amountInRaw) > 10n * 10n ** 18n, "amountIn includes the op
 assert.equal(plan.feeToken.toLowerCase(), USDC.toLowerCase());
 assert.equal(plan.nonce, (BigInt(Date.now()) > 78n ? plan.nonce : "78"));
 assert.equal(plan.mode, "DRY_RUN_ONLY");
+
+const roundingSnapshot = {
+  ...planSnapshot,
+  monUsdPriceRaw: "18178450000000000",
+  minimumNotionalRaw: (20n * 10n ** 18n).toString(),
+  collateralRatio: 20 / (100 * 0.23),
+  pairView: {
+    ...planSnapshot.pairView,
+    leverageMargins: [{ notionalUsdRaw: (3_500_000n * 10n ** 18n).toString(), maxLeverage: 100, tier: 1 }],
+  },
+  accountTokenStates: {
+    ...planSnapshot.accountTokenStates,
+    [WMON.toLowerCase()]: { balance: (125n * 10n ** 18n).toString(), allowance: "0" },
+  },
+};
+const exactMinimumMon = 0.23 / 0.01817845;
+const roundedMinimumMon = Math.ceil(exactMinimumMon * 1e8) / 1e8;
+const roundedMinimumPlan = buildMarketOpenPlan({
+  snapshot: roundingSnapshot, desiredMarginMon: roundedMinimumMon, maxTradeMarginMon: 25,
+  inferredLeverage: 100, side: "LONG", expectedHoldSeconds: 900,
+  reserveMon: 25, requireExistingAllowance: false,
+});
+assert.ok(Number(roundedMinimumPlan.marginMonUsed) >= roundedMinimumMon);
+assert.ok(roundedMinimumPlan.notionalUsd >= 20,
+  "rounding minimum WMON upward must produce a valid $20+ notional plan");
 assert.throws(() => buildMarketOpenPlan({
   snapshot: planSnapshot, desiredMarginMon: 5, maxTradeMarginMon: 50,
   inferredLeverage: 100, side: "LONG", expectedHoldSeconds: 3600,

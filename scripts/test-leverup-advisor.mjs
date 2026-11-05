@@ -83,6 +83,8 @@ assert.ok(seenPlanArgs.stopLossPriceRaw > 0n && seenPlanArgs.takeProfitPriceRaw 
 assert.equal(seenPersist.options.decision, "PASS");
 assert.equal(ready.ledgerPersisted, true);
 assert.ok(formatLeverUpAdvisorLine(ready).includes("DRY RUN ONLY"));
+assert.equal(formatLeverUpAdvisorLine(ready).split("\n").length, 1,
+  "LeverUp suggestion output must stay on one concise line");
 assert.ok(formatLeverUpAdvisorLine(ready).includes("PORTFOLIO RISK BLOCKED"),
   "the $1 MON stop-risk cap must be reported when the 0.4% stop implies higher risk");
 
@@ -166,6 +168,7 @@ assert.equal(scoped.ok, true);
 console.log("PASS: CIEL-to-LeverUp preflight is read-only, 50x-minimum, reserve-aware, approval-gated, existing-position-safe, ledger-backed, and hard-locked from live execution, with read-only wallet and synthetic signer diagnostics.");
 
 const integrationPatch = await readFile(new URL("./apply-leverup-integration.mjs", import.meta.url), "utf8");
+assert.ok(integrationPatch.includes("compactCielSetupMessage"), "trade alerts must use the compact suggestion formatter");
 assert.ok(integrationPatch.includes("/_internal/leverup-diagnostics-once"), "one-time read-only diagnostics route must be included in the build patcher");
 assert.ok(integrationPatch.includes("ciel:leverup:diagnostics:one-time-token"), "the diagnostics route must require and consume a one-time KV token");
 assert.ok(integrationPatch.includes("approvalTransactionSubmitted: false"), "the diagnostic route must never submit approvals or orders");
