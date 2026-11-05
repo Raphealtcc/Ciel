@@ -69,7 +69,7 @@ export function evaluateLeverUpNativeSeries(symbol, rows, now = Date.now()) {
   const alignment = [m5, m15, h1].filter((value) => direction === "LONG" ? value > 0 : direction === "SHORT" ? value < 0 : false).length;
   const signal = direction ? {
     symbol, side: direction, source: "LEVERUP_ORACLE_SAMPLES",
-    score: Math.min(0.89, 0.65 + alignment * 0.06 + (Math.abs(m15) > 0.15 ? 0.04 : 0)),
+    score: Math.max(0, Math.min(1, 0.4 * alignment / 3 + 0.3 * Math.min(1, (Math.abs(m5) + Math.abs(m15) + Math.abs(h1)) / 0.5) + 0.3 * Math.max(0, 1 - Math.abs(strength - (direction === "LONG" ? 62 : 38)) / 20))),
     price: Number(latest.price), observedAt: Number(latest.observed_at_ms),
     ema9: fast, ema21: slow, rsi14: strength,
     change5mPct: m5, change15mPct: m15, change1hPct: h1,
@@ -117,11 +117,18 @@ export async function runLeverUpNativeSampler({ env, now = Date.now(), dependenc
   }
   const symbols = rows.map((row) => row.symbol);
   const placeholders = symbols.map(() => "?").join(",");
-  const history = await env.DB.prepare(
-    "SELECT symbol,price,observed_at_ms FROM leverup_market_samples WHERE symbol IN (" + placeholders + ") AND observed_at_ms>=? ORDER BY symbol,observed_at_ms DESC"
-  ).bind(...symbols, now - MAX_HISTORY_AGE_MS).all();
-  const bySymbol = new Map(symbols.map((symbol) => [symbol, []]));
-  for (const row of history.results || []) bySymbol.get(row.symbol)?.push(row);
+  const history = await Promise.all(symbols.map((symbol) => env.DB.prepare(
+    "SELECT symbol,price,observed_at_ms FROM leverup_market_samples WHERE symbol=? AND observed_at_ms>=? ORDER BY observed_at_ms DESC LIMIT 60"
+  ).bind(symbol, now - MAX_HISTORY_AGE_MS).all()));
+  const bySymbol = new Map(symbols.map((symbol, index) => [
+    symbol, (history[index].results || []).slice().reverse()
+  ]));
+  const pruneKey = "ciel:leverup:native-feed:last-prune";
+  const lastPrune = Number(await env.CIEL_STATE.get(pruneKey) || 0);
+  if (!lastPrune || now - lastPrune >= 24 * 60 * 60 * 1000) {
+    await env.DB.prepare("DELETE FROM leverup_market_samples WHERE observed_at_ms<?").bind(now - 24 * 60 * 60 * 1000).run();
+    await env.CIEL_STATE.put(pruneKey, String(now), { expirationTtl: 3 * 24 * 60 * 60 });
+  }
   const markets = symbols.map((symbol) => evaluateLeverUpNativeSeries(symbol, bySymbol.get(symbol), now));
   const warmed = markets.filter((market) => market.status !== "WARMING_UP" && market.status !== "STALE" && market.status !== "INSUFFICIENT_HISTORY");
   const allReady = markets.length > 0 && markets.every((market) => market.status === "NO_SIGNAL" || market.status === "SIGNAL_CANDIDATE");
