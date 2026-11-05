@@ -169,8 +169,7 @@ once(
 
 once(
   '  async scheduled(_event, env, ctx) {\n    ctx.waitUntil(ensureTelegramWebhook(env));',
-  '  async scheduled(_event, env, ctx) {\n    ctx.waitUntil(ensureTelegramWebhook(env));\n    if (String(env?.LEVERUP_PREFLIGHT_ENABLED).toLowerCase() === "true") {\n      ctx.waitUntil((async () => {\n        try {\n          const now = Date.now();\n          try {\n            const nativeFeed = await runLeverUpNativeSampler({ env, now });
-            await env.CIEL_STATE.put("ciel:leverup:native-feed:last-error", "", { expirationTtl: 3600 });
+  '  async scheduled(_event, env, ctx) {\n    ctx.waitUntil(ensureTelegramWebhook(env));\n    if (String(env?.LEVERUP_PREFLIGHT_ENABLED).toLowerCase() === "true") {\n      ctx.waitUntil((async () => {\n        try {\n          const now = Date.now();\n          try {\n            const nativeFeed = await runLeverUpNativeSampler({ env, now });\n            await env.CIEL_STATE.put("ciel:leverup:native-feed:last-error", "", { expirationTtl: 3600 });
             try { await runAdvisorCycle(env, {}, now, now, null, null, null); }
             catch (advisorError) {
               console.error("LeverUp-native advisor cycle failed: " + String(advisorError?.message || advisorError).slice(0, 180));
@@ -179,39 +178,6 @@ once(
             console.log("LeverUp-native feed " + nativeFeed.status + ": " + nativeFeed.warmedMarkets + "/" + nativeFeed.marketCount + " markets warmed.");\n          } catch (feedError) {\n            await env.CIEL_STATE.put("ciel:leverup:native-feed:status", "DEGRADED");\n            await env.CIEL_STATE.put("ciel:leverup:native-feed:last-error", String(feedError?.message || feedError).slice(0, 220), { expirationTtl: 3600 });\n            console.error("LeverUp-native sampler failed: " + String(feedError?.message || feedError).slice(0, 220));\n          }\n          const diagnosticKey = "ciel:leverup:diagnostics:v1";\n          const last = Number(await env.CIEL_STATE.get(diagnosticKey + ":checkedAt") || 0);\n          if (!last || now - last >= 5 * 60 * 1000) {\n            const symbols = ["BTC","ETH","SOL"];\n            const symbol = symbols[Math.floor(now / (5 * 60 * 1000)) % symbols.length];\n            let diagnostics;\n            try { diagnostics = await runLeverUpDiagnostics({ env: { ...env, LEVERUP_LIVE_TRADING: "false", LEVERUP_KILL_SWITCH: "true" }, now, symbols: [symbol], skipCoordinator: false }); }\n            catch (error) { diagnostics = { ok: false, mode: "READ_ONLY_DRY_RUN", error: String(error?.message || error).slice(0, 220), marketPreflights: {}, orderSubmitted: false }; }\n            const previous = await env.CIEL_STATE.get(diagnosticKey, "json").catch(() => null) || {};\n            const merged = { ...diagnostics, marketPreflights: { ...(previous.marketPreflights || {}), ...(diagnostics.marketPreflights || {}) }, coordinator: diagnostics.coordinator || previous.coordinator || { status: "NOT_CHECKED" } };\n            merged.ok = Object.keys(merged.marketPreflights).length === 3 && Object.values(merged.marketPreflights).every((market) => market.status === "PASS") && merged.coordinator.status === "PASS";\n            merged.status = merged.ok ? "READ_ONLY_CHECKS_PASS" : "READ_ONLY_CHECKS_INCOMPLETE";\n            await env.CIEL_STATE.put(diagnosticKey, JSON.stringify(merged), { expirationTtl: 3600 });\n            await env.CIEL_STATE.put(diagnosticKey + ":checkedAt", String(now), { expirationTtl: 3600 });\n          }\n          const lifecycle = await runLeverUpPositionManager({ env, db: env.DB, now });\n          await env.CIEL_STATE.put("ciel:leverup:position-manager:last-run", JSON.stringify({ at: now, status: lifecycle.status, checked: lifecycle.checked || 0, submitted: lifecycle.submitted || 0, discoveryError: lifecycle.discoveryError || null, reconciliation: lifecycle.reconciliation?.status || null }), { expirationTtl: 3600 });\n          if (lifecycle.status === "BLOCKED_POSITION_DISCOVERY") console.error("LeverUp position management blocked: position indexer unavailable; no false empty-position state assumed.");\n          if (lifecycle.submitted) console.log("LeverUp position manager submitted " + lifecycle.submitted + " exit intent(s).");\n        } catch (error) {\n          console.error("LeverUp scheduled read/management cycle failed: " + String(error?.message || error).slice(0, 220));\n        }\n      })());\n    }',
   "run read-only diagnostics and position/settlement management from the existing minute cron"
 );
-
-const sharedScoreImport = 'import { scoreTechnicalEvidence } from "../src/technical-scoring.js";';
-if (!source.includes(sharedScoreImport)) source = sharedScoreImport + "\n" + source;
-const paperScoreBefore = `  const technicalScore = mode === "RANGE_SCALP"
-    ? 0.76
-    : clamp(0.66 + (hasTrend ? 0.055 : 0) + (hasMomentum ? 0.055 : 0) + (hasStructure ? 0.045 : 0) + (hasBounce ? 0.06 : 0), 0, 0.95);
-  const scoreComponents = mode === "RANGE_SCALP"
-    ? ["RANGE_EDGE_OSCILLATOR", "MICRO_REVERSAL", "PRICE_STRUCTURE"]
-    : [hasTrend ? "TREND" : null, hasMomentum ? "MOMENTUM" : null, hasStructure ? "PRICE_STRUCTURE" : null, hasBounce ? "BOUNCE" : null].filter(Boolean);`;
-const paperScoreAfter = `  const momentumVolPoints = points.filter((point) => point.t >= latest.t - 60 * 60000);
-  const momentumVolReturns = [];
-  for (let i = 1; i < momentumVolPoints.length; i++) {
-    const elapsed = (momentumVolPoints[i].t - momentumVolPoints[i - 1].t) / 60000;
-    if (elapsed >= 0.5 && elapsed <= 2.5) momentumVolReturns.push(pct(momentumVolPoints[i].p, momentumVolPoints[i - 1].p) / Math.sqrt(elapsed));
-  }
-  const momentumVolatilityPerMinutePct = momentumVolReturns.length > 1 ? dev(momentumVolReturns) : null;
-  const sharedTechnicalScore = scoreTechnicalEvidence({
-    side,
-    trendAligned: hasTrend,
-    momentumReturns: [r5, r15, r60],
-    momentumVolatilityPerMinutePct,
-    structureConfirmed: mode === "RANGE_SCALP" ? true : (hasStructure || hasBounce),
-    rsi: rsiAvailable ? rv : null,
-  });
-  const technicalScore = sharedTechnicalScore.score / 100;
-  const scoreComponents = sharedTechnicalScore.components.map((item) => item.key + " " + item.points + "/" + item.max);`;
-const paperScoreCount = source.split(paperScoreBefore).length - 1;
-if (paperScoreCount !== 1) throw new Error("Shared paper scorer anchor mismatch: " + paperScoreCount);
-source = source.replace(paperScoreBefore, paperScoreAfter);
-const oldPaperModel = 'scoreModel:"regime-switch-v3", strategy:votes.join("+"),';
-const newPaperModel = 'scoreModel:"ciel-shared-v1", scoreDetails:sharedTechnicalScore, strategy:votes.join("+"),';
-if (!source.includes(oldPaperModel)) throw new Error("Shared paper score model anchor missing");
-source = source.replace(oldPaperModel, newPaperModel);
 
 await writeFile(file, source);
 console.log("Wrote LeverUp-integrated Worker candidate: " + file);
