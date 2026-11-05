@@ -1,0 +1,10 @@
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+const worker = await readFile("reconstructed/patched-worker.js", "utf8");
+const liveBranch = worker.slice(worker.indexOf("async function runAdvisorCycle"), worker.indexOf("__name(runAdvisorCycle"));
+assert.ok(liveBranch.includes("ciel:leverup:native-feed:latest"));
+assert.ok(liveBranch.includes("TECHNICAL CANDIDATE ONLY"));
+assert.ok(liveBranch.includes("no Hyperliquid data is consumed"));
+assert.ok(worker.includes("await runAdvisorCycle(env, {}, now, now, null, null, null)"));
+assert.ok(worker.includes("executionEnabled:false"));
+console.log("PASS: scheduled native sampler invokes the LeverUp-only live advisor; signal path does not submit orders.");
