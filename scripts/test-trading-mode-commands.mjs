@@ -13,6 +13,10 @@ assert.ok(worker.includes("ciel:control:paper-enabled"));
 assert.ok(worker.includes("ciel:control:live-enabled"));
 assert.ok(worker.includes("ciel:control:live-entry-enabled"));
 assert.ok(worker.includes("writeTradingControls(env, [[keys.live, true], [keys.entries, true]])"));
+for (const key of ["paper-enabled", "live-enabled", "live-entry-enabled"]) {
+  assert.ok(worker.includes('readTradingControl(env, "ciel:control:' + key + '", null)'), "Telegram status/runtime must read " + key + " from D1");
+  assert.ok(!worker.includes('CIEL_STATE?.get("ciel:control:' + key + '")'), "KV must not remain a trading-control source for " + key);
+});
 assert.ok(isolation.includes("readTradingControl(env"));
 assert.ok(isolation.includes('await readTradingControl(env, "ciel:control:paper-enabled", null)'));
 assert.ok(advisor.includes('readTradingControl(env, "ciel:control:live-enabled", null)'));
