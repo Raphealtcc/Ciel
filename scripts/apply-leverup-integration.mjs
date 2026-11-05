@@ -168,8 +168,8 @@ once(
 );
 
 once(
-  `  async scheduled(_event, env, ctx) {\n    ctx.waitUntil(ensureTelegramWebhook(env));',
-  '  async scheduled(_event, env, ctx) {\n    ctx.waitUntil(ensureTelegramWebhook(env));\n    if (String(env?.LEVERUP_PREFLIGHT_ENABLED).toLowerCase() === "true") {\n      ctx.waitUntil((async () => {\n        try {\n          const now = Date.now();\n          try {\n            const nativeFeed = await runLeverUpNativeSampler({ env, now });\n            await env.CIEL_STATE.put("ciel:leverup:native-feed:last-error", "", { expirationTtl: 3600 });
+  '  async scheduled(_event, env, ctx) {\n    ctx.waitUntil(ensureTelegramWebhook(env));',
+  `  async scheduled(_event, env, ctx) {\n    ctx.waitUntil(ensureTelegramWebhook(env));\n    if (String(env?.LEVERUP_PREFLIGHT_ENABLED).toLowerCase() === "true") {\n      ctx.waitUntil((async () => {\n        try {\n          const now = Date.now();\n          try {\n            const nativeFeed = await runLeverUpNativeSampler({ env, now });\n            await env.CIEL_STATE.put("ciel:leverup:native-feed:last-error", "", { expirationTtl: 3600 });
             try { await runAdvisorCycle(env, {}, now, now, null, null, null); }
             catch (advisorError) {
               console.error("LeverUp-native advisor cycle failed: " + String(advisorError?.message || advisorError).slice(0, 180));
