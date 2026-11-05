@@ -13,7 +13,7 @@ const refreshed = refreshLeverUpMarketOpenPlan({
   pairView: { slippageConfig: { enabled: true, slippageLongP: 10, slippageShortP: 10 } },
   freshOraclePriceRaw: "1010000000000000000", now: 200,
 });
-assert.equal(refreshed.actionValues[5], 9900990099n);
+assert.equal(refreshed.actionValues[5], 99009900990n);
 assert.equal(refreshed.actionValues[6], 1011010000000000000n);
 assert.equal(refreshed.preflight.checkedAt, 200);
 const wmonFeeCheck = validateLeverUpTransferBalances({
