@@ -1,4 +1,5 @@
 import { readFile, writeFile } from "node:fs/promises";
+import path from "node:path";
 
 async function patchFile(path, transform) {
   const original = await readFile(path, "utf8");
@@ -55,7 +56,7 @@ await patchFile("src/leverup-coordinator.js", (source) => {
 const workerPath = path.join(process.cwd(), "reconstructed", "patched-worker.js");
 let worker = await readFile(workerPath, "utf8");
 const workerImport = 'import { readTradingControl, writeTradingControls } from "../src/trading-controls.js";';
-if (!worker.includes(workerImport)) worker = workerImport + "\\n" + worker;
+if (!worker.includes(workerImport)) worker = workerImport + "\n" + worker;
 function replaceWorker(before, after, label, expected = 1) {
   const count = worker.split(before).length - 1;
   if (count !== expected) throw new Error(label + ": expected " + expected + " matches, found " + count);
