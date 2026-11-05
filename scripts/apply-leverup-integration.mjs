@@ -188,10 +188,18 @@ const paperScoreBefore = `  const technicalScore = mode === "RANGE_SCALP"
   const scoreComponents = mode === "RANGE_SCALP"
     ? ["RANGE_EDGE_OSCILLATOR", "MICRO_REVERSAL", "PRICE_STRUCTURE"]
     : [hasTrend ? "TREND" : null, hasMomentum ? "MOMENTUM" : null, hasStructure ? "PRICE_STRUCTURE" : null, hasBounce ? "BOUNCE" : null].filter(Boolean);`;
-const paperScoreAfter = `  const sharedTechnicalScore = scoreTechnicalEvidence({
+const paperScoreAfter = `  const momentumVolPoints = points.filter((point) => point.t >= latest.t - 60 * 60000);
+  const momentumVolReturns = [];
+  for (let i = 1; i < momentumVolPoints.length; i++) {
+    const elapsed = (momentumVolPoints[i].t - momentumVolPoints[i - 1].t) / 60000;
+    if (elapsed >= 0.5 && elapsed <= 2.5) momentumVolReturns.push(pct(momentumVolPoints[i].p, momentumVolPoints[i - 1].p) / Math.sqrt(elapsed));
+  }
+  const momentumVolatilityPerMinutePct = momentumVolReturns.length > 1 ? dev(momentumVolReturns) : null;
+  const sharedTechnicalScore = scoreTechnicalEvidence({
     side,
     trendAligned: hasTrend,
     momentumReturns: [r5, r15, r60],
+    momentumVolatilityPerMinutePct,
     structureConfirmed: mode === "RANGE_SCALP" ? true : (hasStructure || hasBounce),
     rsi: rsiAvailable ? rv : null,
   });
