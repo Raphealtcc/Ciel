@@ -115,9 +115,40 @@ var HyperliquidFeed = class {
     this.reconnectAttempts = Number(values[20]) || 0;
     this.lastContextSnapshotPersistAt = Number(values[21]) || 0;
   }
+  async hyperliquidDisabledForLiveMode() {
+    const liveOverride = await this.env?.CIEL_STATE?.get("ciel:control:live-enabled").catch(() => null);
+    return String(liveOverride ?? this.env?.LEVERUP_LIVE_TRADING).toLowerCase() === "true" &&
+      String(this.env?.LEVERUP_KILL_SWITCH).toLowerCase() === "false";
+  }
+  stopHyperliquidSocket() {
+    const socket = this.socket;
+    this.socket = null;
+    this.connected = false;
+    this.connectingSinceAt = 0;
+    if (socket) { try { socket.close(1000, "LeverUp live mode excludes Hyperliquid"); } catch {} }
+  }
   async fetch(request) {
     await this.ready;
     const path = new URL(request.url).pathname;
+    if (await this.hyperliquidDisabledForLiveMode()) {
+      this.stopHyperliquidSocket();
+      if (path === "/ensure" || path === "/status" || path === "/markets") {
+        if (path === "/ensure") await this.scheduleAlarm(60_000);
+        const watchlist = this.watchlist();
+        return json({
+          service: "Ciel market feed",
+          mode: "live",
+          status: "PAUSED_LIVE_VENUE_CUTOFF",
+          source: "Hyperliquid disabled; LeverUp-native signal feed not yet connected",
+          hyperliquidDisabled: true,
+          connected: false,
+          watchlist,
+          availableCount: 0,
+          missingSymbols: watchlist,
+          markets: []
+        }, path === "/ensure" ? 503 : 200);
+      }
+    }
     if (path === "/ensure") {
       this.connect();
       if (Date.now() - this.lastTickAt > PRICE_STALE_MS) {
@@ -146,6 +177,11 @@ var HyperliquidFeed = class {
   }
   async alarm() {
     await this.ready;
+    if (await this.hyperliquidDisabledForLiveMode()) {
+      this.stopHyperliquidSocket();
+      await this.scheduleAlarm(60_000);
+      return;
+    }
     this.connect();
     const now = Date.now();
     const socket = this.socket;
