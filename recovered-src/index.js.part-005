@@ -22,6 +22,10 @@
   async scheduled(_event, env, ctx) {
     ctx.waitUntil(ensureTelegramWebhook(env));
     ctx.waitUntil((async () => {
+      const liveOverride = await env?.CIEL_STATE?.get("ciel:control:live-enabled").catch(() => null);
+      const liveMode = String(liveOverride ?? env?.LEVERUP_LIVE_TRADING).toLowerCase() === "true" &&
+        String(env?.LEVERUP_KILL_SWITCH).toLowerCase() === "false";
+      if (liveMode) return;
       try {
         const response = await feedStub2(env).fetch("https://feed/ensure", { method: "POST" });
         if (!response.ok) {
