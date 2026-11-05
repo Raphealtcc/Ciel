@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 const source=await readFile("reconstructed/patched-worker.js","utf8");
 const live=await readFile("src/leverup-advisor.js","utf8");
-assert.ok(source.includes('const paperOverride = await env?.CIEL_STATE?.get("ciel:control:paper-enabled");'));
+assert.ok(source.includes('const paperOverride = await readTradingControl(env, "ciel:control:paper-enabled", null);'));
 assert.ok(source.includes('const paperTradingEnabled = String(paperOverride ?? env?.PAPER_TRADING_ENABLED ?? "false").toLowerCase() === "true";'));
 assert.ok(source.includes("if (paperTradingEnabled && sizingLimits.feasible)"));
 assert.ok(source.includes("PAPER TRADING PAUSED"));
