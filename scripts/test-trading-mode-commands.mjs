@@ -15,7 +15,7 @@ assert.ok(worker.includes("ciel:control:live-entry-enabled"));
 assert.ok(worker.includes("writeTradingControls(env, [[keys.live, true], [keys.entries, true]])"));
 assert.ok(isolation.includes("readTradingControl(env"));
 assert.ok(isolation.includes('await readTradingControl(env, "ciel:control:paper-enabled", null)'));
-assert.ok(advisor.includes('env.CIEL_STATE.get("ciel:control:live-enabled")'));
+assert.ok(advisor.includes('readTradingControl(env, "ciel:control:live-enabled", null)'));
 assert.ok(advisor.includes('liveEntryOverride !== "false"'));
 assert.ok(coordinator.includes('entryOverride === "false"'));
 assert.ok(coordinator.includes("BLOCKED_POSITION_DISCOVERY"));
