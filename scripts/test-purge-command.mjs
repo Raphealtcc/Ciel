@@ -50,13 +50,32 @@ assert.equal(blocked.openPositionCount, 1);
 assert.equal(blocked.submitted, 0);
 
 let liveSubmitCalls = 0;
+const intentRows = new Map();
 const fakeDb = {
   prepare(sql) {
     return {
-      bind() {
+      bind(...values) {
         return {
-          async run() { return { meta: { changes: 1 } }; },
-          async first() { return { status: "PREPARED", intent_hash: null }; },
+          async run() {
+            if (sql.includes("INSERT INTO leverup_execution_intents")) {
+              const [signalId, idempotencyKey, pairBase, action, leverage, marginMon, notionalUsd, payloadJson, createdAt, updatedAt] = values;
+              intentRows.set(signalId, {
+                signal_id: signalId, idempotency_key: idempotencyKey, status: "PREPARED",
+                pair_base: pairBase, action, requested_leverage: leverage, margin_mon: marginMon,
+                notional_usd: notionalUsd, payload_json: payloadJson, created_at_ms: createdAt,
+                updated_at_ms: updatedAt, intent_hash: null,
+              });
+              return { meta: { changes: 1 } };
+            }
+            return { meta: { changes: 1 } };
+          },
+          async first() {
+            if (sql.includes("WHERE signal_id = ?")) return intentRows.get(values[0]) || null;
+            if (sql.includes("WHERE idempotency_key = ?")) {
+              return [...intentRows.values()].find((row) => row.idempotency_key === values[0]) || null;
+            }
+            return null;
+          },
         };
       },
     };
