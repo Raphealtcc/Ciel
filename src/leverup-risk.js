@@ -1,8 +1,9 @@
 // Independent portfolio risk gate for LeverUp. Fail closed on incomplete account/market data.
+export const MIN_LEVERUP_RISK_LIMIT_MON = 12;
 export const LEVERUP_RISK_DEFAULTS = Object.freeze({
   totalAllocationMon: 50, reserveMon: 25, minLeverage: 50,
-  maxConcurrentPositions: 1, maxDailyRealizedLossMon: 9,
-  maxRollingDrawdownMon: 9, maxAggregateStopRiskMon: 6,
+  maxConcurrentPositions: 1, maxDailyRealizedLossMon: 12,
+  maxRollingDrawdownMon: 12, maxAggregateStopRiskMon: 12,
   feeBufferPct: 25, slippageBufferPct: 25,
 });
 const finitePositive = (v) => Number.isFinite(Number(v)) && Number(v) > 0;
@@ -19,8 +20,15 @@ export function calculateLeverUpEntryBudget({ minimumCollateralUsd, minimumNotio
   const bufferUsd = collateralUsd * ((Math.max(0, Number(feeBufferPct) || 0) + Math.max(0, Number(slippageBufferPct) || 0)) / 100);
   return { collateralUsd, feesUsd, bufferUsd, requiredUsd: collateralUsd + feesUsd + bufferUsd, requiredMon: (collateralUsd + feesUsd + bufferUsd) / Number(monUsdPrice) };
 }
-export function evaluateLeverUpPortfolioRisk({ requestedLeverage, totalAllocationMon = 50, reserveMon = 25, availableWmonMon, requestedMarginMon, entryBudgetMon, currentOpenPositions = [], maxConcurrentPositions = 1, proposedStopRiskMon, aggregateStopRiskMon = 0, maxAggregateStopRiskMon = 6, dailyRealizedLossMon = 0, maxDailyRealizedLossMon = 9, rollingDrawdownMon = 0, maxRollingDrawdownMon = 9, staleFeed = false, executionUncertain = false, killSwitchActive = true }) {
+export function evaluateLeverUpPortfolioRisk({ requestedLeverage, totalAllocationMon = 50, reserveMon = 25, availableWmonMon, requestedMarginMon, entryBudgetMon, currentOpenPositions = [], maxConcurrentPositions = 1, proposedStopRiskMon, aggregateStopRiskMon = 0, maxAggregateStopRiskMon = 12, dailyRealizedLossMon = 0, maxDailyRealizedLossMon = 12, rollingDrawdownMon = 0, maxRollingDrawdownMon = 12, staleFeed = false, executionUncertain = false, killSwitchActive = true }) {
   const reasons = [];
+  // Operator overrides may raise these limits, but cannot reduce any below 12 MON.
+  const riskLimit = (value) => Number.isFinite(Number(value))
+    ? Math.max(MIN_LEVERUP_RISK_LIMIT_MON, Number(value))
+    : MIN_LEVERUP_RISK_LIMIT_MON;
+  const aggregateStopRiskLimitMon = riskLimit(maxAggregateStopRiskMon);
+  const dailyLossLimitMon = riskLimit(maxDailyRealizedLossMon);
+  const drawdownLimitMon = riskLimit(maxRollingDrawdownMon);
   const n = (v) => Number(v);
   if (killSwitchActive) reasons.push("KILL_SWITCH_ACTIVE");
   if (staleFeed) reasons.push("STALE_MARKET_FEED");
@@ -35,11 +43,11 @@ export function evaluateLeverUpPortfolioRisk({ requestedLeverage, totalAllocatio
   if (finitePositive(availableWmonMon) && finitePositive(entryBudgetMon) && n(entryBudgetMon) > n(availableWmonMon)) reasons.push("INSUFFICIENT_WMON_FOR_MARGIN_FEES_AND_BUFFER");
   if (currentOpenPositions.length >= n(maxConcurrentPositions)) reasons.push("MAX_CONCURRENT_POSITIONS_REACHED");
   const totalStopRisk = n(aggregateStopRiskMon) + Math.max(0, n(proposedStopRiskMon) || 0);
-  if (totalStopRisk > n(maxAggregateStopRiskMon)) reasons.push("AGGREGATE_STOP_RISK_LIMIT_EXCEEDED");
+  if (totalStopRisk > aggregateStopRiskLimitMon) reasons.push("AGGREGATE_STOP_RISK_LIMIT_EXCEEDED");
   const proposedRisk = Math.max(0, n(proposedStopRiskMon) || 0);
-  if (n(dailyRealizedLossMon) >= n(maxDailyRealizedLossMon) ||
-      n(dailyRealizedLossMon) + proposedRisk > n(maxDailyRealizedLossMon)) reasons.push("DAILY_REALIZED_LOSS_LIMIT_REACHED_OR_PROJECTED");
-  if (n(rollingDrawdownMon) >= n(maxRollingDrawdownMon) ||
-      n(rollingDrawdownMon) + proposedRisk > n(maxRollingDrawdownMon)) reasons.push("ROLLING_DRAWDOWN_LIMIT_REACHED_OR_PROJECTED");
-  return { allowed: reasons.length === 0, reasons, usableAllocationMon: usable, allocationCommittedMon: allocationCommitted, remainingAllocationMon: Math.max(0, usable - allocationCommitted), aggregateStopRiskMon: totalStopRisk };
+  if (n(dailyRealizedLossMon) >= dailyLossLimitMon ||
+      n(dailyRealizedLossMon) + proposedRisk > dailyLossLimitMon) reasons.push("DAILY_REALIZED_LOSS_LIMIT_REACHED_OR_PROJECTED");
+  if (n(rollingDrawdownMon) >= drawdownLimitMon ||
+      n(rollingDrawdownMon) + proposedRisk > drawdownLimitMon) reasons.push("ROLLING_DRAWDOWN_LIMIT_REACHED_OR_PROJECTED");
+  return { allowed: reasons.length === 0, reasons, usableAllocationMon: usable, allocationCommittedMon: allocationCommitted, remainingAllocationMon: Math.max(0, usable - allocationCommitted), aggregateStopRiskMon: totalStopRisk, riskLimitsMon: { dailyLoss: dailyLossLimitMon, drawdown: drawdownLimitMon, aggregateStopRisk: aggregateStopRiskLimitMon } };
 }
