@@ -35,8 +35,13 @@ async function runAdvisorCycle(env, prices, now, lastTickAt, priceHistory, liveE
         "Not available from this feed: exchange volume, order-book depth and exchange funding.",
         "TECHNICAL CANDIDATE ONLY — no order submitted. New live entries remain paused pending full risk/preflight and execution validation."
       ].join("\\n");
-      await notify(env, message);
-      await env.CIEL_STATE.put(alertKey, String(now), { expirationTtl: 86400 });
+      try {
+        await notify(env, message);
+        await env.CIEL_STATE.put(alertKey, String(now), { expirationTtl: 86400 });
+      } catch (alertError) {
+        console.error("LeverUp-native technical alert delivery failed: " + String(alertError?.message || alertError).slice(0, 180));
+        await env.CIEL_STATE.put("ciel:leverup:native-feed:advisor-error", String(alertError?.message || alertError).slice(0, 180), { expirationTtl: 3600 }).catch(() => void 0);
+      }
     }
     await env.CIEL_STATE.put("ciel:advisor:last-scan", JSON.stringify({
       at: now, source: "LEVERUP_ORACLE_SAMPLES", watchCount: nativeFeed.marketCount,
