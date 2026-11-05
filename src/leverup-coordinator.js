@@ -58,18 +58,49 @@ async function updateIntent(db, signalId, status, patch = {}) {
     .bind(...values).run();
 }
 
+async function findExistingIntent(db, signalId, idempotencyKey) {
+  const bySignal = await db.prepare("SELECT * FROM leverup_execution_intents WHERE signal_id = ?").bind(signalId).first();
+  if (bySignal) return bySignal;
+  return db.prepare("SELECT * FROM leverup_execution_intents WHERE idempotency_key = ?").bind(idempotencyKey).first();
+}
+
 async function claimIntent(db, { signalId, action, pairBase, leverage, marginMon, notionalUsd, payload, now }) {
   if (!db?.prepare) throw new Error("LEVERUP_D1_LEDGER_UNAVAILABLE");
   const idempotencyKey = "ciel:leverup:1ct:" + signalId;
-  const inserted = await db.prepare(`INSERT OR IGNORE INTO leverup_execution_intents
-    (signal_id,idempotency_key,status,pair_base,action,requested_leverage,margin_mon,notional_usd,payload_json,created_at_ms,updated_at_ms)
-    VALUES (?,?, 'PREPARED', ?, ?, ?, ?, ?, ?, ?, ?)`)
-    .bind(signalId,idempotencyKey,pairBase || null,action,leverage || null,marginMon || null,notionalUsd || null,
-      JSON.stringify(serializable(payload)),now,now).run();
-  const created = Number(inserted?.meta?.changes || 0) === 1;
-  if (created) return { created: true, row: null };
-  const row = await db.prepare("SELECT * FROM leverup_execution_intents WHERE signal_id = ?").bind(signalId).first();
-  return { created: false, row };
+  const existing = await findExistingIntent(db, signalId, idempotencyKey);
+  if (existing) return { created: false, row: existing };
+
+  try {
+    await db.prepare(`INSERT INTO leverup_execution_intents
+      (signal_id,idempotency_key,status,pair_base,action,requested_leverage,margin_mon,notional_usd,payload_json,created_at_ms,updated_at_ms)
+      VALUES (?,?, 'PREPARED', ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .bind(signalId,idempotencyKey,pairBase || null,action,leverage || null,marginMon || null,notionalUsd || null,
+        JSON.stringify(serializable(payload)),now,now).run();
+  } catch (error) {
+    const duplicate = await findExistingIntent(db, signalId, idempotencyKey).catch(() => null);
+    if (duplicate) return { created: false, row: duplicate };
+    throw new Error("LEVERUP_IDEMPOTENCY_CLAIM_FAILED: " + String(error?.message || error).slice(0, 220));
+  }
+
+  const claimed = await db.prepare("SELECT * FROM leverup_execution_intents WHERE signal_id = ?").bind(signalId).first();
+  if (!claimed) throw new Error("LEVERUP_IDEMPOTENCY_CLAIM_NOT_CONFIRMED");
+  return { created: true, row: claimed };
+}
+
+function decodeLeverUpIntentFailureReason(value) {
+  const raw = String(value || "");
+  if (!raw.startsWith("0x08c379a0")) return raw.slice(0, 300);
+  try {
+    const body = raw.slice(10);
+    const offset = Number(BigInt("0x" + body.slice(0, 64)));
+    const lengthStart = offset * 2;
+    const length = Number(BigInt("0x" + body.slice(lengthStart, lengthStart + 64)));
+    const encoded = body.slice(lengthStart + 64, lengthStart + 64 + length * 2);
+    const bytes = new Uint8Array(encoded.match(/.{2}/g).map((byte) => parseInt(byte, 16)));
+    return new TextDecoder().decode(bytes).slice(0, 300);
+  } catch {
+    return raw.slice(0, 300);
+  }
 }
 
 /**
@@ -328,17 +359,17 @@ async function readEntryMetadata(db) {
 }
 
 export async function reconcilePendingLeverUpIntents({ env, db, now = Date.now(), dependencies = {} }) {
-  if (!db?.prepare) return { checked: 0, reconciled: 0, skipped: 0, uncertain: 0 };
+  if (!db?.prepare) return { checked: 0, reconciled: 0, skipped: 0, rejected: 0, uncertain: 0 };
   const pending = await db.prepare("SELECT * FROM leverup_execution_intents WHERE status IN ('SUBMITTED','PENDING') AND intent_hash IS NOT NULL ORDER BY created_at_ms ASC LIMIT 25").all();
   const rows = pending.results || [];
-  if (!rows.length) return { checked: 0, reconciled: 0, skipped: 0, uncertain: 0 };
+  if (!rows.length) return { checked: 0, reconciled: 0, skipped: 0, rejected: 0, uncertain: 0 };
   const fetchImpl = dependencies.fetchImpl || fetch;
   const statusReader = dependencies.getStatus || getIntentStatusOnce;
   const apiReader = dependencies.fetchOpenPositions || fetchOpenPositions;
   const trader = String(env?.LEVERUP_TRADER_ADDRESS || "");
   let open = [];
   try { open = await apiReader(trader, { fetchImpl }); } catch { /* retain pending; indexing/API may lag */ }
-  let reconciled = 0, skipped = 0, uncertain = 0;
+  let reconciled = 0, skipped = 0, rejected = 0, uncertain = 0;
   for (const row of rows) {
     try {
       const state = await statusReader(LEVERUP_1CT.baseUrl, row.intent_hash, { fetchImpl });
@@ -347,6 +378,14 @@ export async function reconcilePendingLeverUpIntents({ env, db, now = Date.now()
       if (state.skipped) {
         await updateIntent(db, row.signal_id, "SKIPPED", { payload: { ...payload, intentStatus: state } });
         skipped++; continue;
+      }
+      if (state.executed && state.success === false) {
+        const failureReason = decodeLeverUpIntentFailureReason(state.reason || state.error || "LEVERUP_INTENT_EXECUTED_UNSUCCESSFULLY");
+        await updateIntent(db, row.signal_id, "REJECTED", {
+          lastError: failureReason,
+          payload: { ...payload, intentStatus: state, failureReason, failedAt: now },
+        });
+        rejected++; continue;
       }
       if (!state.executed) {
         await updateIntent(db, row.signal_id, "PENDING", { payload: { ...payload, lastStatusCheckAt: now } });
@@ -400,7 +439,7 @@ export async function reconcilePendingLeverUpIntents({ env, db, now = Date.now()
       uncertain++;
     }
   }
-  return { checked: rows.length, reconciled, skipped, uncertain };
+  return { checked: rows.length, reconciled, skipped, rejected, uncertain };
 }
 
 async function reconcileClosedSettlements({ env, db, now, dependencies = {} }) {
