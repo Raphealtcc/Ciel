@@ -87,6 +87,16 @@ export async function buildLeverUpProfitReport({
     ORDER BY s.close_time DESC
   `).all();
   const settlements = rowsResult?.results || [];
+  const attemptsResult = await env.DB.prepare(`
+    SELECT signal_id, status, last_error, created_at_ms,
+      COALESCE(json_extract(payload_json, '$.symbol'), json_extract(payload_json, '$.candidate.symbol')) AS symbol,
+      json_extract(payload_json, '$.candidate.side') AS side
+    FROM leverup_execution_intents
+    WHERE action = 0
+    ORDER BY created_at_ms DESC
+    LIMIT 5
+  `).all();
+  const attempts = attemptsResult?.results || [];
   const grouped = new Map();
   for (const row of settlements) {
     const token = String(row.margin_token || "UNKNOWN").toLowerCase();
@@ -123,6 +133,23 @@ export async function buildLeverUpProfitReport({
   } else {
     lines.push("", "Realized P&L: no settled LeverUp trades have been reconciled into CIEL's settlement ledger yet.");
   }
+  lines.push("", "RECENT LIVE ENTRY ATTEMPTS — NOT COUNTED AS TRADES");
+  if (attempts.length) {
+    for (const attempt of attempts) {
+      const status = String(attempt.status || "UNKNOWN").toUpperCase();
+      const outcome = status === "REJECTED" ? "FAILED — no position opened" :
+        status === "UNCERTAIN" ? "OUTCOME UNCERTAIN — manual reconciliation required" :
+        status === "SUBMITTED" || status === "PENDING" ? "AWAITING FINAL RECONCILIATION" :
+        status === "EXECUTED" ? "EXECUTION RECONCILED — position/settlement tracked separately" :
+        status;
+      const label = [attempt.side, attempt.symbol].filter(Boolean).join(" ") || attempt.signal_id;
+      const reason = attempt.last_error ? " — " + String(attempt.last_error).slice(0, 140) : "";
+      lines.push(label + ": " + outcome + reason);
+    }
+  } else {
+    lines.push("No LeverUp entry attempts recorded.");
+  }
+
   lines.push("", "UNREALIZED P&L — LIVE ORACLE MARK, GROSS BEFORE CLOSE FEES / FUNDING");
   if (unrealizedError) {
     lines.push("UNAVAILABLE — " + unrealizedError);
