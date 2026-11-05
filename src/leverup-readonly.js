@@ -29,6 +29,11 @@ const monad = defineChain({
   name: "Monad",
   nativeCurrency: { name: "Monad", symbol: "MON", decimals: 18 },
   rpcUrls: { default: { http: ["https://rpc2.monad.xyz"] } },
+  contracts: {
+    multicall3: {
+      address: "0xca11bde05977b3631167028862be2a173976ca11",
+    },
+  },
 });
 
 const POSITION_V4_ABI = [{
@@ -414,14 +419,19 @@ export async function readTokenBalancesAndAllowances(traderAddress, tokenAddress
     .filter(Boolean)
     .map((x) => String(x).toLowerCase())
     .filter((x) => x !== LEVERUP_1CT.zeroAddress.toLowerCase()))];
-  const states = await Promise.all(tokens.map(async (token) => {
-    const [balance, allowance] = await Promise.all([
-      publicClient.readContract({ address: token, abi: ERC20_READ_ABI, functionName: "balanceOf", args: [traderAddress] }),
-      publicClient.readContract({ address: token, abi: ERC20_READ_ABI, functionName: "allowance", args: [traderAddress, diamond] }),
-    ]);
-    return [token, { balance: BigInt(balance), allowance: BigInt(allowance) }];
-  }));
-  return Object.fromEntries(states);
+  if (!tokens.length) return {};
+  if (typeof publicClient.multicall !== "function") {
+    throw new Error("LEVERUP_MULTICALL_UNAVAILABLE");
+  }
+  const contracts = tokens.flatMap((token) => [
+    { address: token, abi: ERC20_READ_ABI, functionName: "balanceOf", args: [traderAddress] },
+    { address: token, abi: ERC20_READ_ABI, functionName: "allowance", args: [traderAddress, diamond] },
+  ]);
+  const results = await publicClient.multicall({ contracts, allowFailure: false });
+  return Object.fromEntries(tokens.map((token, index) => [
+    token,
+    { balance: BigInt(results[index * 2]), allowance: BigInt(results[index * 2 + 1]) },
+  ]));
 }
 
 export async function persistLeverUpPreflight(db, signalId, preflight, {
