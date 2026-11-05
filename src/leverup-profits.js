@@ -99,12 +99,18 @@ export async function buildLeverUpProfitReport({
     grouped.set(token, item);
   }
 
-  const open = await readOpenPositionsWithUnrealizedPnl({ trader, fetchImpl, publicClient });
+  let open = [];
+  let unrealizedError = null;
+  try {
+    open = await readOpenPositionsWithUnrealizedPnl({ trader, fetchImpl, publicClient });
+  } catch (error) {
+    unrealizedError = String(error?.message || error).slice(0, 180);
+  }
   const totalUnrealizedUsdRaw = open.reduce((sum, position) => sum + position.unrealizedUsdRaw, 0n);
   const lines = [
     "🔴 CIEL LIVE TRADING — LEVERUP",
     "Account: " + trader,
-    "Settled trades: " + settlements.length + " reconciled | " + open.length + " currently open",
+    "Settled trades: " + settlements.length + " reconciled" + (unrealizedError ? " | open-position count unavailable" : " | " + open.length + " currently open"),
   ];
   if (grouped.size) {
     lines.push("", "REALIZED NET P&L — AFTER RECORDED FEES / FUNDING");
@@ -118,14 +124,16 @@ export async function buildLeverUpProfitReport({
     lines.push("", "Realized P&L: no settled LeverUp trades have been reconciled into CIEL's settlement ledger yet.");
   }
   lines.push("", "UNREALIZED P&L — LIVE ORACLE MARK, GROSS BEFORE CLOSE FEES / FUNDING");
-  lines.push("Open positions: " + open.length);
-  if (open.length) {
+  if (unrealizedError) {
+    lines.push("UNAVAILABLE — " + unrealizedError);
+  } else if (open.length) {
+    lines.push("Open positions: " + open.length);
     lines.push("Total gross unrealized: " + signedUnits(totalUnrealizedUsdRaw) + " USD");
     for (const position of open.slice(0, 10)) {
       lines.push(position.side + " " + position.symbol + ": " + signedUnits(position.unrealizedUsdRaw) + " USD");
     }
   } else {
-    lines.push("No open LeverUp positions were returned by the exchange.");
+    lines.push("Open positions: 0", "No open LeverUp positions were returned by the exchange.");
   }
   lines.push("", "Unrealized values use LeverUp on-chain position quantity/entry and the latest LeverUp oracle mark. They are gross estimates, not settlement values; close fees and accrued funding/holding costs are excluded. Realized P&L is reported separately in each margin token and is not combined across assets.");
   return lines.join("\n");
