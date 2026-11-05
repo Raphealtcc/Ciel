@@ -37,6 +37,8 @@ const dependencies = {
     seenPlanArgs = args;
     return {
       selectedLeverage: 100, tierMaxLeverage: 100, marginMonUsed: String(args.desiredMarginMon),
+      amountInRaw: BigInt(Math.ceil(Number(args.desiredMarginMon) * 1.014 * 1e18)).toString(),
+      feeToken: "0x0000000000000000000000000000000000000000", antiDdosFee: "0",
       notionalUsd: 20, preflight: {
         requestedLeverage: 100, marketMaxLeverage: 100, maxLeverageForNotional: 100, checkedAt: args.now,
         pair: "BTC/USD", pairBase: "0x3333333333333333333333333333333333333333",
