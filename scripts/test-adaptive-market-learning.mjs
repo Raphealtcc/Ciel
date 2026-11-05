@@ -29,15 +29,26 @@ assert.ok(source.includes('"INSUFFICIENT_CLOSED_CANDLE_HISTORY"'));
 function trendCandles(direction) {
   const rows=[];
   for(let i=0;i<45;i++){
-    const base=100+direction*i*0.025;
-    rows.push({open_ts_ms:now-(45-i)*300e3,close_ts_ms:now-(44-i)*300e3-60e3,open_price:base,high_price:base+0.03,low_price:base-0.03,close_price:base+direction*0.005,volume:100});
+    // Alternating swing highs/lows create a genuine, steadily rising/falling structure.
+    const base=100+direction*i*0.025+direction*0.10*Math.sin(i*Math.PI/2);
+    rows.push({
+      open_ts_ms:now-(45-i)*300e3,
+      close_ts_ms:now-(44-i)*300e3-60e3,
+      open_price:base-direction*0.015,
+      high_price:base+0.02,
+      low_price:base-0.02,
+      close_price:base+direction*0.015,
+      volume:100
+    });
   }
+  const range=rows.slice(20,40);
+  const level=direction>0?Math.max(...range.map(c=>c.high_price)):Math.min(...range.map(c=>c.low_price));
   if(direction>0){
-    rows[43]={...rows[43],open_price:101.15,high_price:101.32,low_price:101.12,close_price:101.28,volume:200};
-    rows[44]={...rows[44],open_price:101.25,high_price:101.34,low_price:101.00,close_price:101.31,volume:120};
+    rows[43]={...rows[43],open_price:level+0.02,high_price:level+0.07,low_price:level+0.01,close_price:level+0.055,volume:200};
+    rows[44]={...rows[44],open_price:level+0.065,high_price:level+0.11,low_price:level-0.005,close_price:level+0.095,volume:120};
   } else {
-    rows[43]={...rows[43],open_price:98.85,high_price:98.88,low_price:98.68,close_price:98.72,volume:200};
-    rows[44]={...rows[44],open_price:98.75,high_price:99.00,low_price:98.66,close_price:98.69,volume:120};
+    rows[43]={...rows[43],open_price:level-0.02,high_price:level-0.01,low_price:level-0.07,close_price:level-0.055,volume:200};
+    rows[44]={...rows[44],open_price:level-0.065,high_price:level+0.005,low_price:level-0.11,close_price:level-0.095,volume:120};
   }
   return rows;
 }
