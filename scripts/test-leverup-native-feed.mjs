@@ -11,6 +11,8 @@ assert.equal(long.signal.side, "LONG");
 assert.equal(long.signal.executionEligible, false);\nassert.ok(long.signal.score >= 0 && long.signal.score <= 1);
 assert.ok(long.signal.unavailableEvidence.includes("ORDER_BOOK_DEPTH"));
 assert.equal(evaluateLeverUpNativeSeries("BTC", rows.slice(0, 20), now).status, "WARMING_UP");
+const gapped = rows.map((r,i)=>({...r,observed_at_ms:r.observed_at_ms-(i>30?300_000:0)}));
+assert.equal(evaluateLeverUpNativeSeries("BTC", gapped, now).status, "GAPPED_HISTORY");
 assert.equal(evaluateLeverUpNativeSeries("BTC", rows.map(r=>({...r,observed_at_ms:r.observed_at_ms-600_000})), now).status, "STALE");
 const flat = rows.map((r,i)=>({...r,price:100}));
 assert.equal(evaluateLeverUpNativeSeries("BTC", flat, now).status, "NO_SIGNAL");
