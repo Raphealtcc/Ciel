@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import assert from "node:assert/strict";
-import { prepareLeverUpAdvisorPlan, formatLeverUpAdvisorLine, leverUpUsdLimitsToMon } from "../src/leverup-advisor.js";
+import { prepareLeverUpAdvisorPlan, formatLeverUpAdvisorLine, leverUpUsdLimitsToMon, buildBudgetedLeverUpPlan } from "../src/leverup-advisor.js";
 import { LEVERUP_TOKENS } from "../src/leverup-readonly.js";
 
 const trader = "0x7aCd7C622a87a148CcdEBd213D7C4070E200186F";
@@ -67,6 +67,25 @@ assert.equal(limitsAfterPriceRise.totalAllocationMon, 25);
 assert.equal(limitsAfterPriceRise.reserveMon, 12.5);
 assert.equal(limitsAfterPriceRise.maxTradeMarginMon, 12.5);
 assert.equal(limitsAfterPriceRise.minimumTradeMarginMon, 6.5);
+const budgetProbe = buildBudgetedLeverUpPlan({
+  buildPlan: ({ desiredMarginMon }) => ({
+    marginMonUsed: String(desiredMarginMon),
+    amountInRaw: BigInt(Math.ceil(desiredMarginMon * 1.014 * 1e18)).toString(),
+    feeToken: "0x0000000000000000000000000000000000000000", antiDdosFee: "0",
+  }),
+  planArgs: { desiredMarginMon: 25.15 }, maxEntryBudgetMon: 25.15, minimumMarginMon: 13,
+});
+assert.ok(Number(budgetProbe.plan.marginMonUsed) < 25.15,
+  "planner must reduce margin to make room for the actual open fee");
+assert.ok(Number(budgetProbe.entryBudgetMon) <= 25.15,
+  "margin plus open fee must fit within the configured entry allocation");
+assert.throws(() => buildBudgetedLeverUpPlan({
+  buildPlan: ({ desiredMarginMon }) => ({
+    marginMonUsed: String(desiredMarginMon), amountInRaw: (30n * 10n ** 18n).toString(),
+    feeToken: "0x0000000000000000000000000000000000000000", antiDdosFee: "0",
+  }),
+  planArgs: { desiredMarginMon: 25 }, maxEntryBudgetMon: 25, minimumMarginMon: 13,
+}), /MINIMUM_MARGIN_PLUS_ENTRY_COSTS/);
 assert.equal(collateral50({ leverage: 75, minimumNotionalUsd: 40 }), 0.66);
 assert.throws(() => collateral50({ leverage: 25, minimumNotionalUsd: 20 }), /SCHEDULE_INPUT_INVALID/);
 
