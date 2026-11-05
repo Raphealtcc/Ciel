@@ -13,6 +13,7 @@ assert.ok(worker.includes("ciel:control:paper-enabled"));
 assert.ok(worker.includes("ciel:control:live-enabled"));
 assert.ok(worker.includes("ciel:control:live-entry-enabled"));
 assert.ok(worker.includes("writeTradingControls(env, [[keys.live, true], [keys.entries, true]])"));
+assert.equal((worker.match(/from "\.\.\/src\/trading-controls\.js";/g) || []).length, 1, "the bundled Worker must import the D1 controls module only once");
 for (const key of ["paper-enabled", "live-enabled", "live-entry-enabled"]) {
   assert.ok(worker.includes('readTradingControl(env, "ciel:control:' + key + '", ' + (key === "live-entry-enabled" ? '"false"' : "null") + ')'), "Telegram status/runtime must read " + key + " from D1");
   assert.ok(!worker.includes('CIEL_STATE?.get("ciel:control:' + key + '")'), "KV must not remain a trading-control source for " + key);
