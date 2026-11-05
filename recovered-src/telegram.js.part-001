@@ -44,21 +44,45 @@ async function sendTelegram(env, text) {
 }
 __name(sendTelegram, "sendTelegram");
 async function sendStatus(env) {
-  const status = await readFeedStatus(env);
+  const [status, liveOverride, entryOverride, paperOverride, diagnostics] = await Promise.all([
+    readFeedStatus(env),
+    env?.CIEL_STATE?.get("ciel:control:live-enabled").catch(() => null),
+    env?.CIEL_STATE?.get("ciel:control:live-entry-enabled").catch(() => null),
+    env?.CIEL_STATE?.get("ciel:control:paper-enabled").catch(() => null),
+    env?.CIEL_STATE?.get("ciel:leverup:diagnostics:v1", "json").catch(() => null)
+  ]);
+  const liveConfigured = String(liveOverride ?? env?.LEVERUP_LIVE_TRADING).toLowerCase() === "true";
+  const killSwitch = String(env?.LEVERUP_KILL_SWITCH).toLowerCase() !== "false";
+  const liveEntries = liveConfigured && !killSwitch && entryOverride !== "false";
+  const liveManagement = liveConfigured && !killSwitch;
+  const paperEnabled = String(paperOverride ?? env?.PAPER_TRADING_ENABLED).toLowerCase() === "true";
   const lastTickAt = Number(status.lastTickAt || 0);
   const isFresh = lastTickAt > 0 && Date.now() - lastTickAt < 12e4;
   const connected = status.connected === true;
+  const modeLine = liveEntries ? "Mode: LIVE TRADING — REAL ORDERS MAY BE PLACED"
+    : liveManagement ? "Mode: LIVE MANAGEMENT ONLY — NEW ENTRIES PAUSED"
+    : liveConfigured && killSwitch ? "Mode: LIVE CONFIGURED — EMERGENCY KILL SWITCH ON"
+    : "Mode: READ-ONLY / PAPER";
   const lines = [
-    "\u{1F6F0} CIEL MARKET WATCH",
-    "Mode: read-only",
+    liveEntries ? "🔴 CIEL LIVE STATUS" : "🛰 CIEL MARKET STATUS",
+    modeLine,
+    "Live entries: " + (liveEntries ? "ACTIVE" : "INACTIVE"),
+    "Live position management: " + (liveManagement ? "ENABLED" : "DISABLED"),
+    "Kill switch: " + (killSwitch ? "ON" : "OFF"),
+    "Paper entries: " + (paperEnabled ? "ACTIVE" : "INACTIVE"),
     "WebSocket: " + (connected ? "connected" : "disconnected"),
     "Latest feed update: " + ageLabel(status.lastTickAt),
     "Last sample: " + ageLabel(status.lastSampleAt),
     "Markets available: " + String(status.availableCount || 0) + "/" + String(status.watchlist?.length || 0),
     "Move notice: " + String(status.alertThresholdPct ?? 2) + "% over " + String(status.alertWindowMinutes ?? 5) + " minutes",
-    "Fresh: " + (isFresh ? "yes" : "no"),
-    status.lastError ? "Last error: " + status.lastError : "",
-    "No orders are submitted."
+    "Feed fresh: " + (isFresh ? "YES" : "NO"),
+    liveConfigured ? "LeverUp preflight: " + String(diagnostics?.status || "NOT YET CHECKED")
+      : "Execution: no live orders; read-only mode",
+    diagnostics?.checkedAt ? "Preflight checked: " + ageLabel(Number(diagnostics.checkedAt)) : "",
+    diagnostics?.marketPreflights ? "Market checks: " + Object.entries(diagnostics.marketPreflights).map(([symbol, item]) => symbol + " " + String(item.status || "UNKNOWN")).join(" · ") : "",
+    diagnostics?.coordinator?.status ? "Execution coordination: " + String(diagnostics.coordinator.status) : "",
+    status.lastError ? "Last feed error: " + status.lastError : "",
+    liveEntries ? "Live entries still require fresh per-signal preflight, balance, allowance, venue and risk checks." : ""
   ].filter(Boolean);
   await sendTelegram(env, lines.join("\n"));
 }
