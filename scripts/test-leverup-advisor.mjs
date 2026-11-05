@@ -180,6 +180,29 @@ assert.equal(scoped.coordinator.status, "SKIPPED");
 assert.equal(coordinatorCalls, 0);
 assert.equal(scoped.ok, true);
 
+const liveDiag = await runLeverUpDiagnostics({
+  env: { ...env, LEVERUP_LIVE_TRADING: "true", LEVERUP_KILL_SWITCH: "false",
+    LEVERUP_TRADER_PRIVATE_KEY: "0x" + "03".repeat(32),
+    LEVERUP_TRADER_ADDRESS: privateKeyToAccount("0x" + "03".repeat(32)).address,
+    LEVERUP_AGENT_PRIVATE_KEY: diagKey, LEVERUP_AGENT_ADDRESS: diagAgent },
+  now: Date.now(), symbols: ["ETH"], skipCoordinator: true,
+  dependencies: {
+    readSnapshot: async ({symbol}) => ({
+      market:{symbol,base:"0x3333333333333333333333333333333333333333"},
+      agentAuthorization:{authorized:true,agentAddress:diagAgent,canMarketOpen:true,canMarketClose:true,canPartialClose:true},
+      lastAgentNonce:"0",blockNumber:"125",indexedPositions:[],onchainPositions:[],
+      accountTokenStates:Object.fromEntries(Object.values(LEVERUP_TOKENS).map(token=>[token.toLowerCase(),{balance:"1000000000000000000",allowance:"1000000000000000000"}]))
+    }),
+    runMarketPreflights: async () => ({ETH:{status:"PASS",symbol:"ETH",orderSubmitted:false,approvalTransactionSubmitted:false}})
+  }
+});
+assert.equal(liveDiag.ok,true);
+assert.equal(liveDiag.mode,"LIVE_READ_ONLY_PREFLIGHT");
+assert.equal(liveDiag.liveTradingEnabled,true);
+assert.equal(liveDiag.killSwitchActive,false);
+assert.equal(liveDiag.orderSubmitted,false);
+assert.equal(liveDiag.coordinator.status,"SKIPPED");
+
 console.log("PASS: CIEL-to-LeverUp preflight is read-only, 50x-minimum, reserve-aware, approval-gated, existing-position-safe, ledger-backed, and hard-locked from live execution, with read-only wallet and synthetic signer diagnostics.");
 
 const integrationPatch = await readFile(new URL("./apply-leverup-integration.mjs", import.meta.url), "utf8");
