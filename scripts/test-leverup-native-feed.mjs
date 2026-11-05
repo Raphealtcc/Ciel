@@ -8,7 +8,7 @@ const rows = Array.from({length: 65}, (_, i) => ({
 const long = evaluateLeverUpNativeSeries("BTC", rows, now);
 assert.equal(long.status, "SIGNAL_CANDIDATE");
 assert.equal(long.signal.side, "LONG");
-assert.equal(long.signal.executionEligible, false);
+assert.equal(long.signal.executionEligible, false);\nassert.ok(long.signal.score >= 0 && long.signal.score <= 1);
 assert.ok(long.signal.unavailableEvidence.includes("ORDER_BOOK_DEPTH"));
 assert.equal(evaluateLeverUpNativeSeries("BTC", rows.slice(0, 20), now).status, "WARMING_UP");
 assert.equal(evaluateLeverUpNativeSeries("BTC", rows.map(r=>({...r,observed_at_ms:r.observed_at_ms-600_000})), now).status, "STALE");
