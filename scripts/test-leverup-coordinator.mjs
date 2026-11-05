@@ -4,7 +4,39 @@ assert.equal(MIN_LEVERUP_RISK_LIMIT_MON, 12);
 assert.equal(LEVERUP_RISK_DEFAULTS.maxDailyRealizedLossMon, 12);
 assert.equal(LEVERUP_RISK_DEFAULTS.maxRollingDrawdownMon, 12);
 assert.equal(LEVERUP_RISK_DEFAULTS.maxAggregateStopRiskMon, 12);
-import { prepareLeverUpExecution, reconcileLeverUpIntent, collectLeverUpPairBases } from "../src/leverup-coordinator.js";
+import { prepareLeverUpExecution, reconcileLeverUpIntent, collectLeverUpPairBases, refreshLeverUpMarketOpenPlan, validateLeverUpTransferBalances } from "../src/leverup-coordinator.js";
+const WMON = "0x3bd359C1119dA7Da1D913D1C4D2B7c461115433A";
+const LVMON = "0x91b81bfbe3A747230F0529Aa28d8b2Bc898E6D56";
+const refreshed = refreshLeverUpMarketOpenPlan({
+  plan: { actionValues: ["0x" + "11".repeat(20), true, WMON, LVMON, "10000000000000000000", "10000000000", "1010000000000000000", "990000000000000000", "1020000000000000000", 0, "0"],
+    preflight: { notionalUsdRaw: "10000000000000000000", checkedAt: 1, oraclePriceRaw: "1000000000000000000", oraclePriceUsd: 1 } },
+  pairView: { slippageConfig: { enabled: true, slippageLongP: 10, slippageShortP: 10 } },
+  freshOraclePriceRaw: "1010000000000000000", now: 200,
+});
+assert.equal(refreshed.actionValues[5], 9900990099n);
+assert.equal(refreshed.actionValues[6], 1011010000000000000n);
+assert.equal(refreshed.preflight.checkedAt, 200);
+const wmonFeeCheck = validateLeverUpTransferBalances({
+  action: 0,
+  actionValues: ["0x" + "11".repeat(20), true, WMON, LVMON, "1000", "1", "1", "0", "0", 0, "50"],
+  feeToken: WMON, antiDdosFee: 25n,
+  tokenStates: {
+    [WMON.toLowerCase()]: { balance: 1075n, allowance: 1074n },
+    [LVMON.toLowerCase()]: { balance: 0n, allowance: 0n },
+  },
+});
+assert.equal(wmonFeeCheck.ok, false, "WMON requirement must include amountIn, extraFee, and same-token anti-DDOS fee");
+assert.equal(wmonFeeCheck.required[WMON.toLowerCase()].required, "1075");
+const wmonFeePass = validateLeverUpTransferBalances({
+  action: 0,
+  actionValues: ["0x" + "11".repeat(20), true, WMON, LVMON, "1000", "1", "1", "0", "0", 0, "50"],
+  feeToken: WMON, antiDdosFee: 25n,
+  tokenStates: {
+    [WMON.toLowerCase()]: { balance: 1075n, allowance: 1075n },
+    [LVMON.toLowerCase()]: { balance: 0n, allowance: 0n },
+  },
+});
+assert.equal(wmonFeePass.ok, true);
 const b50 = calculateLeverUpEntryBudget({minimumCollateralUsd:.45,leverage:50,monUsdPrice:.02,openFeeUsd:.01,closeFeeUsd:.01});
 const b100 = calculateLeverUpEntryBudget({minimumCollateralUsd:.23,leverage:100,monUsdPrice:.02});
 assert.equal(b50.collateralUsd,.45); assert.equal(b100.collateralUsd,.23);

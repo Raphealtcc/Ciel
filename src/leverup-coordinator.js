@@ -199,6 +199,7 @@ export async function submitLeverUpIntent({
   if (!claim.created) return { status: claim.row?.status || "DUPLICATE", duplicate: true, intentHash: claim.row?.intent_hash || null };
 
   let markedUncertain = false;
+  let transferPreflight = null;
   try {
     const approval = dependencies.ensureAllowance || ensureLeverUpTokenAllowance;
     const grouped = new Map();
@@ -222,14 +223,15 @@ export async function submitLeverUpIntent({
       const transferCheck = validateLeverUpTransferBalances({
         action, actionValues, feeToken, antiDdosFee, tokenStates,
       });
+      transferPreflight = serializable(transferCheck);
       await updateIntent(db, signalId, "PREPARED", {
-        payload: { ...payload, action, actionValues: serializable(actionValues), transferPreflight: serializable(transferCheck) },
+        payload: { ...payload, action, actionValues: serializable(actionValues), transferPreflight },
       });
       if (!transferCheck.ok) {
         throw new Error("LEVERUP_TRANSFER_PREFLIGHT_FAILED: " + JSON.stringify(transferCheck.failures));
       }
     }
-    await updateIntent(db, signalId, "UNCERTAIN", { payload: { ...payload, action, actionValues: serializable(actionValues), submissionStartedAt: now } });
+    await updateIntent(db, signalId, "UNCERTAIN", { payload: { ...payload, action, actionValues: serializable(actionValues), transferPreflight, submissionStartedAt: now } });
     markedUncertain = true;
     const submit = dependencies.submit || signAndSubmitIntent;
     const result = await submit({
@@ -375,7 +377,7 @@ export async function executeLeverUpEntry({ env, db, candidate, signalId, snapsh
   const margin = Number(executionPlan.marginMonUsed);
   const wmonFee = String(executionPlan.feeToken || ZERO).toLowerCase() === WMON
     ? BigInt(executionPlan.antiDdosFee || 0) : 0n;
-  const entryBudget = Number(BigInt(executionPlan.amountInRaw) + wmonFee) / 1e18;
+  const entryBudget = Number(BigInt(executionPlan.amountInRaw) + BigInt(executionPlan.actionValues[10] || 0) + wmonFee) / 1e18;
   const stopPct = Number(candidate.stopPct);
   const stopRiskMon = margin * Number(executionPlan.selectedLeverage) * stopPct / 100;
   const portfolioRisk = await readPortfolioRiskFromLedger(db, now);
