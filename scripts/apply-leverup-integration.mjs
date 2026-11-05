@@ -14,9 +14,11 @@ function once(before, after, label) {
 const importLine = 'import { prepareLeverUpAdvisorPlan, formatLeverUpAdvisorLine, runLeverUpDiagnostics } from "../src/leverup-advisor.js";';
 const coordinatorImport = 'import { runLeverUpPositionManager } from "../src/leverup-coordinator.js";';
 const approvalSimulationImport = 'import { simulateLeverUpTokenApproval } from "../src/leverup-approval.js";';
+const profitsImport = 'import { buildLeverUpProfitReport } from "../src/leverup-profits.js";';
 if (!source.includes(importLine)) source = importLine + "\n" + source;
 if (!source.includes(coordinatorImport)) source = coordinatorImport + "\n" + source;
 if (!source.includes(approvalSimulationImport)) source = approvalSimulationImport + "\n" + source;
+if (!source.includes(profitsImport)) source = profitsImport + "\\n" + source;
 if (!source.includes("function compactCielSetupMessage(")) {
   const compactHelper = `function compactCielSetupMessage(p, s, r, monUsd, forecast) {
   const mode = s?.mode === "RANGE_SCALP" ? "RANGE" : "TREND";
@@ -138,6 +140,12 @@ const oneTimeMarketDiagnosticRoute = `    if (url.pathname === "/_internal/lever
       }
     }
 `;
+once(
+  '  if (cmd === "/profits") {',
+  '  if (cmd === "/profits") {\n    const liveOverride = await env?.CIEL_STATE?.get("ciel:control:live-enabled").catch(() => null);\n    const liveMode = String(liveOverride ?? env?.LEVERUP_LIVE_TRADING).toLowerCase() === "true" && String(env?.LEVERUP_KILL_SWITCH).toLowerCase() === "false";\n    if (liveMode) {\n      try { await notify(env, await buildLeverUpProfitReport({ env })); }\n      catch (error) { await notify(env, "🔴 LIVE PROFITS UNAVAILABLE — no paper figures were substituted. " + String(error?.message || error).slice(0, 240)); }\n      return true;\n    }',
+  "route /profits to the live LeverUp settlement ledger whenever live execution is enabled",
+);
+
 once(
   '    if (url.pathname === "/health") {',
   oneTimeMarketDiagnosticRoute + '    if (url.pathname === "/health") {',
