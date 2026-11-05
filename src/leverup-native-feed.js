@@ -73,10 +73,17 @@ export function evaluateLeverUpNativeSeries(symbol, rows, now = Date.now()) {
     ? "LONG"
     : fast < slow && m5 < 0 && m15 < 0 && h1 < 0 && strength >= 28 && strength <= 48
       ? "SHORT" : null;
+  const recentPrices = prices.slice(-60);
+  const minuteReturns = recentPrices.slice(1).map((value, index) => (value / recentPrices[index] - 1) * 100);
+  const meanMinuteReturn = minuteReturns.length ? minuteReturns.reduce((sum, value) => sum + value, 0) / minuteReturns.length : 0;
+  const momentumVolatilityPerMinutePct = minuteReturns.length > 1
+    ? Math.sqrt(minuteReturns.reduce((sum, value) => sum + (value - meanMinuteReturn) ** 2, 0) / minuteReturns.length)
+    : null;
   const technicalScore = direction ? scoreTechnicalEvidence({
     side: direction,
     trendAligned: direction === "LONG" ? fast > slow : fast < slow,
     momentumReturns: [m5, m15, h1],
+    momentumVolatilityPerMinutePct,
     structureConfirmed: null,
     rsi: strength,
   }) : null;
