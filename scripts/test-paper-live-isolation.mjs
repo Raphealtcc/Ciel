@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 const source=await readFile("reconstructed/patched-worker.js","utf8");
 const live=await readFile("src/leverup-advisor.js","utf8");
+const integration=await readFile("scripts/apply-leverup-integration.mjs","utf8");
 assert.ok(source.includes('const paperOverride = await readTradingControl(env, "ciel:control:paper-enabled", null);'));
 assert.ok(source.includes('const paperTradingEnabled = String(paperOverride ?? env?.PAPER_TRADING_ENABLED ?? "false").toLowerCase() === "true";'));
 assert.ok(source.includes("if (paperTradingEnabled && sizingLimits.feasible)"));
@@ -20,4 +21,8 @@ assert.ok(live.includes("Number(reviewed?.liveMarginMon ?? maxTradeMarginMon)"))
 assert.ok(!live.includes("Number(reviewed?.paperMarginMon)"));
 assert.ok(!live.includes("env?.LEVERUP_MAX_TRADE_MARGIN_MON"));
 assert.ok(source.includes("paper_trading_enabled: paperTradingEnabled"));
+assert.ok(integration.includes('once(nativeAdvisorBefore, "", "route live and paper through the same CIEL candidate generation, scoring and review pipeline")'));
+assert.ok(source.includes("prepareLeverUpAdvisorPlan({ env, candidate, reviewed, signalId: id, now, technicalOnly })"));
+assert.ok(!source.includes("LEVERUP NATIVE TECHNICAL SETUP"));
+assert.ok(source.includes("if (paperTradingEnabled && sizingLimits.feasible)"), "only paper ledger entry remains paper-mode gated");
 console.log("PASS: paper pause, independent live candidate discovery, fresh-quote USD allocation sizing, and preserved adaptive history.");
