@@ -9,44 +9,23 @@ export function buildBudgetedLeverUpPlan({ buildPlan, planArgs, maxEntryBudgetMo
   const budgetRaw = BigInt(Math.floor(Number(maxEntryBudgetMon) * 1e8)) * 10n ** 10n;
   const feeToken = String(feeTokenAddress).toLowerCase();
   const floor8 = (value) => Math.floor(Number(value) * 1e8) / 1e8;
-  const minimum = floor8(Number(minimumMarginMon));
-  const maximum = floor8(Number(planArgs.desiredMarginMon));
-  if (!(minimum > 0) || maximum < minimum) throw new Error("LEVERUP_ENTRY_BUDGET_INPUT_INVALID");
-  const measure = (margin) => {
-    const plan = buildPlan({ ...planArgs, desiredMarginMon: margin });
+  let desiredMarginMon = Number(planArgs.desiredMarginMon);
+  for (let attempt = 0; attempt < 64; attempt++) {
+    const plan = buildPlan({ ...planArgs, desiredMarginMon });
     if (plan?.amountInRaw == null || plan?.marginMonUsed == null) throw new Error("LEVERUP_PLAN_MISSING_EXACT_ENTRY_COST");
     const amountInRaw = BigInt(plan.amountInRaw);
     const fixedWmonFeeRaw = String(plan.feeToken || "").toLowerCase() === feeToken ? BigInt(plan.antiDdosFee || 0) : 0n;
-    return { plan, spendRaw: amountInRaw + fixedWmonFeeRaw };
-  };
-  let best = null;
-  let low = minimum, high = maximum;
-  for (let attempt = 0; attempt < 48; attempt++) {
-    const midpoint = floor8((low + high) / 2);
-    const margin = midpoint < minimum ? minimum : midpoint;
-    let measured;
-    try { measured = measure(margin); }
-    catch (error) {
-      if (margin <= minimum) throw new Error("VENUE_MINIMUM_MARGIN_PLUS_ENTRY_COSTS_EXCEEDS_CIEL_TRADE_ALLOCATION");
-      high = floor8(margin - 0.00000001);
-      continue;
+    const spendRaw = amountInRaw + fixedWmonFeeRaw;
+    if (spendRaw <= budgetRaw) return { plan, entryBudgetMon: Number(spendRaw) / 1e18, budgetMon: Number(budgetRaw) / 1e18 };
+    const variableBudgetRaw = budgetRaw - fixedWmonFeeRaw;
+    if (variableBudgetRaw <= 0n || amountInRaw <= 0n) throw new Error("VENUE_MINIMUM_MARGIN_PLUS_ENTRY_COSTS_EXCEEDS_CIEL_TRADE_ALLOCATION");
+    const nextMarginMon = floor8(Number(plan.marginMonUsed) * Number(variableBudgetRaw) / Number(amountInRaw) * (1 - 1e-8));
+    if (!(nextMarginMon >= Number(minimumMarginMon)) || !(nextMarginMon < Number(plan.marginMonUsed))) {
+      throw new Error("VENUE_MINIMUM_MARGIN_PLUS_ENTRY_COSTS_EXCEEDS_CIEL_TRADE_ALLOCATION");
     }
-    if (measured.spendRaw <= budgetRaw) {
-      best = measured;
-      low = floor8(margin + 0.00000001);
-    } else {
-      high = floorMon(margin - 0.00000001);
-    }
-    if (high < low || margin === minimum && best) break;
+    desiredMarginMon = nextMarginMon;
   }
-  if (!best) {
-    const minimumPlan = measure(minimum);
-    if (minimumPlan.spendRaw > budgetRaw) throw new Error("VENUE_MINIMUM_MARGIN_PLUS_ENTRY_COSTS_EXCEEDS_CIEL_TRADE_ALLOCATION");
-    best = minimumPlan;
-  }
-  // Final invariant: exact WMON spend, including the open fee and any WMON anti-DDoS fee, must fit.
-  if (best.spendRaw > budgetRaw) throw new Error("LEVERUP_ENTRY_BUDGET_INVARIANT_FAILED");
-  return { plan: best.plan, entryBudgetMon: Number(best.spendRaw) / 1e18, budgetMon: Number(budgetRaw) / 1e18 };
+  throw new Error("LEVERUP_ENTRY_BUDGET_DID_NOT_CONVERGE");
 }
 
 import { inspectLeverUpTraderSigner } from "./leverup-approval.js";
