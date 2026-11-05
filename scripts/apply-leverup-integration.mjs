@@ -30,7 +30,7 @@ if (!source.includes("function compactCielSetupMessage(")) {
   ].join("\\n");
 }
 `;
-  source = source.replace(coordinatorImport + "\\n", coordinatorImport + "\\n" + compactHelper);
+  source = source.replace(coordinatorImport + "\n", coordinatorImport + "\n" + compactHelper);
 }
 
 once(

@@ -169,6 +169,7 @@ console.log("PASS: CIEL-to-LeverUp preflight is read-only, 50x-minimum, reserve-
 
 const integrationPatch = await readFile(new URL("./apply-leverup-integration.mjs", import.meta.url), "utf8");
 assert.ok(integrationPatch.includes("compactCielSetupMessage"), "trade alerts must use the compact suggestion formatter");
+assert.ok(integrationPatch.includes('source.replace(coordinatorImport + "\\n"'), "compact formatter must be inserted after the coordinator import");
 assert.ok(integrationPatch.includes("/_internal/leverup-diagnostics-once"), "one-time read-only diagnostics route must be included in the build patcher");
 assert.ok(integrationPatch.includes("ciel:leverup:diagnostics:one-time-token"), "the diagnostics route must require and consume a one-time KV token");
 assert.ok(integrationPatch.includes("approvalTransactionSubmitted: false"), "the diagnostic route must never submit approvals or orders");
