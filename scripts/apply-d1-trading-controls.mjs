@@ -72,7 +72,7 @@ const liveModeKvReadCount = worker.split(liveModeKvRead).length - 1;
 if (liveModeKvReadCount !== 4) throw new Error("Expected four remaining bundled env live-mode readers after the feed patch, found " + liveModeKvReadCount);
 worker = worker.split(liveModeKvRead).join('readTradingControl(env, "ciel:control:live-enabled", null).catch(() => null)');
 console.log("Moved " + (liveModeKvReadCount + 1) + " bundled live-mode readers from KV to D1.");
-for (const key of ["live-enabled", "live-entry-enabled", "paper-enabled"]) {
+for (const key of ["live-entry-enabled", "paper-enabled"]) {
   const fallback = key === "live-entry-enabled" ? '"false"' : "null";
   replaceWorker(
     'env?.CIEL_STATE?.get("ciel:control:' + key + '").catch(() => null)',
