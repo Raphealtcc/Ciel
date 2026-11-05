@@ -108,6 +108,79 @@ function decodeLeverUpIntentFailureReason(value) {
  * If a request becomes ambiguous after the claim, it is marked UNCERTAIN and is never
  * resubmitted automatically. This prefers a manual reconciliation over a duplicate order.
  */
+export function refreshLeverUpMarketOpenPlan({ plan, pairView, freshOraclePriceRaw, now = Date.now() }) {
+  if (!plan?.preflight || !Array.isArray(plan.actionValues) || plan.actionValues.length < 11 || !pairView?.slippageConfig) {
+    throw new Error("MARKET_OPEN_PLAN_REFRESH_INPUT_INVALID");
+  }
+  const price = BigInt(freshOraclePriceRaw);
+  if (price <= 0n) throw new Error("FRESH_ORACLE_PRICE_INVALID");
+  const values = [...plan.actionValues];
+  const isLong = Boolean(values[1]);
+  const notionalRaw = BigInt(plan.preflight.notionalUsdRaw);
+  const qtyRaw = notionalRaw * (10n ** 10n) / price;
+  if (qtyRaw <= 0n || qtyRaw > (2n ** 128n - 1n)) throw new Error("FRESH_ORACLE_QTY_OUT_OF_RANGE");
+  const slippage = pairView.slippageConfig;
+  if (!slippage.enabled) throw new Error("LIVE_SLIPPAGE_CONFIG_DISABLED_OR_MISSING");
+  const slippageP = BigInt(isLong ? slippage.slippageLongP : slippage.slippageShortP);
+  if (slippageP < 0n || slippageP > 10_000n) throw new Error("LIVE_SLIPPAGE_BOUND_INVALID");
+  const worstPriceRaw = isLong
+    ? price * (10_000n + slippageP) / 10_000n
+    : price * (10_000n - slippageP) / 10_000n;
+  const stop = BigInt(values[7] || 0);
+  const target = BigInt(values[8] || 0);
+  if (isLong && ((stop > 0n && stop >= price) || (target > 0n && target <= price))) {
+    throw new Error("FRESH_ORACLE_INVALIDATES_LONG_TP_SL");
+  }
+  if (!isLong && ((stop > 0n && stop <= price) || (target > 0n && target >= price))) {
+    throw new Error("FRESH_ORACLE_INVALIDATES_SHORT_TP_SL");
+  }
+  values[5] = qtyRaw;
+  values[6] = worstPriceRaw;
+  return {
+    ...plan,
+    actionValues: values,
+    qtyRaw: qtyRaw.toString(),
+    worstPriceRaw: worstPriceRaw.toString(),
+    preflight: {
+      ...plan.preflight,
+      checkedAt: now,
+      oraclePriceRaw: price.toString(),
+      oraclePriceUsd: Number(price) / 1e18,
+    },
+  };
+}
+
+export function validateLeverUpTransferBalances({ action, actionValues, feeToken = ZERO, antiDdosFee = 0n, tokenStates = {} }) {
+  if (Number(action) !== OneClickAction.MARKET_OPEN) return { ok: true, required: {}, observed: {} };
+  if (!Array.isArray(actionValues) || actionValues.length < 11) throw new Error("MARKET_OPEN_TRANSFER_INPUT_INVALID");
+  const required = new Map();
+  const add = (token, amount) => {
+    const key = String(token || "").toLowerCase();
+    const value = BigInt(amount || 0);
+    if (!key || key === ZERO.toLowerCase() || value <= 0n) return;
+    required.set(key, (required.get(key) || 0n) + value);
+  };
+  add(actionValues[2], BigInt(actionValues[4]) + BigInt(actionValues[10] || 0));
+  add(feeToken, antiDdosFee);
+  const failures = [];
+  const requirements = {};
+  for (const [token, amount] of required) {
+    const state = tokenStates[token];
+    const balance = BigInt(state?.balance ?? 0);
+    const allowance = BigInt(state?.allowance ?? 0);
+    requirements[token] = { required: amount.toString(), balance: balance.toString(), allowance: allowance.toString() };
+    if (balance < amount) failures.push({ token, reason: "BALANCE_INSUFFICIENT", required: amount.toString(), actual: balance.toString() });
+    if (allowance < amount) failures.push({ token, reason: "ALLOWANCE_INSUFFICIENT", required: amount.toString(), actual: allowance.toString() });
+  }
+  const diagnosticTokens = [...new Set([String(actionValues[2] || "").toLowerCase(), String(actionValues[3] || "").toLowerCase()])]
+    .filter((token) => token && token !== ZERO.toLowerCase());
+  const observed = Object.fromEntries(diagnosticTokens.map((token) => {
+    const state = tokenStates[token];
+    return [token, state ? { balance: String(state.balance), allowance: String(state.allowance) } : { unavailable: true }];
+  }));
+  return { ok: failures.length === 0, required: requirements, observed, failures };
+}
+
 export async function submitLeverUpIntent({
   env, db, signalId, action, actionValues, traderAddress, agentAddress, agentAuthorization,
   nonce, deadline, feeToken = ZERO, antiDdosFee = 0n, preflight = null,
@@ -137,6 +210,24 @@ export async function submitLeverUpIntent({
     for (const [tokenAddress, amount] of grouped) {
       await approval({ env, tokenAddress, requiredAmount: amount,
         ...(dependencies.approvalClients || {}) });
+    }
+    if (Number(action) === OneClickAction.MARKET_OPEN) {
+      const diagnosticTokens = [...new Set([
+        actionValues?.[2], actionValues?.[3], feeToken,
+      ].filter((token) => token && String(token).toLowerCase() !== ZERO.toLowerCase()))];
+      const readStates = dependencies.readTokenBalancesAndAllowances || readTokenBalancesAndAllowances;
+      const tokenStates = await readStates(traderAddress, diagnosticTokens, {
+        publicClient: dependencies.publicClient || createLeverUpPublicClient(env?.LEVERUP_RPC_URL || "https://rpc2.monad.xyz"),
+      });
+      const transferCheck = validateLeverUpTransferBalances({
+        action, actionValues, feeToken, antiDdosFee, tokenStates,
+      });
+      await updateIntent(db, signalId, "PREPARED", {
+        payload: { ...payload, action, actionValues: serializable(actionValues), transferPreflight: serializable(transferCheck) },
+      });
+      if (!transferCheck.ok) {
+        throw new Error("LEVERUP_TRANSFER_PREFLIGHT_FAILED: " + JSON.stringify(transferCheck.failures));
+      }
     }
     await updateIntent(db, signalId, "UNCERTAIN", { payload: { ...payload, action, actionValues: serializable(actionValues), submissionStartedAt: now } });
     markedUncertain = true;
@@ -268,18 +359,30 @@ export async function executeLeverUpEntry({ env, db, candidate, signalId, snapsh
   if (!snapshot?.agentAuthorization?.authorized || !snapshot.agentAuthorization.canMarketOpen) {
     return { status: "REJECTED", reason: "AGENT_MARKET_OPEN_PERMISSION_MISSING" };
   }
+  let executionPlan = plan;
+  try {
+    const fetchPrices = dependencies.fetchLatestOraclePrices || fetchLatestOraclePrices;
+    const freshPrices = await fetchPrices([snapshot.market.base], { fetchImpl: dependencies.fetchImpl || fetch });
+    const freshPrice = freshPrices?.[String(snapshot.market.base).toLowerCase()];
+    if (freshPrice == null) throw new Error("FRESH_ORACLE_PRICE_MISSING");
+    executionPlan = refreshLeverUpMarketOpenPlan({
+      plan, pairView: snapshot.pairView, freshOraclePriceRaw: freshPrice, now,
+    });
+  } catch (error) {
+    return { status: "REJECTED", submitted: false, reason: "FRESH_ORACLE_REFRESH_FAILED: " + String(error?.message || error).slice(0, 180) };
+  }
   const wmonBalance = Number(BigInt(snapshot.accountTokenStates?.[WMON]?.balance || "0")) / 1e18;
-  const margin = Number(plan.marginMonUsed);
-  const wmonFee = String(plan.feeToken || ZERO).toLowerCase() === WMON
-    ? BigInt(plan.antiDdosFee || 0) : 0n;
-  const entryBudget = Number(BigInt(plan.amountInRaw) + wmonFee) / 1e18;
+  const margin = Number(executionPlan.marginMonUsed);
+  const wmonFee = String(executionPlan.feeToken || ZERO).toLowerCase() === WMON
+    ? BigInt(executionPlan.antiDdosFee || 0) : 0n;
+  const entryBudget = Number(BigInt(executionPlan.amountInRaw) + wmonFee) / 1e18;
   const stopPct = Number(candidate.stopPct);
-  const stopRiskMon = margin * Number(plan.selectedLeverage) * stopPct / 100;
+  const stopRiskMon = margin * Number(executionPlan.selectedLeverage) * stopPct / 100;
   const portfolioRisk = await readPortfolioRiskFromLedger(db, now);
   const risk = evaluateLeverUpPortfolioRisk({
-    requestedLeverage: plan.selectedLeverage,
-    totalAllocationMon: plan.totalAllocationMon ?? env.LEVERUP_TOTAL_ALLOCATION_MON ?? 50,
-    reserveMon: plan.reserveMon ?? env.LEVERUP_RESERVE_MON ?? 25,
+    requestedLeverage: executionPlan.selectedLeverage,
+    totalAllocationMon: executionPlan.totalAllocationMon ?? env.LEVERUP_TOTAL_ALLOCATION_MON ?? 50,
+    reserveMon: executionPlan.reserveMon ?? env.LEVERUP_RESERVE_MON ?? 25,
     availableWmonMon: wmonBalance, requestedMarginMon: margin, entryBudgetMon: entryBudget,
     currentOpenPositions: snapshot.indexedPositions || [],
     maxConcurrentPositions: env.LEVERUP_MAX_CONCURRENT_POSITIONS ?? 1,
@@ -292,19 +395,19 @@ export async function executeLeverUpEntry({ env, db, candidate, signalId, snapsh
     staleFeed: now - Number(snapshot.checkedAt || now) > 30_000, executionUncertain: false, killSwitchActive: false,
   });
   if (!risk.allowed) return { status: "REJECTED_RISK", reasons: risk.reasons, risk };
-  const feeToken = String(plan.feeToken || ZERO);
-  const allowances = [{ tokenAddress: LEVERUP_TOKENS.WMON, amount: BigInt(plan.amountInRaw) }];
-  if (feeToken.toLowerCase() !== ZERO.toLowerCase() && BigInt(plan.antiDdosFee || 0) > 0n) {
-    allowances.push({ tokenAddress: feeToken, amount: BigInt(plan.antiDdosFee) });
+  const feeToken = String(executionPlan.feeToken || ZERO);
+  const allowances = [{ tokenAddress: LEVERUP_TOKENS.WMON, amount: BigInt(executionPlan.amountInRaw) + BigInt(executionPlan.actionValues[10] || 0) }];
+  if (feeToken.toLowerCase() !== ZERO.toLowerCase() && BigInt(executionPlan.antiDdosFee || 0) > 0n) {
+    allowances.push({ tokenAddress: feeToken, amount: BigInt(executionPlan.antiDdosFee) });
   }
   const result = await submitLeverUpIntent({
-    env: effectiveEnv, db, signalId, action: OneClickAction.MARKET_OPEN, actionValues: plan.actionValues,
+    env: effectiveEnv, db, signalId, action: OneClickAction.MARKET_OPEN, actionValues: executionPlan.actionValues,
     traderAddress: snapshot.traderAddress, agentAddress: snapshot.agentAddress,
-    agentAuthorization: snapshot.agentAuthorization, nonce: plan.nonce, deadline: plan.deadline,
-    feeToken, antiDdosFee: plan.antiDdosFee, preflight: plan.preflight,
+    agentAuthorization: snapshot.agentAuthorization, nonce: executionPlan.nonce, deadline: executionPlan.deadline,
+    feeToken, antiDdosFee: executionPlan.antiDdosFee, preflight: executionPlan.preflight,
     allowanceRequirements: allowances, pairBase: snapshot.market.base,
-    leverage: plan.selectedLeverage, marginMon: plan.marginMonUsed, notionalUsd: plan.notionalUsd,
-    payload: { symbol: candidate.symbol, candidate, plan: serializable(plan), stopRiskMon }, now, dependencies,
+    leverage: executionPlan.selectedLeverage, marginMon: executionPlan.marginMonUsed, notionalUsd: executionPlan.notionalUsd,
+    payload: { symbol: candidate.symbol, candidate, plan: serializable(executionPlan), stopRiskMon }, now, dependencies,
   });
   return { ...result, risk };
 }
