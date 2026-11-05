@@ -178,6 +178,21 @@ const planSnapshot = {
   agentAuthorization: { authorized: true, agentAddress: testAgent, canMarketOpen: true, canMarketClose: true, canPartialClose: true },
   lastAgentNonce: "77",
 };
+const discountedCollateralPlan = buildMarketOpenPlan({
+  snapshot: { ...planSnapshot, collateralRatio: 0.8 },
+  desiredMarginMon: 20, maxTradeMarginMon: 50,
+  inferredLeverage: 100, side: "LONG", expectedHoldSeconds: 3600,
+});
+const discountedEffectiveMonPriceRaw = BigInt(planSnapshot.monUsdPriceRaw) * 8n * 10n ** 17n / (10n ** 18n);
+const discountedOpenFeeUsdRaw = BigInt(planSnapshot.minimumNotionalRaw) * 3n / 10_000n;
+const expectedDiscountedOpenFeeWmonRaw =
+  (discountedOpenFeeUsdRaw * (10n ** 18n) + discountedEffectiveMonPriceRaw - 1n) / discountedEffectiveMonPriceRaw;
+assert.equal(discountedCollateralPlan.openFeeTokenInRaw, expectedDiscountedOpenFeeWmonRaw.toString(),
+  "WMON open fee must be converted using the collateral-ratio-adjusted MON price, not spot MON price");
+assert.ok(BigInt(discountedCollateralPlan.openFeeTokenInRaw) >
+  (discountedOpenFeeUsdRaw * (10n ** 18n) + BigInt(planSnapshot.monUsdPriceRaw) - 1n) / BigInt(planSnapshot.monUsdPriceRaw),
+  "a discounted WMON collateral ratio must increase the WMON amount needed to cover the LVMON-denominated open fee");
+
 const plan = buildMarketOpenPlan({
   snapshot: planSnapshot, desiredMarginMon: 20, maxTradeMarginMon: 50,
   inferredLeverage: 100, side: "LONG", expectedHoldSeconds: 3600,

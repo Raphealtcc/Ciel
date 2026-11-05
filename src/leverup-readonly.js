@@ -781,7 +781,7 @@ export function buildMarketOpenPlan({
   const discountP = usesLvToken ? BigInt(fees.lvTokenDiscountP || 0) : 0n;
   const grossOpenFeeUsdRaw = fees.enabled === false ? 0n : notionalRaw * BigInt(fees.openFeeP) / 10_000n;
   const openFeeUsdRaw = grossOpenFeeUsdRaw * (100_000n - discountP) / 100_000n;
-  const openFeeTokenInRaw = ceilDiv(openFeeUsdRaw * (10n ** 18n), monPriceRaw);
+  const openFeeTokenInRaw = ceilDiv(openFeeUsdRaw * (10n ** 18n), effectiveMonPriceRaw);
   const amountInRaw = marginUsedRaw + openFeeTokenInRaw;
   const extraFee = BigInt(extraFeeRaw);
   const totalCollateralSpend = amountInRaw + extraFee;
