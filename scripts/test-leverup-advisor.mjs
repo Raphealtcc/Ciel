@@ -117,6 +117,16 @@ assert.ok(Math.abs(ready.totalAllocationMon - (0.9129835 / 0.019038)) < 1e-6);
 assert.ok(seenPlanArgs.stopLossPriceRaw > 0n && seenPlanArgs.takeProfitPriceRaw > 0n);
 assert.equal(seenPersist.options.decision, "PASS");
 assert.equal(ready.ledgerPersisted, true);
+
+const liveWithoutExplicitEntryGrant = await prepareLeverUpAdvisorPlan({
+  env: { ...env, LEVERUP_LIVE_TRADING: "true", LEVERUP_KILL_SWITCH: "false" },
+  candidate, reviewed, signalId: "SIG-LIVE-NO-D1-GRANT",
+  now: 1_800_000_000_000, dependencies,
+});
+assert.equal(liveWithoutExplicitEntryGrant.status, "BLOCKED_SAFETY_CONFIGURATION",
+  "live environment flags alone must not enable entries without an explicit D1 grant");
+assert.equal(liveWithoutExplicitEntryGrant.liveExecutionEnabled, false);
+
 assert.ok(formatLeverUpAdvisorLine(ready).includes("DRY RUN"),
   "compact LeverUp output must identify dry-run mode");
 assert.equal(formatLeverUpAdvisorLine(ready).split("\n").length, 1,
