@@ -18,7 +18,7 @@ const profitsImport = 'import { buildLeverUpProfitReport } from "../src/leverup-
 if (!source.includes(importLine)) source = importLine + "\n" + source;
 if (!source.includes(coordinatorImport)) source = coordinatorImport + "\n" + source;
 if (!source.includes(approvalSimulationImport)) source = approvalSimulationImport + "\n" + source;
-if (!source.includes(profitsImport)) source = profitsImport + "\\n" + source;
+if (!source.includes(profitsImport)) source = profitsImport + "\n" + source;
 if (!source.includes("function compactCielSetupMessage(")) {
   const compactHelper = `function compactCielSetupMessage(p, s, r, monUsd, forecast) {
   const mode = s?.mode === "RANGE_SCALP" ? "RANGE" : "TREND";
