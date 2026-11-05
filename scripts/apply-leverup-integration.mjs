@@ -171,5 +171,30 @@ once(
   "run read-only diagnostics and position/settlement management from the existing minute cron"
 );
 
+const sharedScoreImport = 'import { scoreTechnicalEvidence } from "../src/technical-scoring.js";';
+if (!source.includes(sharedScoreImport)) source = sharedScoreImport + "\n" + source;
+const paperScoreBefore = `  const technicalScore = mode === "RANGE_SCALP"
+    ? 0.76
+    : clamp(0.66 + (hasTrend ? 0.055 : 0) + (hasMomentum ? 0.055 : 0) + (hasStructure ? 0.045 : 0) + (hasBounce ? 0.06 : 0), 0, 0.95);
+  const scoreComponents = mode === "RANGE_SCALP"
+    ? ["RANGE_EDGE_OSCILLATOR", "MICRO_REVERSAL", "PRICE_STRUCTURE"]
+    : [hasTrend ? "TREND" : null, hasMomentum ? "MOMENTUM" : null, hasStructure ? "PRICE_STRUCTURE" : null, hasBounce ? "BOUNCE" : null].filter(Boolean);`;
+const paperScoreAfter = `  const sharedTechnicalScore = scoreTechnicalEvidence({
+    side,
+    trendAligned: hasTrend,
+    momentumReturns: [r5, r15, r60],
+    structureConfirmed: mode === "RANGE_SCALP" ? true : (hasStructure || hasBounce),
+    rsi: rsiAvailable ? rv : null,
+  });
+  const technicalScore = sharedTechnicalScore.score / 100;
+  const scoreComponents = sharedTechnicalScore.components.map((item) => item.key + " " + item.points + "/" + item.max);`;
+const paperScoreCount = source.split(paperScoreBefore).length - 1;
+if (paperScoreCount !== 1) throw new Error("Shared paper scorer anchor mismatch: " + paperScoreCount);
+source = source.replace(paperScoreBefore, paperScoreAfter);
+const oldPaperModel = 'scoreModel:"regime-switch-v3", strategy:votes.join("+"),';
+const newPaperModel = 'scoreModel:"ciel-shared-v1", scoreDetails:sharedTechnicalScore, strategy:votes.join("+"),';
+if (!source.includes(oldPaperModel)) throw new Error("Shared paper score model anchor missing");
+source = source.replace(oldPaperModel, newPaperModel);
+
 await writeFile(file, source);
 console.log("Wrote LeverUp-integrated Worker candidate: " + file);
