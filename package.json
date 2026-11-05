@@ -17,7 +17,7 @@
     "test:leverup-readonly": "node scripts/test-leverup-readonly.mjs",
     "patch:leverup": "node scripts/apply-leverup-integration.mjs",
     "test:leverup-advisor": "node scripts/test-leverup-advisor.mjs",
-    "test:leverup-native-feed": "node scripts/test-leverup-native-feed.mjs",
+    "test:leverup-native-feed": "node scripts/test-leverup-native-feed.mjs",\n    "test:leverup-native-integration": "node scripts/test-leverup-native-integration.mjs",
     "test:leverup-coordinator": "node scripts/test-leverup-coordinator.mjs",
     "test:leverup-approval": "node scripts/test-leverup-approval.mjs",
     "patch:adaptive-learning": "node scripts/apply-adaptive-market-fix.mjs",
