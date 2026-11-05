@@ -65,7 +65,7 @@ function replaceWorker(before, after, label, expected = 1) {
 replaceWorker(
   'env?.CIEL_STATE?.get("ciel:control:live-enabled").catch(() => null)',
   'readTradingControl(env, "ciel:control:live-enabled", null).catch(() => null)',
-  "advisor and scheduled live-control reads", 2
+  "advisor, scheduled handler and /profits live-control reads", 3
 );
 replaceWorker(
   'this.env?.CIEL_STATE?.get("ciel:control:live-enabled").catch(() => null)',
