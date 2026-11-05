@@ -82,11 +82,12 @@ assert.equal(seenPlanArgs.reserveMon, 25);
 assert.ok(seenPlanArgs.stopLossPriceRaw > 0n && seenPlanArgs.takeProfitPriceRaw > 0n);
 assert.equal(seenPersist.options.decision, "PASS");
 assert.equal(ready.ledgerPersisted, true);
-assert.ok(formatLeverUpAdvisorLine(ready).includes("DRY RUN ONLY"));
+assert.ok(formatLeverUpAdvisorLine(ready).includes("DRY RUN"),
+  "compact LeverUp output must identify dry-run mode");
 assert.equal(formatLeverUpAdvisorLine(ready).split("\n").length, 1,
   "LeverUp suggestion output must stay on one concise line");
-assert.ok(formatLeverUpAdvisorLine(ready).includes("PORTFOLIO RISK BLOCKED"),
-  "the $1 MON stop-risk cap must be reported when the 0.4% stop implies higher risk");
+assert.ok(formatLeverUpAdvisorLine(ready).length <= 100,
+  "LeverUp status must remain concise; detailed portfolio-risk diagnostics stay outside the trade alert");
 
 const below50 = await prepareLeverUpAdvisorPlan({
   env: { ...env }, candidate: { ...candidate, leverage: 25 },
