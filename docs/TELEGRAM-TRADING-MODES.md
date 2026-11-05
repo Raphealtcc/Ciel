@@ -6,4 +6,4 @@
 - `/livedeactivate`: stop new live entries while retaining management and risk-reducing exits for existing live positions; it does not close positions.
 - `/modes`: show effective states.
 
-Overrides are stored in the existing CIEL_STATE KV namespace. Telegram commands remain restricted to TELEGRAM_CHAT_ID. The independent Cloudflare kill switch cannot be bypassed.
+Trading-mode overrides are stored in the D1 `ciel_control_flags` table. The same D1 helper is used by Telegram commands, the advisor, the execution coordinator, and paper-entry gating. KV remains reserved for feed and diagnostic snapshots. Telegram commands remain restricted to TELEGRAM_CHAT_ID. The independent Cloudflare kill switch cannot be bypassed.
