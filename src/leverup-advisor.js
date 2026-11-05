@@ -8,8 +8,9 @@ export function buildBudgetedLeverUpPlan({ buildPlan, planArgs, maxEntryBudgetMo
   if (typeof buildPlan !== "function" || !planArgs || !(Number(maxEntryBudgetMon) > 0)) throw new Error("LEVERUP_ENTRY_BUDGET_INPUT_INVALID");
   const budgetRaw = BigInt(Math.floor(Number(maxEntryBudgetMon) * 1e8)) * 10n ** 10n;
   const feeToken = String(feeTokenAddress).toLowerCase();
-  const minimum = floorMon(Number(minimumMarginMon));
-  const maximum = floorMon(Number(planArgs.desiredMarginMon));
+  const floor8 = (value) => Math.floor(Number(value) * 1e8) / 1e8;
+  const minimum = floor8(Number(minimumMarginMon));
+  const maximum = floor8(Number(planArgs.desiredMarginMon));
   if (!(minimum > 0) || maximum < minimum) throw new Error("LEVERUP_ENTRY_BUDGET_INPUT_INVALID");
   const measure = (margin) => {
     const plan = buildPlan({ ...planArgs, desiredMarginMon: margin });
@@ -21,18 +22,18 @@ export function buildBudgetedLeverUpPlan({ buildPlan, planArgs, maxEntryBudgetMo
   let best = null;
   let low = minimum, high = maximum;
   for (let attempt = 0; attempt < 48; attempt++) {
-    const midpoint = floorMon((low + high) / 2);
+    const midpoint = floor8((low + high) / 2);
     const margin = midpoint < minimum ? minimum : midpoint;
     let measured;
     try { measured = measure(margin); }
     catch (error) {
       if (margin <= minimum) throw new Error("VENUE_MINIMUM_MARGIN_PLUS_ENTRY_COSTS_EXCEEDS_CIEL_TRADE_ALLOCATION");
-      high = floorMon(margin - 0.00000001);
+      high = floor8(margin - 0.00000001);
       continue;
     }
     if (measured.spendRaw <= budgetRaw) {
       best = measured;
-      low = floorMon(margin + 0.00000001);
+      low = floor8(margin + 0.00000001);
     } else {
       high = floorMon(margin - 0.00000001);
     }
