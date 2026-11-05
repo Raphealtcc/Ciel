@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { submitLeverUpIntent, evaluateLeverUpPositionAction, verifyLeverUpCoordinatorDryRun } from "../src/leverup-coordinator.js";
+import { submitLeverUpIntent, evaluateLeverUpPositionAction, verifyLeverUpCoordinatorDryRun, reconcilePendingLeverUpIntents } from "../src/leverup-coordinator.js";
 
 class FakeD1 {
   rows = new Map();
@@ -9,9 +9,9 @@ class FakeD1 {
     return {
       bind(...args) { values = args; return this; },
       async run() {
-        if (sql.startsWith("INSERT OR IGNORE INTO leverup_execution_intents")) {
+        if (sql.startsWith("INSERT INTO leverup_execution_intents")) {
           const [signal_id,idempotency_key,pair_base,action,requested_leverage,margin_mon,notional_usd,payload_json,created_at_ms,updated_at_ms] = values;
-          if (db.rows.has(signal_id) || [...db.rows.values()].some((r) => r.idempotency_key === idempotency_key)) return { meta: { changes: 0 } };
+          if (db.rows.has(signal_id) || [...db.rows.values()].some((r) => r.idempotency_key === idempotency_key)) throw new Error("UNIQUE constraint failed");
           db.rows.set(signal_id,{signal_id,idempotency_key,status:"PREPARED",pair_base,action,requested_leverage,margin_mon,notional_usd,payload_json,created_at_ms,updated_at_ms});
           return { meta: { changes: 1 } };
         }
@@ -28,6 +28,7 @@ class FakeD1 {
       },
       async first() {
         if (sql.includes("WHERE signal_id = ?")) return db.rows.get(values[0]) || null;
+        if (sql.includes("WHERE idempotency_key = ?")) return [...db.rows.values()].find((r) => r.idempotency_key === values[0]) || null;
         return null;
       },
       async all() {
@@ -68,6 +69,17 @@ const duplicate = await submitLeverUpIntent(args);
 assert.equal(duplicate.duplicate, true);
 assert.equal(approvalCalls, 1);
 assert.equal(submitCalls, 1);
+
+const failedReconciliation = await reconcilePendingLeverUpIntents({
+  env, db, now: Date.now(),
+  dependencies: {
+    getStatus: async () => ({ executed: true, success: false, skipped: false, reason: "Unable to trade at a price acceptable to the user." }),
+    fetchOpenPositions: async () => [],
+  },
+});
+assert.equal(failedReconciliation.rejected, 1);
+assert.equal(db.rows.get(args.signalId).status, "REJECTED");
+assert.match(db.rows.get(args.signalId).last_error, /price acceptable/);
 
 const position = {
   positionHash: "0x" + "aa".repeat(32), qtyRaw: "1000", entryPriceRaw: "100000000000000000000",
