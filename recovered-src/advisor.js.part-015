@@ -15,41 +15,7 @@ async function runAdvisorCycle(env, prices, now, lastTickAt, priceHistory, liveE
   const liveMode = String(liveOverride ?? env?.LEVERUP_LIVE_TRADING).toLowerCase() === "true" &&
     String(env?.LEVERUP_KILL_SWITCH).toLowerCase() === "false";
   if (liveMode) {
-    const nativeFeed = await env?.CIEL_STATE?.get("ciel:leverup:native-feed:latest", "json").catch(() => null);
-    if (nativeFeed?.status !== "READY") {
-      console.log("CIEL live advisor waiting for LeverUp-native feed warm-up; no Hyperliquid data is consumed.");
-      return;
-    }
-    const candidates = Array.isArray(nativeFeed.candidates) ? nativeFeed.candidates : [];
-    for (const candidate of candidates) {
-      const alertKey = "ciel:leverup:native-signal-alert:" + candidate.symbol;
-      const lastAlert = Number(await env.CIEL_STATE.get(alertKey) || 0);
-      if (now - lastAlert < 30 * 60 * 1000) continue;
-      const message = [
-        "🟡 LEVERUP NATIVE TECHNICAL SETUP — " + candidate.side + " " + candidate.symbol,
-        "Oracle price: " + candidate.price,
-        "Technical alignment (heuristic): " + Math.round(candidate.score * 100) + "/100",
-        "RSI(14): " + candidate.rsi14.toFixed(1),
-        "5m: " + candidate.change5mPct.toFixed(3) + "% · 15m: " + candidate.change15mPct.toFixed(3) + "% · 1h: " + candidate.change1hPct.toFixed(3) + "%",
-        "Evidence: EMA9/EMA21 trend + multi-horizon momentum + RSI",
-        "Not available from this feed: exchange volume, order-book depth and exchange funding.",
-        "TECHNICAL CANDIDATE ONLY — no order submitted. New live entries remain paused pending full risk/preflight and execution validation."
-      ].join("\\n");
-      try {
-        await notify(env, message);
-        await env.CIEL_STATE.put(alertKey, String(now), { expirationTtl: 86400 });
-      } catch (alertError) {
-        console.error("LeverUp-native technical alert delivery failed: " + String(alertError?.message || alertError).slice(0, 180));
-        await env.CIEL_STATE.put("ciel:leverup:native-feed:advisor-error", String(alertError?.message || alertError).slice(0, 180), { expirationTtl: 3600 }).catch(() => void 0);
-      }
-    }
-    await env.CIEL_STATE.put("ciel:advisor:last-scan", JSON.stringify({
-      at: now, source: "LEVERUP_ORACLE_SAMPLES", watchCount: nativeFeed.marketCount,
-      historySymbols: nativeFeed.warmedMarkets, candidates: candidates.map((x) => ({
-        symbol: x.symbol, side: x.side, score: x.score, rsi: x.rsi14,
-        change5mPct: x.change5mPct, change15mPct: x.change15mPct, change1hPct: x.change1hPct
-      }))
-    }), { expirationTtl: 86400 });
+    console.log("CIEL live signal cycle skipped: Hyperliquid-derived signals are not eligible for live mode.");
     return;
   }
   if (now - lastTickAt > MAX_AGE || !(prices.MON > 0)) return;
