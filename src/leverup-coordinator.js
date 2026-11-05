@@ -239,7 +239,9 @@ export async function executeLeverUpEntry({ env, db, candidate, signalId, snapsh
   }
   const wmonBalance = Number(BigInt(snapshot.accountTokenStates?.[WMON]?.balance || "0")) / 1e18;
   const margin = Number(plan.marginMonUsed);
-  const entryBudget = Number(BigInt(plan.amountInRaw)) / 1e18;
+  const wmonFee = String(plan.feeToken || ZERO).toLowerCase() === WMON
+    ? BigInt(plan.antiDdosFee || 0) : 0n;
+  const entryBudget = Number(BigInt(plan.amountInRaw) + wmonFee) / 1e18;
   const stopPct = Number(candidate.stopPct);
   const stopRiskMon = margin * Number(plan.selectedLeverage) * stopPct / 100;
   const portfolioRisk = await readPortfolioRiskFromLedger(db, now);
