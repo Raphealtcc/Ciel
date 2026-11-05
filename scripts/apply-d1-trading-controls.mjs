@@ -62,16 +62,16 @@ function replaceWorker(before, after, label, expected = 1) {
   if (count !== expected) throw new Error(label + ": expected " + expected + " matches, found " + count);
   worker = worker.split(before).join(after);
 }
-const liveModeKvRead = 'env?.CIEL_STATE?.get("ciel:control:live-enabled").catch(() => null)';
-const liveModeKvReadCount = worker.split(liveModeKvRead).length - 1;
-if (liveModeKvReadCount < 4) throw new Error("Expected at least four bundled live-mode readers, found " + liveModeKvReadCount);
-worker = worker.split(liveModeKvRead).join('readTradingControl(env, "ciel:control:live-enabled", null).catch(() => null)');
-console.log("Moved " + liveModeKvReadCount + " bundled live-mode readers from KV to D1.");
 replaceWorker(
   'this.env?.CIEL_STATE?.get("ciel:control:live-enabled").catch(() => null)',
   'readTradingControl(this.env, "ciel:control:live-enabled", null).catch(() => null)',
   "Hyperliquid feed live-control read"
 );
+const liveModeKvRead = 'env?.CIEL_STATE?.get("ciel:control:live-enabled").catch(() => null)';
+const liveModeKvReadCount = worker.split(liveModeKvRead).length - 1;
+if (liveModeKvReadCount !== 4) throw new Error("Expected four remaining bundled env live-mode readers after the feed patch, found " + liveModeKvReadCount);
+worker = worker.split(liveModeKvRead).join('readTradingControl(env, "ciel:control:live-enabled", null).catch(() => null)');
+console.log("Moved " + (liveModeKvReadCount + 1) + " bundled live-mode readers from KV to D1.");
 for (const key of ["live-enabled", "live-entry-enabled", "paper-enabled"]) {
   const fallback = key === "live-entry-enabled" ? '"false"' : "null";
   replaceWorker(
