@@ -16,7 +16,7 @@ await patchFile("src/leverup-advisor.js", (source) => {
     : [null, null];`;
   const after = `  const [liveOverride, liveEntryOverride] = await Promise.all([
     readTradingControl(env, "ciel:control:live-enabled", null),
-    readTradingControl(env, "ciel:control:live-entry-enabled", null),
+    readTradingControl(env, "ciel:control:live-entry-enabled", "false"),
   ]);`;
   if (!source.includes(after)) {
     if (source.split(before).length !== 2) throw new Error("Advisor D1 control read anchor mismatch");
@@ -34,7 +34,7 @@ await patchFile("src/leverup-coordinator.js", (source) => {
     : [null, null];`;
   const afterEntry = `  const [liveOverride, entryOverride] = await Promise.all([
     readTradingControl(env, "ciel:control:live-enabled", null),
-    readTradingControl(env, "ciel:control:live-entry-enabled", null),
+    readTradingControl(env, "ciel:control:live-entry-enabled", "false"),
   ]);`;
   if (!source.includes(afterEntry)) {
     if (source.split(beforeEntry).length !== 2) throw new Error("Coordinator entry control read anchor mismatch");
@@ -72,9 +72,10 @@ replaceWorker(
   "Hyperliquid feed live-control read"
 );
 for (const key of ["live-enabled", "live-entry-enabled", "paper-enabled"]) {
+  const fallback = key === "live-entry-enabled" ? '"false"' : "null";
   replaceWorker(
     'env?.CIEL_STATE?.get("ciel:control:' + key + '").catch(() => null)',
-    'readTradingControl(env, "ciel:control:' + key + '", null).catch(() => null)',
+    'readTradingControl(env, "ciel:control:' + key + '", ' + fallback + ').catch(() => ' + fallback + ')',
     "Telegram status " + key + " D1 read"
   );
 }
