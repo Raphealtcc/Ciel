@@ -244,7 +244,7 @@ export async function submitLeverUpIntent({
     }
     try {
       await updateIntent(db, signalId, "SUBMITTED", { intentHash: result.intentHash,
-        payload: { ...payload, action, actionValues: serializable(actionValues), intentDigest: result.intent?.actionDataHash || null } });
+        payload: { ...payload, action, actionValues: serializable(actionValues), transferPreflight, intentDigest: result.intent?.actionDataHash || null } });
     } catch (ledgerError) {
       // The order may already be live. Keep the pre-submit UNCERTAIN claim and never replay it.
       return { status: "UNCERTAIN", submitted: true, intentHash: result.intentHash, signalId,
