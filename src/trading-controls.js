@@ -1,13 +1,15 @@
 const CONTROL_TABLE = "ciel_control_flags";
 
-function assertDatabase(env) {
-  if (!env?.DB?.prepare || typeof env.DB.batch !== "function") {
-    throw new Error("TRADING_CONTROL_D1_BINDING_UNAVAILABLE");
-  }
+function assertReadDatabase(env) {
+  if (!env?.DB?.prepare) throw new Error("TRADING_CONTROL_D1_BINDING_UNAVAILABLE");
+}
+function assertWriteDatabase(env) {
+  assertReadDatabase(env);
+  if (typeof env.DB.batch !== "function") throw new Error("TRADING_CONTROL_D1_BATCH_UNAVAILABLE");
 }
 
 export async function readTradingControl(env, key, fallback = null) {
-  assertDatabase(env);
+  assertReadDatabase(env);
   const row = await env.DB.prepare(
     "SELECT control_value FROM " + CONTROL_TABLE + " WHERE control_key = ?1"
   ).bind(String(key)).first();
@@ -15,7 +17,7 @@ export async function readTradingControl(env, key, fallback = null) {
 }
 
 export async function writeTradingControls(env, entries, now = Date.now()) {
-  assertDatabase(env);
+  assertWriteDatabase(env);
   if (!Array.isArray(entries) || !entries.length) throw new Error("TRADING_CONTROL_UPDATE_EMPTY");
   const allowed = new Set([
     "ciel:control:paper-enabled",
