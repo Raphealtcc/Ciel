@@ -52,7 +52,10 @@ const report = await buildLeverUpProfitReport({
 });
 assert.match(report, /CIEL LIVE TRADING/);
 assert.match(report, /WMON \(MON\): \+1\.0000 token units/);
-assert.match(report, /1 currently open/);\nassert.match(report, /RECENT LIVE ENTRY ATTEMPTS/);\nassert.match(report, /XRP: FAILED — no position opened — insufficient transfers/);\nassert.match(report, /BTC: AWAITING FINAL RECONCILIATION/);
+assert.match(report, /1 currently open/);
+assert.match(report, /RECENT LIVE ENTRY ATTEMPTS/);
+assert.match(report, /XRP: FAILED — no position opened — insufficient transfers/);
+assert.match(report, /BTC: AWAITING FINAL RECONCILIATION/);
 assert.match(report, /Total gross unrealized: \+10\.0000 USD/);
 assert.match(report, /LONG BTC\/USD: \+10\.0000 USD/);
 assert.match(report, /gross before close fees \/ funding/i);
