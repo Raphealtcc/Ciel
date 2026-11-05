@@ -1,3 +1,4 @@
+import { scoreTechnicalEvidence } from "./technical-scoring.js";
 import { fetchLeverUpPairs, fetchLatestOraclePrices } from "./leverup-readonly.js";
 
 const SAMPLE_INTERVAL_MS = 60_000;
@@ -73,9 +74,17 @@ export function evaluateLeverUpNativeSeries(symbol, rows, now = Date.now()) {
     : fast < slow && m5 < 0 && m15 < 0 && h1 < 0 && strength >= 28 && strength <= 48
       ? "SHORT" : null;
   const alignment = [m5, m15, h1].filter((value) => direction === "LONG" ? value > 0 : direction === "SHORT" ? value < 0 : false).length;
+  const technicalScore = direction ? scoreTechnicalEvidence({
+    side: direction,
+    trendAligned: direction === "LONG" ? fast > slow : fast < slow,
+    momentumReturns: [m5, m15, h1],
+    structureConfirmed: null,
+    rsi: strength,
+  }) : null;
   const signal = direction ? {
     symbol, side: direction, source: "LEVERUP_ORACLE_SAMPLES",
-    score: Math.max(0, Math.min(1, 0.4 * alignment / 3 + 0.3 * Math.min(1, (Math.abs(m5) + Math.abs(m15) + Math.abs(h1)) / 0.5) + 0.3 * Math.max(0, 1 - Math.abs(strength - (direction === "LONG" ? 62 : 38)) / 20))),
+    score: technicalScore.score / 100,
+    scoreDetails: technicalScore,
     price: Number(latest.price), observedAt: Number(latest.observed_at_ms),
     ema9: fast, ema21: slow, rsi14: strength,
     change5mPct: m5, change15mPct: m15, change1hPct: h1,
