@@ -25,10 +25,10 @@ assert.equal(config.vars.LEVERUP_AGENT_ADDRESS, agentAddress);
 assert.equal(config.vars.LEVERUP_AUTO_APPROVE, "true");
 assert.equal(config.vars.LEVERUP_RPC_URL, "https://rpc2.monad.xyz");
 assert.equal(config.vars.LEVERUP_PREFLIGHT_ENABLED, "true");
-assert.equal(config.vars.PAPER_TRADING_ENABLED, "false");
+assert.equal(config.vars.PAPER_TRADING_ENABLED, undefined, "production paper mode must remain remotely managed");
 assert.equal(config.previews.vars.PAPER_TRADING_ENABLED, "false");
-assert.equal(config.vars.LEVERUP_LIVE_TRADING, "false");
-assert.equal(config.vars.LEVERUP_KILL_SWITCH, "true");
+assert.equal(config.vars.LEVERUP_LIVE_TRADING, undefined, "production live mode must not be overwritten by staging defaults");
+assert.equal(config.vars.LEVERUP_KILL_SWITCH, undefined, "production kill switch must remain remotely managed");
 assert.equal(config.vars.LEVERUP_PURGE_LIVE_ENABLED, "true", "Only the explicit manual purge command may close live positions while the kill switch is on");
 assert.equal(config.vars.LEVERUP_MIN_LEVERAGE, "50");
 assert.equal(config.vars.LEVERUP_TOTAL_ALLOCATION_MON, "50");
@@ -59,7 +59,10 @@ const expectedPreviewVars = {
   ...config.vars,
   TELEGRAM_WEBHOOK_URL: "",
   TELEGRAM_STAGING_BOT_ID: "",
-  LEVERUP_PURGE_LIVE_ENABLED: "false"
+  LEVERUP_PURGE_LIVE_ENABLED: "false",
+  PAPER_TRADING_ENABLED: "false",
+  LEVERUP_LIVE_TRADING: "false",
+  LEVERUP_KILL_SWITCH: "true"
 };
 assert.deepEqual(config.previews.vars, expectedPreviewVars, "Previews must retain the full variable set but must not claim the shared Telegram bot/webhook");
 const previewD1 = config.previews.d1_databases?.find((item) => item.binding === "DB");
