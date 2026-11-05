@@ -116,7 +116,7 @@ export async function prepareLeverUpAdvisorPlan({
     collateralRatio = minimumNotionalUsd / (leverageForMinimum * minimumCollateralUsd);
     if (!(collateralRatio > 0 && collateralRatio <= 1)) throw new Error("DERIVED_COLLATERAL_RATIO_OUT_OF_RANGE");
     snapshot.collateralRatio = collateralRatio;
-    const minimumMarginMon = minimumCollateralUsd / monUsdPrice;
+    const minimumMarginMon = Math.ceil((minimumCollateralUsd / monUsdPrice) * 1e8) / 1e8;
     const totalAllocationMon = Number(env?.LEVERUP_TOTAL_ALLOCATION_MON || 50);
     const reserveMon = Number(env?.LEVERUP_RESERVE_MON ?? totalAllocationMon * 0.5);
     const allocationCeiling = Math.max(0, totalAllocationMon - reserveMon);
@@ -207,32 +207,13 @@ export async function prepareLeverUpAdvisorPlan({
 }
 
 export function formatLeverUpAdvisorLine(record) {
-  if (!record) return "LEVERUP: no preflight was generated.";
-  const account = record.account || {};
-  const accountLine = "WMON balance " + (account.wmonBalanceMon || "unavailable") +
-    " MON; agent market-open permission " + (account.canMarketOpen ? "verified" : "not verified") + ".";
-  const riskLine = record.coordination?.status === "REJECTED"
-    ? "PORTFOLIO RISK BLOCKED — " + (record.coordination.risk?.reasons || []).join(", ") + "."
-    : record.coordination?.status === "REJECTED_RISK"
-      ? "LIVE ENTRY BLOCKED BY PORTFOLIO RISK — " + (record.coordination.reasons || []).join(", ") + "."
-      : record.coordination?.status === "SUBMITTED"
-        ? "LIVE INTENT SUBMITTED — " + String(record.coordination.intentHash || "hash pending") + "."
-        : null;
+  if (!record) return "LeverUp: no preflight.";
   if (record.status === "PREFLIGHT_PASS_LIVE_DISABLED" || record.status === "PREFLIGHT_PASS_LIVE_ENABLED") {
-    const costs = record.estimatedProtocolCosts || {};
-    return [
-      "LEVERUP PREFLIGHT: PASS — " + record.selectedLeverage + "x, margin " + Number(record.marginMonUsed).toFixed(3) +
-        " MON, notional $" + Number(record.notionalUsd).toFixed(2) + ".",
-      "Estimated open fee $" + Number(costs.openFeeUsd || 0).toFixed(4) +
-        "; projected holding $" + Number(costs.holdingFeeUsd || 0).toFixed(4) +
-        "; projected funding $" + Number(costs.fundingFeeUsd || 0).toFixed(4) + ".",
-      accountLine,
-      ...(riskLine ? [riskLine] : []),
-      record.status === "PREFLIGHT_PASS_LIVE_ENABLED" ? "LIVE MODE — idempotent execution coordinator handled submission and reconciliation." : "DRY RUN ONLY — live trading is OFF; no order was signed or submitted.",
-    ].join("\\n");
+    return "LeverUp: PASS · " + record.selectedLeverage + "x · " +
+      Number(record.marginMonUsed).toFixed(2) + " MON · $" + Number(record.notionalUsd).toFixed(2) +
+      " notional · " + (record.status === "PREFLIGHT_PASS_LIVE_ENABLED" ? "LIVE" : "DRY RUN");
   }
-  return "LEVERUP PREFLIGHT: " + record.status + " — " + String(record.reason || "No reason supplied") +
-    " " + accountLine + " Live trading is OFF.";
+  return "LeverUp: BLOCKED · " + String(record.reason || record.status || "preflight failed").slice(0, 120);
 }
 
 
@@ -267,7 +248,7 @@ export async function runLeverUpMarketPreflights({ env, traderAddress, agentAddr
       const collateralRatio = minimumNotionalUsd / (leverage * minimumCollateralUsd);
       if (!(collateralRatio > 0 && collateralRatio <= 1) || !(monUsdPrice > 0)) throw new Error("LIVE_COLLATERAL_OR_ORACLE_DATA_INVALID");
       snapshot.collateralRatio = collateralRatio;
-      const minimumMarginMon = minimumCollateralUsd / monUsdPrice;
+      const minimumMarginMon = Math.ceil((minimumCollateralUsd / monUsdPrice) * 1e8) / 1e8;
       const totalAllocationMon = Number(env?.LEVERUP_TOTAL_ALLOCATION_MON || 50);
       const reserveMon = Number(env?.LEVERUP_RESERVE_MON ?? totalAllocationMon * 0.5);
       const allocationCeiling = Math.max(0, totalAllocationMon - reserveMon);

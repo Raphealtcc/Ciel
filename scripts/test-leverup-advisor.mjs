@@ -71,6 +71,8 @@ assert.ok(Math.abs(seenPlanArgs.snapshot.collateralRatio - (20 / (100 * 0.23))) 
 assert.ok(Math.abs(ready.minimumMarginMon - (0.23 / 0.019038)) < 1e-6,
   "minimum WMON must be calculated from the $0.23 USD collateral and live MON/USD oracle");
 const expectedLiveMarginMon = Math.max(12, ready.minimumMarginMon);
+assert.equal(seenPlanArgs.desiredMarginMon, Math.ceil(ready.minimumMarginMon * 1e8) / 1e8,
+  "minimum margin passed to the plan must round upward to avoid floating-point underfunding");
 assert.ok(Math.abs(seenPlanArgs.desiredMarginMon - expectedLiveMarginMon) < 1e-9,
   "LeverUp must use its independent live margin proposal, clamped only to the venue minimum collateral");
 assert.ok(seenPlanArgs.desiredMarginMon > reviewed.paperMarginMon,

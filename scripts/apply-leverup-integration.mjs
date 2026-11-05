@@ -15,6 +15,23 @@ const importLine = 'import { prepareLeverUpAdvisorPlan, formatLeverUpAdvisorLine
 const coordinatorImport = 'import { runLeverUpPositionManager } from "../src/leverup-coordinator.js";';
 if (!source.includes(importLine)) source = importLine + "\n" + source;
 if (!source.includes(coordinatorImport)) source = coordinatorImport + "\n" + source;
+if (!source.includes("function compactCielSetupMessage(")) {
+  const compactHelper = `function compactCielSetupMessage(p, s, r, monUsd, forecast) {
+  const mode = s?.mode === "RANGE_SCALP" ? "RANGE" : "TREND";
+  const confidence = Math.round(Number(s?.confidence || 0) * 100);
+  const review = String(r?.verdict || "WAIT");
+  const forecastStatus = forecast?.available ? "forecast ready" : "forecast unavailable";
+  const hold = Number(s?.holdMinutes || (mode === "RANGE" ? 12 : 180));
+  return [
+    (review === "APPROVE" && forecast?.available ? "📈 " : "🟡 ") + String(p?.side || "—") + " " + String(p?.symbol || "—") + " · " + mode + " · " + confidence + "/100",
+    "Entry $" + fmt(p?.entry_price) + " | SL $" + fmt(p?.stop_price) + " | TP $" + fmt(p?.target_price),
+    "Review " + review + " · " + forecastStatus + " · hold ≤" + hold + "m",
+    "PROPOSED — not tracking"
+  ].join("\\n");
+}
+`;
+  source = source.replace(coordinatorImport + "\\n", coordinatorImport + "\\n" + compactHelper);
+}
 
 once(
   '    const id = crypto.randomUUID().replace(/-/g, "").slice(0, 10).toUpperCase(), direction = candidate.side === "LONG" ? 1 : -1;\n    const stop = candidate.entry * (1 - direction * candidate.stopPct / 100), target = candidate.entry * (1 + direction * candidate.targetPct / 100), expires = now + 15 * 6e4;',
@@ -24,7 +41,7 @@ once(
 
 once(
   '      await notify(env, setupMessage(position, candidate, reviewed, prices.MON, forecast, quality.market, intraday) + paperLine, [',
-  '      const leverUpLine = formatLeverUpAdvisorLine(leverUpPlan);\n      await notify(env, setupMessage(position, candidate, reviewed, prices.MON, forecast, quality.market, intraday) + paperLine + "\\n\\n" + leverUpLine, [',
+  '      const leverUpLine = formatLeverUpAdvisorLine(leverUpPlan);\n      await notify(env, compactCielSetupMessage(position, candidate, reviewed, prices.MON, forecast) + paperLine + "\\n\\n" + leverUpLine, [',
   "attach real LeverUp preflight, collateral and fee status to the CIEL trade card",
 );
 
