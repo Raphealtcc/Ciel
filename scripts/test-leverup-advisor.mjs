@@ -233,6 +233,6 @@ assert.ok(integrationPatch.includes("/_internal/leverup-diagnostics-once"), "one
 assert.ok(integrationPatch.includes("ciel:leverup:diagnostics:one-time-token"), "the diagnostics route must require and consume a one-time KV token");
 assert.ok(integrationPatch.includes("approvalTransactionSubmitted: false"), "the diagnostic route must never submit approvals or orders");
 assert.ok(integrationPatch.includes("symbols: [requestedSymbol]"), "one-time diagnostics must run only the requested market per Worker invocation");
-assert.ok(integrationPatch.includes("skipCoordinator: true"), "scheduled diagnostics must not spend recurring D1 reads on the temporary coordinator test");
+assert.ok(integrationPatch.includes("skipCoordinator: false"), "scheduled diagnostics must verify the temporary coordinator dry-run at the five-minute cadence");
 assert.ok(integrationPatch.includes("5 * 60 * 1000"), "scheduled diagnostics must rotate one market every five minutes");
 
