@@ -71,7 +71,7 @@ const degraded = await buildLeverUpProfitReport({
   fetchImpl: async () => { throw new Error("oracle temporarily unavailable"); },
   publicClient,
 });
-assert.match(degraded, /WMON \\(MON\\): \\+1\\.0000 token units/);
+assert.match(degraded, /WMON \(MON\): \+1\.0000 token units/);
 assert.match(degraded, /UNAVAILABLE — oracle temporarily unavailable/);
 assert.match(degraded, /open-position count unavailable/);
 console.log("PASS: a mark/oracle outage does not erase realized P&L or report a false zero.");
