@@ -2,10 +2,16 @@ import assert from "node:assert/strict";
 import { buildLeverUpProfitReport } from "../src/leverup-profits.js";
 
 const db = { prepare(sql) {
-  assert.match(sql, /leverup_settlement_reconciliations/);
+  if (sql.includes("leverup_settlement_reconciliations")) {
+    return { async all() { return { results: [
+      { position_hash: "0x1", symbol: "BTC", close_time: 1, net_pnl_after_fees_raw: "1500000000000000000", margin_token: "0x3bd359c1119da7da1d913d1c4d2b7c461115433a" },
+      { position_hash: "0x2", symbol: "ETH", close_time: 2, net_pnl_after_fees_raw: "-500000000000000000", margin_token: "0x3bd359c1119da7da1d913d1c4d2b7c461115433a" },
+    ] }; } };
+  }
+  assert.match(sql, /leverup_execution_intents/);
   return { async all() { return { results: [
-    { position_hash: "0x1", symbol: "BTC", close_time: 1, net_pnl_after_fees_raw: "1500000000000000000", margin_token: "0x3bd359c1119da7da1d913d1c4d2b7c461115433a" },
-    { position_hash: "0x2", symbol: "ETH", close_time: 2, net_pnl_after_fees_raw: "-500000000000000000", margin_token: "0x3bd359c1119da7da1d913d1c4d2b7c461115433a" },
+    { signal_id: "NXRPLMW3GVCO0", status: "REJECTED", last_error: "insufficient transfers", symbol: "XRP", side: "LONG" },
+    { signal_id: "NTEST", status: "PENDING", last_error: null, symbol: "BTC", side: "SHORT" },
   ] }; } };
 } };
 const pairBase = "0x2222222222222222222222222222222222222222";
@@ -46,7 +52,7 @@ const report = await buildLeverUpProfitReport({
 });
 assert.match(report, /CIEL LIVE TRADING/);
 assert.match(report, /WMON \(MON\): \+1\.0000 token units/);
-assert.match(report, /1 currently open/);
+assert.match(report, /1 currently open/);\nassert.match(report, /RECENT LIVE ENTRY ATTEMPTS/);\nassert.match(report, /XRP: FAILED — no position opened — insufficient transfers/);\nassert.match(report, /BTC: AWAITING FINAL RECONCILIATION/);
 assert.match(report, /Total gross unrealized: \+10\.0000 USD/);
 assert.match(report, /LONG BTC\/USD: \+10\.0000 USD/);
 assert.match(report, /gross before close fees \/ funding/i);
