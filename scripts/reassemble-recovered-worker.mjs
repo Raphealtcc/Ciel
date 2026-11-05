@@ -11,7 +11,7 @@ const modules = [
   ["symbols.js", 1647],
   ["cloudflare-forecast.js", 4425],
   ["advisor.js", 119195],
-  ["telegram.js", 11954],
+  ["telegram.js", 13973],
   ["hyperliquid_feed.js", 46516],
   ["index.js", 26022],
 ];
@@ -49,8 +49,8 @@ if (preamble.length !== 391) {
 }
 
 const worker = preamble + recoveredModules.join("");
-if (worker.length !== 210150) {
-  throw new Error(`Integrity check failed for full Worker: expected 210150, got ${worker.length}`);
+if (worker.length !== 212169) {
+  throw new Error(`Integrity check failed for full Worker: expected 212169, got ${worker.length}`);
 }
 
 const sha256 = createHash("sha256").update(worker, "utf8").digest("hex");
