@@ -28,7 +28,7 @@ async function runAdvisorCycle(env, prices, now, lastTickAt, priceHistory, liveE
       const message = [
         "🟡 LEVERUP NATIVE TECHNICAL SETUP — " + candidate.side + " " + candidate.symbol,
         "Oracle price: " + candidate.price,
-        "Signal score: " + Math.round(candidate.score * 100) + "/100",
+        "Technical alignment (heuristic): " + Math.round(candidate.score * 100) + "/100",
         "RSI(14): " + candidate.rsi14.toFixed(1),
         "5m: " + candidate.change5mPct.toFixed(3) + "% · 15m: " + candidate.change15mPct.toFixed(3) + "% · 1h: " + candidate.change1hPct.toFixed(3) + "%",
         "Evidence: EMA9/EMA21 trend + multi-horizon momentum + RSI",
