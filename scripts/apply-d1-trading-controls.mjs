@@ -51,4 +51,34 @@ await patchFile("src/leverup-coordinator.js", (source) => {
   return source;
 });
 
+
+const workerPath = path.join(process.cwd(), "reconstructed", "patched-worker.js");
+let worker = await readFile(workerPath, "utf8");
+const workerImport = 'import { readTradingControl, writeTradingControls } from "../src/trading-controls.js";';
+if (!worker.includes(workerImport)) worker = workerImport + "\\n" + worker;
+function replaceWorker(before, after, label, expected = 1) {
+  const count = worker.split(before).length - 1;
+  if (count !== expected) throw new Error(label + ": expected " + expected + " matches, found " + count);
+  worker = worker.split(before).join(after);
+}
+replaceWorker(
+  'env?.CIEL_STATE?.get("ciel:control:live-enabled").catch(() => null)',
+  'readTradingControl(env, "ciel:control:live-enabled", null).catch(() => null)',
+  "advisor and scheduled live-control reads", 2
+);
+replaceWorker(
+  'this.env?.CIEL_STATE?.get("ciel:control:live-enabled").catch(() => null)',
+  'readTradingControl(this.env, "ciel:control:live-enabled", null).catch(() => null)',
+  "Hyperliquid feed live-control read"
+);
+for (const key of ["live-enabled", "live-entry-enabled", "paper-enabled"]) {
+  replaceWorker(
+    'env?.CIEL_STATE?.get("ciel:control:' + key + '").catch(() => null)',
+    'readTradingControl(env, "ciel:control:' + key + '", null).catch(() => null)',
+    "Telegram status " + key + " D1 read"
+  );
+}
+await writeFile(workerPath, worker);
+console.log("Patched deployed Worker advisor, scheduled handler, feed and Telegram status to read D1 controls.");
+
 console.log("Patched LeverUp advisor and coordinator to read D1 trading controls.");
