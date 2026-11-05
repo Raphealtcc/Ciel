@@ -56,6 +56,12 @@ export function evaluateLeverUpNativeSeries(symbol, rows, now = Date.now()) {
   if (points.length < MIN_WARMUP_SAMPLES) {
     return { symbol, status: "WARMING_UP", samples: points.length, requiredSamples: MIN_WARMUP_SAMPLES, signal: null };
   }
+  const recent = points.slice(-MIN_WARMUP_SAMPLES);
+  const gaps = recent.slice(1).map((point, index) => Number(point.observed_at_ms) - Number(recent[index].observed_at_ms));
+  const span = Number(recent.at(-1).observed_at_ms) - Number(recent[0].observed_at_ms);
+  if (span < 55 * 60_000 || span > 75 * 60_000 || gaps.some((gap) => gap <= 0 || gap > 180_000)) {
+    return { symbol, status: "GAPPED_HISTORY", samples: points.length, signal: null };
+  }
   const prices = points.map((point) => Number(point.price));
   const fast = ema(prices, 9), slow = ema(prices, 21), strength = rsi(prices, 14);
   const m5 = pctChange(prices, 5), m15 = pctChange(prices, 15), h1 = pctChange(prices, 59);
