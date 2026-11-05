@@ -5,4 +5,4 @@ assert.ok(w.includes("ciel:control:paper-enabled")&&w.includes("ciel:control:liv
 assert.ok(p.includes('await env?.CIEL_STATE?.get("ciel:control:paper-enabled")'));
 assert.ok(a.includes('env.CIEL_STATE.get("ciel:control:live-enabled")')&&a.includes('liveEntryOverride !== "false"'));
 assert.ok(c.includes('entryOverride === "false"')&&c.includes('if (liveOverride != null) env = { ...env, LEVERUP_LIVE_TRADING: liveOverride };'));
-assert.ok(w.includes("This command will not bypass it"));console.log("PASS: independent Telegram mode controls, hard kill-switch and retained live position management.");
+assert.ok(w.includes("This command will not bypass it"));\nassert.ok(w.includes("LeverUp-native market feed is not READY and warmed up"), "live activation must fail closed until the LeverUp-native feed is ready");console.log("PASS: independent Telegram mode controls, hard kill-switch and retained live position management.");
