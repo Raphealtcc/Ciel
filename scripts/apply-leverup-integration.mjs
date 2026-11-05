@@ -13,8 +13,10 @@ function once(before, after, label) {
 
 const importLine = 'import { prepareLeverUpAdvisorPlan, formatLeverUpAdvisorLine, runLeverUpDiagnostics } from "../src/leverup-advisor.js";';
 const coordinatorImport = 'import { runLeverUpPositionManager } from "../src/leverup-coordinator.js";';
+const approvalSimulationImport = 'import { simulateLeverUpTokenApproval } from "../src/leverup-approval.js";';
 if (!source.includes(importLine)) source = importLine + "\n" + source;
 if (!source.includes(coordinatorImport)) source = coordinatorImport + "\n" + source;
+if (!source.includes(approvalSimulationImport)) source = approvalSimulationImport + "\n" + source;
 if (!source.includes("function compactCielSetupMessage(")) {
   const compactHelper = `function compactCielSetupMessage(p, s, r, monUsd, forecast) {
   const mode = s?.mode === "RANGE_SCALP" ? "RANGE" : "TREND";
@@ -98,15 +100,34 @@ const oneTimeMarketDiagnosticRoute = `    if (url.pathname === "/_internal/lever
           minimumNotionalUsd: market.minimumNotionalUsd || null, minimumCollateralUsd: market.minimumCollateralUsd || null,
           minimumMarginMon: market.minimumMarginMon || null, plannedMarginMon: market.plannedMarginMon || null,
           plannedNotionalUsd: market.plannedNotionalUsd || null,
+          wmonAllowanceRaw: market.wmonAllowanceRaw || "0",
+          wmonRequiredAllowanceRaw: market.wmonRequiredAllowanceRaw || "0",
           wmonAllowanceReady: market.wmonAllowanceShortfallRaw === "0",
+          feeToken: market.feeToken || null,
+          feeAllowanceRaw: market.feeAllowanceRaw || "0",
+          feeRequiredAllowanceRaw: market.feeRequiredAllowanceRaw || "0",
+          feeAllowanceShortfallRaw: market.feeAllowanceShortfallRaw || "0",
           autoApprovalConfigured: market.autoApprovalConfigured === true,
           approvalWillRunOnlyOnLiveEntry: market.approvalWillRunOnlyOnLiveEntry === true,
           orderSubmitted: false, approvalTransactionSubmitted: false,
         }]));
+        let approvalSimulation = null;
+        if (url.searchParams.get("simulateApproval") === "true") {
+          const btc = diagnostics.marketPreflights?.BTC;
+          if (!btc || btc.status !== "PASS" || !btc.wmonRequiredAllowanceRaw) {
+            approvalSimulation = { status: "NOT_RUN", reason: btc?.reason || "BTC_PREFLIGHT_NOT_PASS", transactionBroadcast: false };
+          } else {
+            approvalSimulation = await simulateLeverUpTokenApproval({
+              env: { ...env, LEVERUP_RPC_URL: selectedRpc.endpoint },
+              tokenAddress: "0x3bd359C1119dA7Da1D913D1C4D2B7c461115433A",
+              requiredAmount: btc.wmonRequiredAllowanceRaw,
+            });
+          }
+        }
         return json2({
           ok: diagnostics.ok, checkedAt: diagnostics.checkedAt,
           rpc: { provider: selectedRpc.provider, host: selectedRpc.host, chainId: selectedRpc.chainId },
-          rpcCandidates, marketPreflights,
+          rpcCandidates, marketPreflights, approvalSimulation,
           coordinator: { status: diagnostics.coordinator?.status || "NOT_CHECKED", reason: diagnostics.coordinator?.reason || null },
           liveTradingEnabled: diagnostics.liveTradingEnabled, killSwitchActive: diagnostics.killSwitchActive,
           orderSubmitted: false, approvalTransactionSubmitted: false,
