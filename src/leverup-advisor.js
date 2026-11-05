@@ -4,6 +4,32 @@ import {
 } from "./leverup-readonly.js";
 import { OneClickAction, signIntentDryRun } from "./leverup-1ct.js";
 import { prepareLeverUpExecution, executeLeverUpEntry, verifyLeverUpCoordinatorDryRun } from "./leverup-coordinator.js";
+export function buildBudgetedLeverUpPlan({ buildPlan, planArgs, maxEntryBudgetMon, minimumMarginMon, feeTokenAddress = WMON }) {
+  if (typeof buildPlan !== "function" || !planArgs || !(Number(maxEntryBudgetMon) > 0)) throw new Error("LEVERUP_ENTRY_BUDGET_INPUT_INVALID");
+  const budgetRaw = BigInt(Math.floor(Number(maxEntryBudgetMon) * 1e8)) * 10n ** 10n;
+  const feeToken = String(feeTokenAddress).toLowerCase();
+  let desiredMarginMon = Number(planArgs.desiredMarginMon);
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const plan = buildPlan({ ...planArgs, desiredMarginMon });
+    if (plan?.amountInRaw == null || plan?.marginMonUsed == null) throw new Error("LEVERUP_PLAN_MISSING_EXACT_ENTRY_COST");
+    const amountInRaw = BigInt(plan.amountInRaw);
+    const fixedWmonFeeRaw = String(plan.feeToken || "").toLowerCase() === feeToken ? BigInt(plan.antiDdosFee || 0) : 0n;
+    const totalWmonSpendRaw = amountInRaw + fixedWmonFeeRaw;
+    if (totalWmonSpendRaw <= budgetRaw) {
+      return { plan, entryBudgetMon: Number(totalWmonSpendRaw) / 1e18, budgetMon: Number(budgetRaw) / 1e18 };
+    }
+    const variableBudgetRaw = budgetRaw - fixedWmonFeeRaw;
+    if (variableBudgetRaw <= 0n || amountInRaw <= 0n) throw new Error("VENUE_MINIMUM_MARGIN_PLUS_ENTRY_COSTS_EXCEEDS_CIEL_TRADE_ALLOCATION");
+    const usedMarginMon = Number(plan.marginMonUsed);
+    const nextMarginMon = floorMon(usedMarginMon * Number(variableBudgetRaw) / Number(amountInRaw) * (1 - 1e-8));
+    if (!(nextMarginMon >= Number(minimumMarginMon)) || !(nextMarginMon < usedMarginMon)) {
+      throw new Error("VENUE_MINIMUM_MARGIN_PLUS_ENTRY_COSTS_EXCEEDS_CIEL_TRADE_ALLOCATION");
+    }
+    desiredMarginMon = nextMarginMon;
+  }
+  throw new Error("LEVERUP_ENTRY_BUDGET_DID_NOT_CONVERGE");
+}
+
 import { inspectLeverUpTraderSigner } from "./leverup-approval.js";
 
 const WMON = LEVERUP_TOKENS.WMON.toLowerCase();
@@ -178,9 +204,15 @@ export async function prepareLeverUpAdvisorPlan({
     const takeProfitPriceRaw = isLong ? oracleRaw * (10_000n + targetBps) / 10_000n : oracleRaw * (10_000n - targetBps) / 10_000n;
 
     const buildPlan = dependencies.buildPlan || buildMarketOpenPlan;
-    const plan = { ...buildPlan({ snapshot, desiredMarginMon, maxTradeMarginMon, inferredLeverage,
-      side: candidate.side, expectedHoldSeconds, reserveMon, stopLossPriceRaw, takeProfitPriceRaw,
-      requireExistingAllowance: false, now }), totalAllocationMon, reserveMon, usdLimits };
+    const budgeted = buildBudgetedLeverUpPlan({
+      buildPlan,
+      planArgs: { snapshot, desiredMarginMon, maxTradeMarginMon, inferredLeverage,
+        side: candidate.side, expectedHoldSeconds, reserveMon, stopLossPriceRaw, takeProfitPriceRaw,
+        requireExistingAllowance: false, now },
+      maxEntryBudgetMon: maxTradeMarginMon, minimumMarginMon,
+    });
+    const plan = { ...budgeted.plan, entryBudgetMon: budgeted.entryBudgetMon,
+      entryBudgetCeilingMon: budgeted.budgetMon, totalAllocationMon, reserveMon, usdLimits };
     const authorized = Boolean(snapshot.agentAuthorization?.authorized && snapshot.agentAuthorization?.canMarketOpen);
     const status = authorized ? (liveMode ? "PREFLIGHT_PASS_LIVE_ENABLED" : "PREFLIGHT_PASS_LIVE_DISABLED") : "BLOCKED_AGENT_AUTHORIZATION";
     const reason = authorized
