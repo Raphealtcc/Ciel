@@ -49,22 +49,19 @@ eData.microEma &&
   const hasMomentum = votes.includes("MOMENTUM");
   const hasStructure = votes.includes("BREAKOUT") || votes.includes("RANGE_REVERSION");
   const hasBounce = Boolean(bounce && bounce.side === side);
-  const sharedTechnicalScore = scoreTechnicalEvidence({
-    side,
-    trendAligned: hasTrend,
-    momentumReturns: [r5, r15, r60],
-    structureConfirmed: mode === "RANGE_SCALP" ? true : (hasStructure || hasBounce),
-    rsi: rsiAvailable ? rv : null,
-  });
-  const technicalScore = sharedTechnicalScore.score / 100;
-  const scoreComponents = sharedTechnicalScore.components;
+  const technicalScore = mode === "RANGE_SCALP"
+    ? 0.76
+    : clamp(0.66 + (hasTrend ? 0.055 : 0) + (hasMomentum ? 0.055 : 0) + (hasStructure ? 0.045 : 0) + (hasBounce ? 0.06 : 0), 0, 0.95);
+  const scoreComponents = mode === "RANGE_SCALP"
+    ? ["RANGE_EDGE_OSCILLATOR", "MICRO_REVERSAL", "PRICE_STRUCTURE"]
+    : [hasTrend ? "TREND" : null, hasMomentum ? "MOMENTUM" : null, hasStructure ? "PRICE_STRUCTURE" : null, hasBounce ? "BOUNCE" : null].filter(Boolean);
   const baseReason = mode === "RANGE_SCALP"
     ? "RANGE regime; " + regimeData.rangePositionPct.toFixed(1) + "% from range low, CCI(20) " + regimeData.cci.toFixed(1) + ", 3m return " + (regimeData.r3 > 0 ? "+" : "") + regimeData.r3.toFixed(3) + "%, range width " + regimeData.widthPct.toFixed(2) + "%. Entry waits for the edge rejection."
     : votes.join(" + ") + " agree in " + regimeData.regime + "; 5m " + r5.toFixed(2) + "%, 15m " + r15.toFixed(2) + "%, 1h " + r60.toFixed(2) + "%, RSI " + (rsiAvailable ? rv.toFixed(1) : "unavailable") + ".";
   const bounceReason = bounce ? " Confirmed " + bounce.type + " after " + bounce.priorMovePct.toFixed(2) + "% prior " + (bounce.side === "LONG" ? "decline" : "rally") + ", " + bounce.reversalPct.toFixed(2) + "% reversal, " + (bounce.confirm3mPct > 0 ? "+" : "") + bounce.confirm3mPct.toFixed(2) + "% over 3m; pivot " + bounce.pivotAgeMinutes + "m ago and 5m EMA " + bounce.emaConfirmed.toLowerCase() + "." : "";
   return {
     symbol, side, entry:cur, stopPct:stop, targetPct:target, confidence:technicalScore,
-    scoreComponents, scoreModel:"ciel-shared-v1", scoreDetails:sharedTechnicalScore, strategy:votes.join("+"),
+    scoreComponents, scoreModel:"regime-switch-v3", strategy:votes.join("+"),
     reason:baseReason + bounceReason, rsi:rsiAvailable ? rv : null, bounce,
     regime:regimeData.regime, mode, holdMinutes:mode === "RANGE_SCALP" ? 12 : 180,
     cci:mode === "RANGE_SCALP" ? regimeData.cci : null,
