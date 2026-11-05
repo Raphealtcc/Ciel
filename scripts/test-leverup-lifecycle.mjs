@@ -51,6 +51,9 @@ const args = {
   preflight: { preflightPassed: true, status: "AVAILABLE", requestedLeverage: 100, marketMaxLeverage: 100, maxLeverageForNotional: 100, pairBase: "0x" + "11".repeat(20), checkedAt: Date.now() },
   dependencies: {
     ensureAllowance: async () => { approvalCalls++; return { status: "APPROVED" }; },
+    readTokenBalancesAndAllowances: async (_trader, tokens) => Object.fromEntries(tokens.map((token) => [
+      token.toLowerCase(), { balance: 5n, allowance: 5n },
+    ])),
     submit: async () => { submitCalls++; return { intentHash: "0x" + "ab".repeat(32), intent: { actionDataHash: "0x" + "cd".repeat(32) } }; },
   },
 };
