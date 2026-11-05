@@ -635,10 +635,14 @@ export async function runLeverUpPositionManager({ env, db, now = Date.now(), dep
   const fetchImpl = dependencies.fetchImpl || fetch;
   const client = dependencies.publicClient || createLeverUpPublicClient(env?.LEVERUP_RPC_URL || "https://rpc2.monad.xyz");
   let apiPositions = [];
+  let positionIndexError = null;
   try { apiPositions = await (dependencies.fetchOpenPositions || fetchOpenPositions)(traderAddress, { fetchImpl }); }
-  catch { /* on-chain discovery below remains authoritative when the indexer is unavailable */ }
+  catch (error) { positionIndexError = errorMessage(error); }
   const entries = await readEntryMetadata(db);
   const pairBases = collectLeverUpPairBases(apiPositions, entries);
+  if (!pairBases.length && positionIndexError) {
+    return { status: "BLOCKED_POSITION_DISCOVERY", checked: 0, submitted: 0, reconciliation, discoveryError: positionIndexError };
+  }
   if (!pairBases.length) {
     const settlements = await reconcileClosedSettlements({ env, db, now, dependencies })
       .catch((error) => ({ error: String(error?.message || error).slice(0, 200) }));
