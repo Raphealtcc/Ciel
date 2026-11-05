@@ -5,6 +5,7 @@ import {
   http,
   isAddress,
   maxUint256,
+  formatUnits,
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { LEVERUP_1CT } from "./leverup-1ct.js";
@@ -130,4 +131,48 @@ export async function ensureLeverUpTokenAllowance({
 
   return { status: "APPROVED", traderAddress, tokenAddress, spender,
     allowance: confirmedAllowance.toString(), requiredAmount: amount.toString(), approvalTxHash };
+}
+
+/**
+ * Read-only simulation of an exact ERC-20 approval for the fixed 1CT spender.
+ * Uses eth_call + eth_estimateGas only. It never creates a wallet client or
+ * broadcasts a transaction.
+ */
+export async function simulateLeverUpTokenApproval({ env, tokenAddress, requiredAmount, publicClient }) {
+  if (String(env?.LEVERUP_LIVE_TRADING).toLowerCase() !== "false" ||
+      String(env?.LEVERUP_KILL_SWITCH).toLowerCase() !== "true") {
+    throw new Error("APPROVAL_SIMULATION_REQUIRES_LIVE_OFF_AND_KILL_SWITCH_ON");
+  }
+  const traderAddress = String(env?.LEVERUP_TRADER_ADDRESS || "");
+  if (!isAddress(traderAddress)) throw new Error("LEVERUP_TRADER_ADDRESS_MISSING_OR_INVALID");
+  if (!isAddress(tokenAddress) || !APPROVABLE_TOKENS.has(tokenAddress.toLowerCase())) throw new Error("LEVERUP_APPROVAL_TOKEN_NOT_ALLOWLISTED");
+  const amount = BigInt(requiredAmount);
+  if (amount <= 0n || amount === maxUint256) throw new Error("LEVERUP_APPROVAL_AMOUNT_MUST_BE_PRECISE_AND_POSITIVE");
+  const signer = privateKeyToAccount(normalizedKey(env?.LEVERUP_TRADER_PRIVATE_KEY));
+  if (signer.address.toLowerCase() !== traderAddress.toLowerCase()) throw new Error("LEVERUP_TRADER_SIGNER_KEY_DOES_NOT_MATCH_TRADER_ADDRESS");
+  const rpcUrl = String(env?.LEVERUP_RPC_URL || "https://rpc2.monad.xyz");
+  const reader = publicClient || createPublicClient({ chain: MONAD, transport: http(rpcUrl) });
+  const spender = LEVERUP_1CT.diamond;
+  const [chainId, currentAllowance, nativeBalance, gasPrice] = await Promise.all([
+    reader.getChainId(),
+    reader.readContract({ address: tokenAddress, abi: ERC20_APPROVAL_ABI, functionName: "allowance", args: [traderAddress, spender] }),
+    reader.getBalance({ address: traderAddress }),
+    reader.getGasPrice(),
+  ]);
+  if (chainId !== 143) throw new Error("APPROVAL_SIMULATION_WRONG_CHAIN");
+  const request = { address: tokenAddress, abi: ERC20_APPROVAL_ABI, functionName: "approve", args: [spender, amount], account: traderAddress };
+  const [simulation, gas] = await Promise.all([reader.simulateContract(request), reader.estimateContractGas(request)]);
+  if (simulation?.result === false) throw new Error("APPROVAL_SIMULATION_RETURNED_FALSE");
+  const gasCost = BigInt(gas) * BigInt(gasPrice);
+  return {
+    status: "SIMULATION_PASS", chainId, traderAddress, tokenAddress, spender,
+    currentAllowanceRaw: BigInt(currentAllowance).toString(), requiredApprovalRaw: amount.toString(),
+    allowanceAlreadySufficient: BigInt(currentAllowance) >= amount,
+    estimatedGas: BigInt(gas).toString(), gasPriceWei: BigInt(gasPrice).toString(),
+    estimatedGasCostWei: gasCost.toString(), estimatedGasCostMon: formatUnits(gasCost, 18),
+    nativeBalanceWei: BigInt(nativeBalance).toString(), nativeBalanceMon: formatUnits(BigInt(nativeBalance), 18),
+    sufficientNativeBalanceForEstimatedGas: BigInt(nativeBalance) >= gasCost,
+    simulationResult: simulation?.result === undefined ? "CALL_SUCCEEDED" : String(simulation.result),
+    transactionBroadcast: false,
+  };
 }
