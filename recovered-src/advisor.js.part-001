@@ -1,3 +1,4 @@
+import { scoreTechnicalEvidence } from "../src/technical-scoring.js";
 // src/advisor.ts
 var MAX_AGE = 12e4;
 var CYCLE = 3e5;
