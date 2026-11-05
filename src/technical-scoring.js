@@ -12,6 +12,7 @@ export function scoreTechnicalEvidence({
   side,
   trendAligned,
   momentumReturns = [],
+  momentumVolatilityPerMinutePct = null,
   structureConfirmed = null,
   rsi = null,
 }) {
@@ -35,17 +36,18 @@ export function scoreTechnicalEvidence({
   }
 
   const horizons = ["5M", "15M", "1H"];
+  const periods = [5, 15, 60];
+  const volatility = toFinite(momentumVolatilityPerMinutePct);
   for (let i = 0; i < horizons.length; i++) {
     const value = toFinite(momentumReturns[i]);
-    if (value == null) {
-      missing.push("MOMENTUM_" + horizons[i]);
-      continue;
-    }
+    if (value == null) { missing.push("MOMENTUM_" + horizons[i]); continue; }
+    if (!(volatility > 0)) { missing.push("MOMENTUM_VOLATILITY"); continue; }
     available += WEIGHTS.momentumPerHorizon;
     const aligned = direction === "LONG" ? value > 0 : value < 0;
-    const points = aligned ? WEIGHTS.momentumPerHorizon : 0;
+    const normalizedStrength = Math.abs(value) / (volatility * Math.sqrt(periods[i]));
+    const points = aligned ? WEIGHTS.momentumPerHorizon * clamp(normalizedStrength / 1.5, 0, 1) : 0;
     score += points;
-    components.push({ key: "MOMENTUM_" + horizons[i], points, max: WEIGHTS.momentumPerHorizon, status: aligned ? "ALIGNED" : "CONFLICTING" });
+    components.push({ key: "MOMENTUM_" + horizons[i], points: Number(points.toFixed(2)), max: WEIGHTS.momentumPerHorizon, normalizedStrength: Number(normalizedStrength.toFixed(2)), status: aligned ? "ALIGNED" : "CONFLICTING" });
   }
 
   if (typeof structureConfirmed === "boolean") {
