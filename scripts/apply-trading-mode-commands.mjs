@@ -4,7 +4,7 @@ import path from "node:path";
 const file = path.join(process.cwd(), "reconstructed", "patched-worker.js");
 let source = await readFile(file, "utf8");
 const importLine = 'import { writeTradingControls } from "../src/trading-controls.js";';
-if (!source.includes(importLine)) source = importLine + "\n" + source;
+if (!source.includes(importLine) && !source.includes('import { readTradingControl, writeTradingControls } from "../src/trading-controls.js";')) source = importLine + "\n" + source;
 
 const helper = `async function handleTradingModeCommand(env, command) {
   const keys = {
