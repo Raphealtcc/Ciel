@@ -24,12 +24,21 @@ if (!source.includes(profitsImport)) source = profitsImport + "\n" + source;
 if (!source.includes("function compactCielSetupMessage(")) {
   const compactHelper = `function compactCielSetupMessage(p, s, r, monUsd, forecast) {
   const mode = s?.mode === "RANGE_SCALP" ? "RANGE" : "TREND";
-  const confidence = Math.round(Number(s?.confidence || 0) * 100);
+  const score = Math.round(Number(s?.confidence || 0) * 100);
+  const details = s?.scoreDetails || null;
+  const coverage = details ? Number(details.coveragePct || 0) : null;
+  const components = Array.isArray(details?.components)
+    ? details.components.map((item) => item.key + " " + item.points + "/" + item.max)
+    : [];
+  const missing = Array.isArray(details?.missing) ? details.missing : [];
   const review = String(r?.verdict || "WAIT");
   const forecastStatus = forecast?.available ? "forecast ready" : "forecast unavailable";
   const hold = Number(s?.holdMinutes || (mode === "RANGE" ? 12 : 180));
   return [
-    (review === "APPROVE" && forecast?.available ? "📈 " : "🟡 ") + String(p?.side || "—") + " " + String(p?.symbol || "—") + " · " + mode + " · " + confidence + "/100",
+    (review === "APPROVE" && forecast?.available ? "📈 " : "🟡 ") + String(p?.side || "—") + " " + String(p?.symbol || "—") + " · " + mode + " · technical " + score + "/100",
+    "Evidence coverage: " + (coverage == null ? "unavailable" : coverage + "%") + " · " + String(s?.scoreModel || "legacy"),
+    "Breakdown: " + (components.join(" · ") || "unavailable"),
+    missing.length ? "Missing evidence: " + missing.join(", ") : "All configured evidence groups available",
     "Entry $" + fmt(p?.entry_price) + " | SL $" + fmt(p?.stop_price) + " | TP $" + fmt(p?.target_price),
     "Review " + review + " · " + forecastStatus + " · hold ≤" + hold + "m",
     "PROPOSED — not tracking"
