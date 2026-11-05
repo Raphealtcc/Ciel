@@ -18,6 +18,6 @@ assert.equal(full.score, 100);
 assert.match(full.interpretation, /not a win probability/i);
 
 const missing = scoreTechnicalEvidence({ side: "LONG", trendAligned: true, momentumReturns: [0.1, null, 0.2], structureConfirmed: null, rsi: null });
-assert.equal(missing.coveragePct, 55);
+assert.equal(missing.coveragePct, 45);
 assert.ok(missing.score <= 45);
 console.log("PASS: shared technical scoring is fixed-weight, conservative, coverage-aware and not a win probability.");
