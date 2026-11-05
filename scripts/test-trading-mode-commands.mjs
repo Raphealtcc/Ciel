@@ -12,7 +12,9 @@ for (const command of ["/paperactive", "/paperdeactivate", "/liveactive", "/live
 assert.ok(worker.includes("ciel:control:paper-enabled"));
 assert.ok(worker.includes("ciel:control:live-enabled"));
 assert.ok(worker.includes("ciel:control:live-entry-enabled"));
-assert.ok(isolation.includes('await env?.CIEL_STATE?.get("ciel:control:paper-enabled")'));
+assert.ok(worker.includes("writeTradingControls(env, [[keys.live, true], [keys.entries, true]])"));
+assert.ok(isolation.includes("readTradingControl(env"));
+assert.ok(isolation.includes('await readTradingControl(env, "ciel:control:paper-enabled", null)'));
 assert.ok(advisor.includes('env.CIEL_STATE.get("ciel:control:live-enabled")'));
 assert.ok(advisor.includes('liveEntryOverride !== "false"'));
 assert.ok(coordinator.includes('entryOverride === "false"'));
