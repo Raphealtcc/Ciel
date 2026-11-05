@@ -3,7 +3,7 @@ import { evaluateLeverUpNativeSeries } from "../src/leverup-native-feed.js";
 
 const now = 1_800_000_000_000;
 const rows = Array.from({length: 65}, (_, i) => ({
-  symbol: "BTC", price: 100 + i * 0.1, observed_at_ms: now - (64 - i) * 60_000
+  symbol: "BTC", price: 100 + i * 0.1 + [0, 0.2, -0.3, 0][i % 4], observed_at_ms: now - (64 - i) * 60_000
 }));
 const long = evaluateLeverUpNativeSeries("BTC", rows, now);
 assert.equal(long.status, "SIGNAL_CANDIDATE");
