@@ -73,7 +73,6 @@ export function evaluateLeverUpNativeSeries(symbol, rows, now = Date.now()) {
     ? "LONG"
     : fast < slow && m5 < 0 && m15 < 0 && h1 < 0 && strength >= 28 && strength <= 48
       ? "SHORT" : null;
-  const alignment = [m5, m15, h1].filter((value) => direction === "LONG" ? value > 0 : direction === "SHORT" ? value < 0 : false).length;
   const technicalScore = direction ? scoreTechnicalEvidence({
     side: direction,
     trendAligned: direction === "LONG" ? fast > slow : fast < slow,
