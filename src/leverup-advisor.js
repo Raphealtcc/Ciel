@@ -397,8 +397,12 @@ export async function runLeverUpDiagnostics({ env, now = Date.now(), dependencie
     try {
       const pairBase = String(snapshot.market?.base || snapshot.pairView?.base || "");
       if (!/^0x[0-9a-fA-F]{40}$/.test(pairBase)) throw new Error("LEVERUP_PAIR_BASE_INVALID");
+      // Diagnostics may run while live mode is configured, but this signer check is
+      // always an isolated synthetic dry-run. It cannot submit an intent or use
+      // the live execution configuration.
       const signed = await signIntentDryRun({
-        env, traderAddress, agentAddress, agentAuthorization: auth,
+        env: { ...env, LEVERUP_LIVE_TRADING: "false", LEVERUP_KILL_SWITCH: "true" },
+        traderAddress, agentAddress, agentAuthorization: auth,
         action: OneClickAction.MARKET_OPEN,
         nonce: (BigInt(snapshot.lastAgentNonce || "0") + 1n).toString(),
         deadline: Math.floor(now / 1000) + 300,
