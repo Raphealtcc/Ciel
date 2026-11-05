@@ -12,7 +12,12 @@ assert.ok(source.includes("PAPER_MARKET_TIER_UNSUPPORTED"));
 assert.ok(!source.includes('reason:"PAPER_MARKET_TIER_UNSUPPORTED"}); continue;'));
 assert.ok(!source.includes('reason:"PAPER_INSUFFICIENT_FREE_MARGIN",requiredPaperMargin,availablePaperMargin:paperCash}); continue;'));
 assert.ok(!source.includes('reason:"PAPER_POSITION_ALREADY_OPEN"}); continue;'));
-assert.ok(live.includes("Number(reviewed?.liveMarginMon ?? env?.LEVERUP_MAX_TRADE_MARGIN_MON)"));
+// Live sizing must use the independently calculated USD allocation converted
+// with the fresh MON/USD quote, not the paper margin or the retired MON env var.
+assert.ok(live.includes("const usdLimits = leverUpUsdLimitsToMon({ env, monUsdPrice });"));
+assert.ok(live.includes("const { totalAllocationMon, reserveMon, maxTradeMarginMon } = usdLimits;"));
+assert.ok(live.includes("Number(reviewed?.liveMarginMon ?? maxTradeMarginMon)"));
 assert.ok(!live.includes("Number(reviewed?.paperMarginMon)"));
+assert.ok(!live.includes("env?.LEVERUP_MAX_TRADE_MARGIN_MON"));
 assert.ok(source.includes("paper_trading_enabled: paperTradingEnabled"));
-console.log("PASS: paper pause, independent live candidate discovery and LeverUp sizing, preserved adaptive history.");
+console.log("PASS: paper pause, independent live candidate discovery, fresh-quote USD allocation sizing, and preserved adaptive history.");
