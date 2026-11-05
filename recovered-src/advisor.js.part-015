@@ -11,6 +11,13 @@ G SOURCES (headlines only)"
 }
 
 async function runAdvisorCycle(env, prices, now, lastTickAt, priceHistory, liveEvidence, paperStorage) {
+  const liveOverride = await env?.CIEL_STATE?.get("ciel:control:live-enabled").catch(() => null);
+  const liveMode = String(liveOverride ?? env?.LEVERUP_LIVE_TRADING).toLowerCase() === "true" &&
+    String(env?.LEVERUP_KILL_SWITCH).toLowerCase() === "false";
+  if (liveMode && String(env?.LEVERUP_NATIVE_SIGNAL_FEED_ENABLED).toLowerCase() !== "true") {
+    console.log("CIEL live signal cycle skipped: LeverUp-native market data is not enabled; Hyperliquid-derived signals are not eligible for live mode.");
+    return;
+  }
   if (now - lastTickAt > MAX_AGE || !(prices.MON > 0)) return;
   const slot = Math.floor(now / CYCLE), key = "ciel:advisor:last-slot";
   const previous = await env.CIEL_STATE.get(key);
