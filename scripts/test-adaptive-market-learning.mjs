@@ -62,7 +62,7 @@ assert.equal(analyzeCoreTrendContinuation("BTC",trendCandles(1).slice(0,20),now)
 
 assert.ok(source.includes("function analyzeCoreTrendContinuation"));
 assert.ok(source.includes("CORE_TREND_CONTINUATION"));
-assert.ok(source.includes("5M_TREND_CONTINUATION+BREAKOUT_RETEST"));
+assert.ok(source.includes("5M_STRUCTURE+EMA+MACD+RSI+BREAKOUT_RETEST"));
 assert.ok(source.includes("corePullbackScalp: modeStats(\"CORE_PULLBACK_SCALP\")"));
 assert.ok(source.includes("coreTrendContinuation: modeStats(\"CORE_TREND_CONTINUATION\")"));
 assert.ok(source.includes('"PULLBACK_RECLAIM_VOLUME_OR_FRESHNESS_GATE"'));
