@@ -245,8 +245,8 @@ export async function executeLeverUpEntry({ env, db, candidate, signalId, snapsh
   const portfolioRisk = await readPortfolioRiskFromLedger(db, now);
   const risk = evaluateLeverUpPortfolioRisk({
     requestedLeverage: plan.selectedLeverage,
-    totalAllocationMon: env.LEVERUP_TOTAL_ALLOCATION_MON ?? 50,
-    reserveMon: env.LEVERUP_RESERVE_MON ?? 25,
+    totalAllocationMon: plan.totalAllocationMon ?? env.LEVERUP_TOTAL_ALLOCATION_MON ?? 50,
+    reserveMon: plan.reserveMon ?? env.LEVERUP_RESERVE_MON ?? 25,
     availableWmonMon: wmonBalance, requestedMarginMon: margin, entryBudgetMon: entryBudget,
     currentOpenPositions: snapshot.indexedPositions || [],
     maxConcurrentPositions: env.LEVERUP_MAX_CONCURRENT_POSITIONS ?? 1,

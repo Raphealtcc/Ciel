@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import assert from "node:assert/strict";
-import { prepareLeverUpAdvisorPlan, formatLeverUpAdvisorLine } from "../src/leverup-advisor.js";
+import { prepareLeverUpAdvisorPlan, formatLeverUpAdvisorLine, leverUpUsdLimitsToMon } from "../src/leverup-advisor.js";
 import { LEVERUP_TOKENS } from "../src/leverup-readonly.js";
 
 const trader = "0x7aCd7C622a87a148CcdEBd213D7C4070E200186F";
@@ -19,6 +19,8 @@ const baseSnapshot = (ratio) => ({
 const env = {
   LEVERUP_PREFLIGHT_ENABLED: "true", LEVERUP_LIVE_TRADING: "false", LEVERUP_KILL_SWITCH: "true",
   LEVERUP_MIN_LEVERAGE: "50", LEVERUP_TOTAL_ALLOCATION_MON: "50", LEVERUP_RESERVE_MON: "25",
+  LEVERUP_TOTAL_ALLOCATION_USD: "0.9129835", LEVERUP_RESERVE_USD: "0.45649175",
+  LEVERUP_MAX_TRADE_MARGIN_USD: "0.45649175", LEVERUP_MIN_TRADE_MARGIN_USD: "0.23737571",
   LEVERUP_COLLATERAL_50X_USD: "0.43", LEVERUP_COLLATERAL_100X_USD: "0.23", LEVERUP_MAX_TRADE_MARGIN_MON: "25",
   LEVERUP_TRADER_ADDRESS: trader, LEVERUP_AGENT_ADDRESS: agent,
   CIEL_STATE: { put: async () => {} }, DB: { prepare: () => ({}) },
@@ -55,6 +57,16 @@ assert.equal(collateral50({ leverage: 50, minimumNotionalUsd: 20 }), 0.43);
 assert.equal(collateral50({ leverage: 75, minimumNotionalUsd: 20 }), 0.33);
 assert.equal(collateral50({ leverage: 100, minimumNotionalUsd: 20 }), 0.23);
 assert.equal(collateral50({ leverage: 150, minimumNotionalUsd: 20 }), 0.23);
+const limitsAtReference = leverUpUsdLimitsToMon({ env, monUsdPrice: 0.01825967 });
+assert.equal(limitsAtReference.totalAllocationMon, 50);
+assert.equal(limitsAtReference.reserveMon, 25);
+assert.equal(limitsAtReference.maxTradeMarginMon, 25);
+assert.equal(limitsAtReference.minimumTradeMarginMon, 13);
+const limitsAfterPriceRise = leverUpUsdLimitsToMon({ env, monUsdPrice: 0.03651934 });
+assert.equal(limitsAfterPriceRise.totalAllocationMon, 25);
+assert.equal(limitsAfterPriceRise.reserveMon, 12.5);
+assert.equal(limitsAfterPriceRise.maxTradeMarginMon, 12.5);
+assert.equal(limitsAfterPriceRise.minimumTradeMarginMon, 6.5);
 assert.equal(collateral50({ leverage: 75, minimumNotionalUsd: 40 }), 0.66);
 assert.throws(() => collateral50({ leverage: 25, minimumNotionalUsd: 20 }), /SCHEDULE_INPUT_INVALID/);
 
@@ -68,8 +80,8 @@ assert.equal(ready.killSwitchEnabled, true);
 assert.equal(ready.selectedLeverage, 100);
 assert.ok(Math.abs(seenPlanArgs.snapshot.collateralRatio - (20 / (100 * 0.23))) < 1e-9,
   "100x collateral ratio must be derived from the $0.23 minimum, not a hardcoded protocol ratio");
-assert.ok(Math.abs(ready.minimumMarginMon - (0.23 / 0.019038)) < 1e-6,
-  "minimum WMON must be calculated from the $0.23 USD collateral and live MON/USD oracle");
+assert.ok(Math.abs(ready.minimumMarginMon - (0.23737571 / 0.019038)) < 1e-6,
+  "minimum WMON must preserve the prior 13 MON USD-equivalent floor, subject to venue minimum collateral");
 const expectedLiveMarginMon = Math.max(12, ready.minimumMarginMon);
 assert.equal(seenPlanArgs.desiredMarginMon, Math.ceil(ready.minimumMarginMon * 1e8) / 1e8,
   "minimum margin passed to the plan must round upward to avoid floating-point underfunding");
@@ -77,8 +89,10 @@ assert.ok(Math.abs(seenPlanArgs.desiredMarginMon - expectedLiveMarginMon) < 1e-9
   "LeverUp must use its independent live margin proposal, clamped only to the venue minimum collateral");
 assert.ok(seenPlanArgs.desiredMarginMon > reviewed.paperMarginMon,
   "LeverUp sizing must not inherit the smaller paper margin");
-assert.equal(seenPlanArgs.maxTradeMarginMon, 25, "live margin ceiling must use the configured LeverUp cap");
-assert.equal(seenPlanArgs.reserveMon, 25);
+assert.ok(Math.abs(seenPlanArgs.maxTradeMarginMon - (0.45649175 / 0.019038)) < 1e-6,
+  "live margin ceiling must convert the fixed USD cap using the fresh MON/USD oracle");
+assert.ok(Math.abs(seenPlanArgs.reserveMon - (0.45649175 / 0.019038)) < 1e-6);
+assert.ok(Math.abs(ready.totalAllocationMon - (0.9129835 / 0.019038)) < 1e-6);
 assert.ok(seenPlanArgs.stopLossPriceRaw > 0n && seenPlanArgs.takeProfitPriceRaw > 0n);
 assert.equal(seenPersist.options.decision, "PASS");
 assert.equal(ready.ledgerPersisted, true);

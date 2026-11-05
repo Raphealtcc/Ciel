@@ -7,6 +7,46 @@ import { prepareLeverUpExecution, executeLeverUpEntry, verifyLeverUpCoordinatorD
 import { inspectLeverUpTraderSigner } from "./leverup-approval.js";
 
 const WMON = LEVERUP_TOKENS.WMON.toLowerCase();
+// These USD limits preserve the prior MON caps at the reference MON/USD quote
+// used when the 50/25/25 MON limits were configured. Convert with the fresh
+// LeverUp MON/USD oracle on every preflight; never let MON appreciation expand
+// the USD exposure ceiling.
+const DEFAULT_LEVERUP_USD_LIMITS = Object.freeze({
+  totalAllocation: 0.9129835,
+  reserve: 0.45649175,
+  maxTradeMargin: 0.45649175,
+  minTradeMargin: 0.23737571,
+});
+const floorMon = (usd, price) => Math.floor((usd / price) * 1e8) / 1e8;
+const ceilMon = (usd, price) => Math.ceil((usd / price) * 1e8) / 1e8;
+export function leverUpUsdLimitsToMon({ env = {}, monUsdPrice }) {
+  const price = Number(monUsdPrice);
+  if (!Number.isFinite(price) || price <= 0) throw new Error("MON_USD_PRICE_UNAVAILABLE");
+  const readUsd = (key, fallback) => {
+    const raw = env?.[key];
+    if (raw == null || raw === "") return fallback;
+    const value = Number(raw);
+    if (!Number.isFinite(value) || value <= 0) throw new Error(key + "_INVALID");
+    return value;
+  };
+  const totalAllocationUsd = readUsd("LEVERUP_TOTAL_ALLOCATION_USD", DEFAULT_LEVERUP_USD_LIMITS.totalAllocation);
+  const reserveUsd = readUsd("LEVERUP_RESERVE_USD", DEFAULT_LEVERUP_USD_LIMITS.reserve);
+  const maxTradeMarginUsd = readUsd("LEVERUP_MAX_TRADE_MARGIN_USD", DEFAULT_LEVERUP_USD_LIMITS.maxTradeMargin);
+  const minTradeMarginUsd = readUsd("LEVERUP_MIN_TRADE_MARGIN_USD", DEFAULT_LEVERUP_USD_LIMITS.minTradeMargin);
+  const totalAllocationMon = floorMon(totalAllocationUsd, price);
+  const reserveMon = ceilMon(reserveUsd, price);
+  const allocationCeilingMon = Math.max(0, totalAllocationMon - reserveMon);
+  const maxTradeMarginMon = Math.min(floorMon(maxTradeMarginUsd, price), allocationCeilingMon);
+  const minimumTradeMarginMon = ceilMon(minTradeMarginUsd, price);
+  if (!(totalAllocationMon > reserveMon) || !(maxTradeMarginMon > 0)) {
+    throw new Error("LEVERUP_USD_ALLOCATION_LIMITS_INVALID_AT_CURRENT_MON_PRICE");
+  }
+  return {
+    monUsdPrice: price, totalAllocationUsd, reserveUsd, maxTradeMarginUsd, minTradeMarginUsd,
+    totalAllocationMon, reserveMon, allocationCeilingMon, maxTradeMarginMon, minimumTradeMarginMon,
+  };
+}
+
 const errorMessage = (error) => String(error?.message || error || "Unknown LeverUp preflight failure").slice(0, 220);
 const monAmount = (raw) => { try { return (Number(BigInt(raw || "0")) / 1e18).toFixed(4); } catch { return "unavailable"; } };
 const jsonSafe = (value) => JSON.parse(JSON.stringify(value, (_key, item) => typeof item === "bigint" ? item.toString() : item));
@@ -116,16 +156,13 @@ export async function prepareLeverUpAdvisorPlan({
     collateralRatio = minimumNotionalUsd / (leverageForMinimum * minimumCollateralUsd);
     if (!(collateralRatio > 0 && collateralRatio <= 1)) throw new Error("DERIVED_COLLATERAL_RATIO_OUT_OF_RANGE");
     snapshot.collateralRatio = collateralRatio;
-    const minimumMarginMon = Math.ceil((minimumCollateralUsd / monUsdPrice) * 1e8) / 1e8;
-    const totalAllocationMon = Number(env?.LEVERUP_TOTAL_ALLOCATION_MON || 50);
-    const reserveMon = Number(env?.LEVERUP_RESERVE_MON ?? totalAllocationMon * 0.5);
-    const allocationCeiling = Math.max(0, totalAllocationMon - reserveMon);
-    const configuredTradeCeiling = Number(env?.LEVERUP_MAX_TRADE_MARGIN_MON);
-    const maxTradeMarginMon = Number.isFinite(configuredTradeCeiling) && configuredTradeCeiling > 0
-      ? Math.min(configuredTradeCeiling, allocationCeiling)
-      : Math.min(minimumMarginMon, allocationCeiling);
+    if (!(monUsdPrice > 0)) throw new Error("MON_USD_PRICE_UNAVAILABLE");
+    const usdLimits = leverUpUsdLimitsToMon({ env, monUsdPrice });
+    const venueMinimumMarginMon = Math.ceil((minimumCollateralUsd / monUsdPrice) * 1e8) / 1e8;
+    const minimumMarginMon = Math.max(venueMinimumMarginMon, usdLimits.minimumTradeMarginMon);
+    const { totalAllocationMon, reserveMon, maxTradeMarginMon } = usdLimits;
     if (maxTradeMarginMon + 1e-9 < minimumMarginMon) throw new Error("VENUE_MINIMUM_MARGIN_EXCEEDS_CIEL_TRADE_ALLOCATION");
-    const aiMargin = Number(reviewed?.liveMarginMon ?? env?.LEVERUP_MAX_TRADE_MARGIN_MON);
+    const aiMargin = Number(reviewed?.liveMarginMon ?? maxTradeMarginMon);
     const desiredMarginMon = Math.max(minimumMarginMon, Math.min(maxTradeMarginMon,
       Number.isFinite(aiMargin) && aiMargin > 0 ? aiMargin : minimumMarginMon));
 
@@ -141,9 +178,9 @@ export async function prepareLeverUpAdvisorPlan({
     const takeProfitPriceRaw = isLong ? oracleRaw * (10_000n + targetBps) / 10_000n : oracleRaw * (10_000n - targetBps) / 10_000n;
 
     const buildPlan = dependencies.buildPlan || buildMarketOpenPlan;
-    const plan = buildPlan({ snapshot, desiredMarginMon, maxTradeMarginMon, inferredLeverage,
+    const plan = { ...buildPlan({ snapshot, desiredMarginMon, maxTradeMarginMon, inferredLeverage,
       side: candidate.side, expectedHoldSeconds, reserveMon, stopLossPriceRaw, takeProfitPriceRaw,
-      requireExistingAllowance: false, now });
+      requireExistingAllowance: false, now }), totalAllocationMon, reserveMon, usdLimits };
     const authorized = Boolean(snapshot.agentAuthorization?.authorized && snapshot.agentAuthorization?.canMarketOpen);
     const status = authorized ? (liveMode ? "PREFLIGHT_PASS_LIVE_ENABLED" : "PREFLIGHT_PASS_LIVE_DISABLED") : "BLOCKED_AGENT_AUTHORIZATION";
     const reason = authorized
@@ -185,7 +222,8 @@ export async function prepareLeverUpAdvisorPlan({
           preflight: { status: "PREFLIGHT_PASS_LIVE_DISABLED", selectedLeverage: plan.selectedLeverage,
             inferredLeverage, marginMonUsed: plan.marginMonUsed, entryBudgetMon, stopRiskMon },
           account: { wmonBalanceMon, openPositions: snapshot.indexedPositions || [], staleFeed: false },
-          portfolio: {}, env, store: env.CIEL_STATE, now,
+          portfolio: {}, env: { ...env, LEVERUP_TOTAL_ALLOCATION_MON: String(totalAllocationMon),
+            LEVERUP_RESERVE_MON: String(reserveMon) }, store: env.CIEL_STATE, now,
         });
       } catch (error) { coordination = { status: "REJECTED", reason: errorMessage(error), risk: { reasons: ["PORTFOLIO_RISK_EVALUATION_FAILED"] } }; }
     }
@@ -195,7 +233,8 @@ export async function prepareLeverUpAdvisorPlan({
     const record = result(status, reason, {
       account, ledgerId, ledgerPersisted, inferredLeverage, selectedLeverage: plan.selectedLeverage,
       tierMaxLeverage: plan.tierMaxLeverage, marginMonUsed: plan.marginMonUsed, notionalUsd: plan.notionalUsd,
-      minimumMarginMon, reserveMon, maxTradeMarginMon, dryRunSigning, coordination,
+      minimumMarginMon, venueMinimumMarginMon, reserveMon, totalAllocationMon, maxTradeMarginMon,
+      usdLimits, dryRunSigning, coordination,
       estimatedProtocolCosts: plan.preflight?.estimatedProtocolCosts || null,
       preflight: plan.preflight || null, plan: jsonSafe(plan),
     });
@@ -248,13 +287,10 @@ export async function runLeverUpMarketPreflights({ env, traderAddress, agentAddr
       const collateralRatio = minimumNotionalUsd / (leverage * minimumCollateralUsd);
       if (!(collateralRatio > 0 && collateralRatio <= 1) || !(monUsdPrice > 0)) throw new Error("LIVE_COLLATERAL_OR_ORACLE_DATA_INVALID");
       snapshot.collateralRatio = collateralRatio;
-      const minimumMarginMon = Math.ceil((minimumCollateralUsd / monUsdPrice) * 1e8) / 1e8;
-      const totalAllocationMon = Number(env?.LEVERUP_TOTAL_ALLOCATION_MON || 50);
-      const reserveMon = Number(env?.LEVERUP_RESERVE_MON ?? totalAllocationMon * 0.5);
-      const allocationCeiling = Math.max(0, totalAllocationMon - reserveMon);
-      const configuredTradeCeiling = Number(env?.LEVERUP_MAX_TRADE_MARGIN_MON);
-      const maxTradeMarginMon = Number.isFinite(configuredTradeCeiling) && configuredTradeCeiling > 0
-        ? Math.min(configuredTradeCeiling, allocationCeiling) : allocationCeiling;
+      const usdLimits = leverUpUsdLimitsToMon({ env, monUsdPrice });
+      const venueMinimumMarginMon = Math.ceil((minimumCollateralUsd / monUsdPrice) * 1e8) / 1e8;
+      const minimumMarginMon = Math.max(venueMinimumMarginMon, usdLimits.minimumTradeMarginMon);
+      const { totalAllocationMon, reserveMon, maxTradeMarginMon } = usdLimits;
       if (maxTradeMarginMon + 1e-9 < minimumMarginMon) throw new Error("VENUE_MINIMUM_MARGIN_EXCEEDS_CIEL_TRADE_ALLOCATION");
       const oracle = BigInt(snapshot.oraclePriceRaw);
       const buildPlan = dependencies.buildPlan || buildMarketOpenPlan;
@@ -284,7 +320,8 @@ export async function runLeverUpMarketPreflights({ env, traderAddress, agentAddr
         marketStatus: snapshot.market?.status || null,
         executionVenue: snapshot.market?.executionVenue || null,
         selectedLeverage: leverage, marketMaxLeverage, minimumTierMaxLeverage: Number(minimumTier.maxLeverage),
-        minimumNotionalUsd, minimumCollateralUsd, minimumMarginMon,
+        minimumNotionalUsd, minimumCollateralUsd, minimumMarginMon, venueMinimumMarginMon,
+        totalAllocationMon, reserveMon, maxTradeMarginMon, usdLimits,
         plannedMarginMon: Number(plan.marginMonUsed), plannedNotionalUsd: Number(plan.notionalUsd),
         wmonBalanceMon: Number(BigInt(wmon.balance || "0")) / 1e18,
         wmonAllowanceRaw: wmonAllowance.toString(), wmonRequiredAllowanceRaw: wmonRequired.toString(),
