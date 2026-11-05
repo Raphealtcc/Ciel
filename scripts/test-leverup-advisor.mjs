@@ -23,7 +23,7 @@ const env = {
   LEVERUP_MAX_TRADE_MARGIN_USD: "0.45649175", LEVERUP_MIN_TRADE_MARGIN_USD: "0.23737571",
   LEVERUP_COLLATERAL_50X_USD: "0.43", LEVERUP_COLLATERAL_100X_USD: "0.23", LEVERUP_MAX_TRADE_MARGIN_MON: "25",
   LEVERUP_TRADER_ADDRESS: trader, LEVERUP_AGENT_ADDRESS: agent,
-  CIEL_STATE: { put: async () => {} }, DB: { prepare: () => ({}) },
+  CIEL_STATE: { put: async () => {} }, DB: { prepare: () => ({ bind() { return this; }, first: async () => null }) },
 };
 const candidate = { symbol: "BTC", side: "LONG", stopPct: 0.4, targetPct: 0.64, holdMinutes: 180, mode: "TREND_HOLD" };
 const advisorSource = await readFile(new URL("../src/leverup-advisor.js", import.meta.url), "utf8");
