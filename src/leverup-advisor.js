@@ -342,9 +342,13 @@ export async function runLeverUpMarketPreflights({ env, traderAddress, agentAddr
 export async function runLeverUpDiagnostics({ env, now = Date.now(), dependencies = {}, symbols = ["BTC", "ETH", "SOL"], skipCoordinator = false }) {
   const traderAddress = String(env?.LEVERUP_TRADER_ADDRESS || "");
   const agentAddress = String(env?.LEVERUP_AGENT_ADDRESS || "");
-  if (String(env?.LEVERUP_LIVE_TRADING).toLowerCase() !== "false" ||
-      String(env?.LEVERUP_KILL_SWITCH).toLowerCase() !== "true") {
-    return { ok: false, mode: "READ_ONLY_DRY_RUN", status: "BLOCKED_SAFETY_CONFIGURATION" };
+  const liveConfigured = String(env?.LEVERUP_LIVE_TRADING).toLowerCase() === "true";
+  const killSwitchActive = String(env?.LEVERUP_KILL_SWITCH).toLowerCase() !== "false";
+  const dryRunConfigured = !liveConfigured && killSwitchActive;
+  const liveConfiguredSafely = liveConfigured && !killSwitchActive;
+  if (!dryRunConfigured && !liveConfiguredSafely) {
+    return { ok: false, mode: "BLOCKED_SAFETY_CONFIGURATION", status: "BLOCKED_SAFETY_CONFIGURATION",
+      liveTradingEnabled: liveConfigured, killSwitchActive, orderSubmitted: false };
   }
   if (!/^0x[0-9a-fA-F]{40}$/.test(traderAddress) || !/^0x[0-9a-fA-F]{40}$/.test(agentAddress)) {
     return { ok: false, mode: "READ_ONLY_DRY_RUN", status: "BLOCKED_WALLET_CONFIGURATION" };
@@ -399,7 +403,7 @@ export async function runLeverUpDiagnostics({ env, now = Date.now(), dependencie
     (skipCoordinator || coordinator?.status === "PASS");
   return jsonSafe({
     ok: diagnosticsOk, status: diagnosticsOk ? "READ_ONLY_CHECKS_PASS" : "READ_ONLY_CHECKS_INCOMPLETE",
-    mode: "READ_ONLY_DRY_RUN", checkedAt: now, blockNumber: snapshot.blockNumber,
+    mode: liveConfiguredSafely ? "LIVE_READ_ONLY_PREFLIGHT" : "READ_ONLY_DRY_RUN", checkedAt: now, blockNumber: snapshot.blockNumber,
     traderWallet: traderAddress, agentWallet: agentAddress, traderSigning,
     traderSignerMatchesConfiguredWallet: traderSigning.matchesConfiguredTrader ?? false, signerKeyConfigured: keyConfigured,
     signerAddress: signing.signerAddress || null,
@@ -417,6 +421,6 @@ export async function runLeverUpDiagnostics({ env, now = Date.now(), dependencie
       canPartialClose: Boolean(auth.canPartialClose), authorizedAt: auth.authorizedAt || null,
     },
     lastAgentNonce: snapshot.lastAgentNonce || null, signing, marketPreflights, coordinator,
-    liveTradingEnabled: false, killSwitchActive: true, orderSubmitted: false,
+    liveTradingEnabled: liveConfiguredSafely, killSwitchActive, orderSubmitted: false,
   });
 }
