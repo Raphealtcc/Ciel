@@ -52,3 +52,18 @@ assert.match(report, /LONG BTC\/USD: \+10\.0000 USD/);
 assert.match(report, /gross before close fees \/ funding/i);
 assert.doesNotMatch(report, /PAPER TRADING/);
 console.log("PASS: live realized P&L and on-chain/oracle mark-to-market unrealized P&L are reported separately.");
+
+const degraded = await buildLeverUpProfitReport({
+  env: {
+    DB: db,
+    LEVERUP_TRADER_ADDRESS: "0x1111111111111111111111111111111111111111",
+    LEVERUP_RPC_URL: "https://rpc2.monad.xyz",
+  },
+  fetchImpl: async () => { throw new Error("oracle temporarily unavailable"); },
+  publicClient,
+});
+assert.match(degraded, /WMON \\(MON\\): \\+1\\.0000 token units/);
+assert.match(degraded, /UNAVAILABLE — oracle temporarily unavailable/);
+assert.match(degraded, /open-position count unavailable/);
+console.log("PASS: a mark/oracle outage does not erase realized P&L or report a false zero.");
+
