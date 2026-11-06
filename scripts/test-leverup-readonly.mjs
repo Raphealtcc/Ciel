@@ -15,6 +15,7 @@ import {
   readLastAgentNonce,
   normalizePairView,
   buildMarketOpenPlan,
+  LEVERUP_TOKENS,
 } from "../src/leverup-readonly.js";
 
 const tiers = [
@@ -295,7 +296,7 @@ const nativePlan = buildMarketOpenPlan({
 });
 assert.equal(nativePlan.mode, "ONCHAIN_NATIVE");
 assert.equal(nativePlan.actionValues[2], "0x0000000000000000000000000000000000000000");
-assert.equal(nativePlan.actionValues[3].toLowerCase(), LVMON.toLowerCase());
+assert.equal(nativePlan.actionValues[3].toLowerCase(), LEVERUP_TOKENS.LVMON.toLowerCase());
 assert.equal(nativePlan.feeToken, "0x0000000000000000000000000000000000000000");
 assert.equal(nativePlan.antiDdosFee, 0n);
 
