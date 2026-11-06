@@ -97,11 +97,24 @@ replaceExactlyOnce(
   "show the tier-aware paper cash requirement in the setup card",
 );
 
-replaceExactlyOnce(
-  '? "\\n\\n🧪 Paper: OPEN · " + candidate.side + " " + candidate.symbol + " · " + PAPER_LEVERAGE + "x · " + Number(paperResult.availableBalanceMon).toFixed(2) + " MON free"',
-  '? "\\n\\n🧪 Paper: OPEN · " + candidate.side + " " + candidate.symbol + " · " + paperResult.trade.leverage + "x · " + paperResult.trade.marginMon + " MON · " + Number(paperResult.availableBalanceMon).toFixed(2) + " MON free"',
-  "show actual margin and leverage in paper entry alert",
-);
+const paperAlertStart = source.indexOf("const paperLine = paperResult?.opened");
+if (paperAlertStart < 0 || source.indexOf("const paperLine = paperResult?.opened", paperAlertStart + 1) >= 0) {
+  throw new Error("show actual margin and leverage in paper entry alert: expected exactly one paperLine declaration");
+}
+const paperAlertSeparator = source.indexOf("\n        : ", paperAlertStart);
+if (paperAlertSeparator < 0) throw new Error("show actual margin and leverage in paper entry alert: missing paperLine fallback");
+const paperAlertPrefix = source.slice(paperAlertStart, paperAlertSeparator);
+if (!paperAlertPrefix.includes("PAPER_LEVERAGE") || !paperAlertPrefix.includes("paperResult.availableBalanceMon")) {
+  throw new Error("show actual margin and leverage in paper entry alert: unexpected source shape; refusing to patch");
+}
+source = source.slice(0, paperAlertStart) + paperAlertPrefix.replace(
+  /PAPER_LEVERAGE \+ "x · " \+ Number\(paperResult\.availableBalanceMon\)\.toFixed\(2\) \+ " MON free"/,
+  'paperResult.trade.leverage + "x · " + paperResult.trade.marginMon + " MON · " + Number(paperResult.availableBalanceMon).toFixed(2) + " MON free"'
+) + source.slice(paperAlertSeparator);
+if (source.slice(paperAlertStart, paperAlertSeparator).includes("PAPER_LEVERAGE")) {
+  throw new Error("show actual margin and leverage in paper entry alert: replacement did not apply");
+}
+console.log("Applied paper-simulation patch: show actual margin and leverage in paper entry alert");
 
 replaceExactlyOnce(
   '"🧪 CIEL PAPER TRADING — AUTOMATIC / 50x ONLY"',
