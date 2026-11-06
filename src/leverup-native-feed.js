@@ -136,6 +136,7 @@ export async function runLeverUpNativeSampler({ env, now = Date.now(), dependenc
   if (!storedResponse.ok || stored.ok !== true || !stored.samples) {
     throw new Error("LEVERUP_NATIVE_SAMPLE_STORAGE_FAILED: " + String(stored.error || storedResponse.status));
   }
+  const symbols = selected.map(([symbol]) => symbol);
   const bySymbol = new Map(symbols.map((symbol) => [symbol, stored.samples[symbol] || []]));
   const markets = symbols.map((symbol) => evaluateLeverUpNativeSeries(symbol, bySymbol.get(symbol), now));
   const warmed = markets.filter((market) => market.status !== "WARMING_UP" && market.status !== "STALE" && market.status !== "INSUFFICIENT_HISTORY");
