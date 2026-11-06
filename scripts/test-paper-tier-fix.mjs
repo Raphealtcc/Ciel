@@ -264,7 +264,8 @@ assert.ok(source.includes("paperCash + 1e-9 < requiredPaperMargin"));
 assert.ok(!source.includes("no new recommendation will be issued until a paper slot is free"));
 
 assert.ok(source.includes('const leverage = marketMaxLeverage >= 100 ? 100 : PAPER_LEVERAGE;'));
-assert.ok(source.includes('Margin: " + paperResult.trade.marginMon + " MON | leverage: " + paperResult.trade.leverage + "x'));
+assert.ok(source.includes('paperResult.trade.marginMon + " MON · "'), "paper entry alert must show actual reserved margin");
+assert.ok(source.includes('paperResult.trade.leverage + "x · "'), "paper entry alert must show actual executed leverage");
 
 assert.ok(source.includes("Reference price source: Hyperliquid mid; LeverUp settles against Pyth and applies per-pair pool slippage. Check LeverUp's live quote before entry."));
 assert.ok(source.includes("Hyperliquid market quality: 24h notional"));
