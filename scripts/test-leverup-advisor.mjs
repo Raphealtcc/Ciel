@@ -102,7 +102,7 @@ assert.equal(ready.liveExecutionEnabled, false);
 assert.equal(ready.killSwitchEnabled, true);
 assert.equal(ready.selectedLeverage, 100);
 assert.equal(seenPlanArgs.snapshot.collateralRatio, 1,
-  "100x collateral ratio must be derived from the $0.23 minimum, not a hardcoded protocol ratio");
+  "native-MON planning must not reuse the old collateral haircut inferred from USD estimates");
 assert.ok(Math.abs(ready.minimumMarginMon - (0.23737571 / 0.019038)) < 1e-6,
   "minimum WMON must preserve the prior 13 MON USD-equivalent floor, subject to venue minimum collateral");
 const expectedLiveMarginMon = Math.max(12, ready.minimumMarginMon);

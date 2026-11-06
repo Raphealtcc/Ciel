@@ -226,7 +226,7 @@ export async function prepareLeverUpAdvisorPlan({
       ? (liveMode
         ? "Live market, native-MON collateral, tier, margin and slippage checks passed; entry is simulated before direct on-chain submission."
         : "Live market, tier, margin, balance and fee checks passed. Exact token approvals are prepared for live mode; no approval transaction or order was signed or submitted.")
-      : "The LeverUp agent authorization is missing. No transaction was signed or submitted.";
+       : "The configured trader private key does not match the trader wallet. No transaction was signed or submitted.";
     let ledgerId = null, ledgerPersisted = false;
     try {
       const persist = dependencies.persistPreflight || persistLeverUpPreflight;
