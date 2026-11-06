@@ -67,6 +67,7 @@
       "GEMINI_MODEL": "gemini-3.5-flash-lite",
       "LEVERUP_AUTO_APPROVE": "true",
       "LEVERUP_RPC_URL": "https://rpc2.monad.xyz",
+      "LEVERUP_ENTRY_PRICE_TOLERANCE_BPS": "30",
       "MOVE_ALERT_PCT": "2.0",
       "TELEGRAM_WEBHOOK_URL": "",
       "TELEGRAM_STAGING_BOT_ID": "",
