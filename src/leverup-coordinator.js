@@ -1,3 +1,5 @@
+import { createWalletClient, defineChain, http } from "viem";
+import { privateKeyToAccount } from "viem/accounts";
 // Durable, idempotent LeverUp 1CT execution and position lifecycle.
 import { evaluateLeverUpPortfolioRisk } from "./leverup-risk.js";
 import {
@@ -10,6 +12,30 @@ import {
   readPairByBaseV4, readTokenBalancesAndAllowances, readAgentAuthorization, readLastAgentNonce,
   persistPositionFeeSnapshot, reconcileClosedPosition, persistSettlementReconciliation,
 } from "./leverup-readonly.js";
+
+const MONAD_ONCHAIN = defineChain({
+  id: 143, name: "Monad",
+  nativeCurrency: { name: "Monad", symbol: "MON", decimals: 18 },
+  rpcUrls: { default: { http: ["https://rpc2.monad.xyz"] } },
+});
+const OPEN_MARKET_ABI = [{
+  type: "function", name: "openMarketTradeV2", stateMutability: "payable",
+  inputs: [
+    { name: "data", type: "tuple", components: [
+      { name: "pairBase", type: "address" }, { name: "isLong", type: "bool" },
+      { name: "tokenIn", type: "address" }, { name: "lvToken", type: "address" },
+      { name: "amountIn", type: "uint96" }, { name: "qty", type: "uint128" },
+      { name: "price", type: "uint128" }, { name: "stopLoss", type: "uint128" },
+      { name: "takeProfit", type: "uint128" }, { name: "broker", type: "uint24" },
+    ]},
+    { name: "updateData", type: "tuple", components: [
+      { name: "pythPriceUpdateData", type: "bytes[]" },
+      { name: "pythProPriceUpdateData", type: "bytes[]" },
+    ]},
+    { name: "extraFee", type: "uint96" },
+  ],
+  outputs: [{ name: "tradeHash", type: "bytes32" }],
+}];
 
 const WMON = LEVERUP_TOKENS.WMON.toLowerCase();
 const ZERO = LEVERUP_1CT.zeroAddress;
@@ -64,9 +90,9 @@ async function findExistingIntent(db, signalId, idempotencyKey) {
   return db.prepare("SELECT * FROM leverup_execution_intents WHERE idempotency_key = ?").bind(idempotencyKey).first();
 }
 
-async function claimIntent(db, { signalId, action, pairBase, leverage, marginMon, notionalUsd, payload, now }) {
+async function claimIntent(db, { signalId, action, pairBase, leverage, marginMon, notionalUsd, payload, now, executionPath = "1ct" }) {
   if (!db?.prepare) throw new Error("LEVERUP_D1_LEDGER_UNAVAILABLE");
-  const idempotencyKey = "ciel:leverup:1ct:" + signalId;
+  const idempotencyKey = "ciel:leverup:" + executionPath + ":" + signalId;
   const existing = await findExistingIntent(db, signalId, idempotencyKey);
   if (existing) return { created: false, row: existing };
 
@@ -359,15 +385,107 @@ async function readPortfolioRiskFromLedger(db, now) {
   return { dailyRealizedLossMon, rollingDrawdownMon, aggregateStopRiskMon, source: "leverup_settlement_reconciliations+active_execution_intents" };
 }
 
+async function fetchLeverUpOnchainOracleUpdate(pairBase, fetchImpl = fetch) {
+  const response = await fetchImpl("https://service.leverup.xyz/v1/oracle/price/updates/by-position", {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      pairBase, collateral: LEVERUP_TOKENS.WMON, blockChain: "MONAD",
+      options: { includeEncodingData: true, includeFee: true, includePrice: true, includePublishTime: false },
+    }),
+  });
+  if (!response.ok) throw new Error("LEVERUP_ORACLE_UPDATE_HTTP_" + response.status);
+  const data = await response.json();
+  if (Array.isArray(data.failures) && data.failures.length) throw new Error("LEVERUP_ORACLE_UPDATE_FAILED: " + JSON.stringify(data.failures).slice(0, 180));
+  return {
+    updateData: { pythPriceUpdateData: data.pythPriceUpdateData || [], pythProPriceUpdateData: data.pythProPriceUpdateData || [] },
+    value: BigInt(data.updateFee || "0") + BigInt(data.verifition_fee || "0"),
+  };
+}
+
+export async function submitLeverUpNativeOnchainEntry({
+  env, db, signalId, candidate, plan, traderAddress, pairBase, oracleUpdate,
+  now = Date.now(), dependencies = {},
+}) {
+  if (!liveEnabled(env)) return { status: "LIVE_DISABLED", submitted: false };
+  const claim = await claimIntent(db, {
+    signalId, action: OneClickAction.MARKET_OPEN, pairBase,
+    leverage: plan.selectedLeverage, marginMon: plan.marginMonUsed, notionalUsd: plan.notionalUsd,
+    payload: { executionPath: "ONCHAIN_NATIVE", candidate, plan: serializable(plan), submittedAt: now },
+    now, executionPath: "onchain-native",
+  });
+  if (!claim.created) return { status: claim.row?.status || "DUPLICATE", duplicate: true, transactionHash: claim.row?.intent_hash || null };
+  let broadcastStarted = false;
+  try {
+    const rpcUrl = env?.LEVERUP_RPC_URL || "https://rpc2.monad.xyz";
+    const key = String(env?.LEVERUP_TRADER_PRIVATE_KEY || "").trim();
+    if (!/^0x[0-9a-fA-F]{64}$/.test(key)) throw new Error("LEVERUP_TRADER_PRIVATE_KEY_MISSING_OR_INVALID");
+    const account = privateKeyToAccount(key);
+    if (account.address.toLowerCase() !== String(traderAddress).toLowerCase()) throw new Error("LEVERUP_TRADER_SIGNER_ADDRESS_MISMATCH");
+    const client = dependencies.publicClient || createLeverUpPublicClient(rpcUrl);
+    const wallet = dependencies.walletClient || createWalletClient({ account, chain: MONAD_ONCHAIN, transport: http(rpcUrl) });
+    const v = plan.actionValues;
+    if (String(v[2]).toLowerCase() !== ZERO.toLowerCase() || String(v[3]).toLowerCase() !== LEVERUP_TOKENS.LVMON.toLowerCase()) {
+      throw new Error("NATIVE_MON_LVMON_COLLATERAL_PAIR_MISMATCH");
+    }
+    const amountIn = BigInt(v[4]);
+    const extraFee = BigInt(v[10] || 0);
+    const value = amountIn + extraFee + BigInt(oracleUpdate.value);
+    const balance = BigInt(await (dependencies.getBalance || client.getBalance.bind(client))({ address: traderAddress }));
+    if (balance < value + 20_000_000_000_000_000n) throw new Error("NATIVE_MON_BALANCE_INSUFFICIENT_FOR_COLLATERAL_OR_GAS");
+    const args = [{
+      pairBase: String(v[0]), isLong: Boolean(v[1]), tokenIn: ZERO, lvToken: LEVERUP_TOKENS.LVMON,
+      amountIn, qty: BigInt(v[5]), price: BigInt(v[6]), stopLoss: BigInt(v[7] || 0),
+      takeProfit: BigInt(v[8] || 0), broker: Number(v[9] || 0),
+    }, oracleUpdate.updateData, extraFee];
+    const request = await client.simulateContract({
+      account, address: LEVERUP_1CT.diamond, abi: OPEN_MARKET_ABI,
+      functionName: "openMarketTradeV2", args, value,
+    });
+    await updateIntent(db, signalId, "UNCERTAIN", {
+      payload: { executionPath: "ONCHAIN_NATIVE", candidate, plan: serializable(plan), oracleValue: oracleUpdate.value.toString(), submissionStartedAt: now },
+    });
+    broadcastStarted = true;
+    const hash = await wallet.writeContract(request.request);
+    await updateIntent(db, signalId, "SUBMITTED", {
+      intentHash: hash,
+      payload: { executionPath: "ONCHAIN_NATIVE", candidate, plan: serializable(plan), transactionHash: hash, oracleValue: oracleUpdate.value.toString(), submittedAt: now },
+    });
+    let receipt;
+    try { receipt = await client.waitForTransactionReceipt({ hash, timeout: 30_000 }); }
+    catch (error) {
+      await updateIntent(db, signalId, "PENDING", { lastError: "RECEIPT_PENDING: " + String(error?.message || error).slice(0, 120) });
+      return { status: "PENDING", submitted: true, transactionHash: hash, signalId };
+    }
+    if (receipt.status !== "success") {
+      await updateIntent(db, signalId, "REJECTED", { lastError: "ONCHAIN_MARKET_OPEN_TRANSACTION_REVERTED", payload: { executionPath: "ONCHAIN_NATIVE", candidate, plan: serializable(plan), transactionHash: hash, receiptBlock: String(receipt.blockNumber) } });
+      return { status: "REJECTED", submitted: true, transactionHash: hash, signalId, reason: "ONCHAIN_MARKET_OPEN_TRANSACTION_REVERTED" };
+    }
+    const positions = await (dependencies.readPositions || readPositionsV4)(traderAddress, pairBase, { publicClient: client });
+    const matches = (positions || []).filter((p) => Boolean(p.isLong) === (candidate.side === "LONG"));
+    if (matches.length === 1) {
+      const position = normalizePositionAccrual(matches[0]);
+      await updateIntent(db, signalId, "EXECUTED", {
+        payload: { executionPath: "ONCHAIN_NATIVE", candidate, plan: serializable(plan), transactionHash: hash, positionHash: position.positionHash, receiptBlock: String(receipt.blockNumber), executedAt: now },
+      });
+      return { status: "EXECUTED", submitted: true, transactionHash: hash, positionHash: position.positionHash, signalId };
+    }
+    await updateIntent(db, signalId, "SUBMITTED", {
+      payload: { executionPath: "ONCHAIN_NATIVE", candidate, plan: serializable(plan), transactionHash: hash, receiptBlock: String(receipt.blockNumber), keeperPending: true },
+    });
+    return { status: "SUBMITTED", submitted: true, transactionHash: hash, signalId, positionConfirmed: false, reason: "REQUEST_ACCEPTED_AWAITING_KEEPER_FILL" };
+  } catch (error) {
+    const message = String(error?.shortMessage || error?.message || error).slice(0, 260);
+    await updateIntent(db, signalId, broadcastStarted ? "UNCERTAIN" : "REJECTED", { lastError: message }).catch(() => void 0);
+    return { status: broadcastStarted ? "UNCERTAIN" : "REJECTED", submitted: broadcastStarted, signalId, reason: message };
+  }
+}
+
 export async function executeLeverUpEntry({ env, db, candidate, signalId, snapshot, plan, now = Date.now(), dependencies = {} }) {
   const [liveOverride, entryOverride] = env?.CIEL_STATE && typeof env.CIEL_STATE.get === "function"
     ? await Promise.all([env.CIEL_STATE.get("ciel:control:live-enabled"), env.CIEL_STATE.get("ciel:control:live-entry-enabled")])
     : [null, null];
   const effectiveEnv = liveOverride == null ? env : { ...env, LEVERUP_LIVE_TRADING: liveOverride };
   if (!liveEnabled(effectiveEnv) || entryOverride === "false") return { status: "LIVE_DISABLED", submitted: false };
-  if (!snapshot?.agentAuthorization?.authorized || !snapshot.agentAuthorization.canMarketOpen) {
-    return { status: "REJECTED", reason: "AGENT_MARKET_OPEN_PERMISSION_MISSING" };
-  }
   let executionPlan = plan;
   try {
     const fetchPrices = dependencies.fetchLatestOraclePrices || fetchLatestOraclePrices;
@@ -381,11 +499,11 @@ export async function executeLeverUpEntry({ env, db, candidate, signalId, snapsh
   } catch (error) {
     return { status: "REJECTED", submitted: false, reason: "FRESH_ORACLE_REFRESH_FAILED: " + String(error?.message || error).slice(0, 180) };
   }
-  const wmonBalance = Number(BigInt(snapshot.accountTokenStates?.[WMON]?.balance || "0")) / 1e18;
+  const nativeBalance = Number(BigInt(snapshot.nativeMonBalanceRaw || "0")) / 1e18;
+  const oracleUpdate = await fetchLeverUpOnchainOracleUpdate(snapshot.market.base, dependencies.fetchImpl || fetch)
+    .catch((error) => { throw new Error("ONCHAIN_ORACLE_UPDATE_FAILED: " + String(error?.message || error).slice(0, 160)); });
   const margin = Number(executionPlan.marginMonUsed);
-  const wmonFee = String(executionPlan.feeToken || ZERO).toLowerCase() === WMON
-    ? BigInt(executionPlan.antiDdosFee || 0) : 0n;
-  const entryBudget = Number(BigInt(executionPlan.amountInRaw) + BigInt(executionPlan.actionValues[10] || 0) + wmonFee) / 1e18;
+  const entryBudget = Number(BigInt(executionPlan.amountInRaw) + BigInt(executionPlan.actionValues[10] || 0) + BigInt(oracleUpdate.value)) / 1e18;
   const stopPct = Number(candidate.stopPct);
   const stopRiskMon = margin * Number(executionPlan.selectedLeverage) * stopPct / 100;
   const portfolioRisk = await readPortfolioRiskFromLedger(db, now);
@@ -393,7 +511,7 @@ export async function executeLeverUpEntry({ env, db, candidate, signalId, snapsh
     requestedLeverage: executionPlan.selectedLeverage,
     totalAllocationMon: executionPlan.totalAllocationMon ?? env.LEVERUP_TOTAL_ALLOCATION_MON ?? 50,
     reserveMon: executionPlan.reserveMon ?? env.LEVERUP_RESERVE_MON ?? 25,
-    availableWmonMon: wmonBalance, requestedMarginMon: margin, entryBudgetMon: entryBudget,
+    availableWmonMon: nativeBalance, requestedMarginMon: margin, entryBudgetMon: entryBudget,
     currentOpenPositions: snapshot.indexedPositions || [],
     maxConcurrentPositions: env.LEVERUP_MAX_CONCURRENT_POSITIONS ?? 1,
     proposedStopRiskMon: stopRiskMon, aggregateStopRiskMon: portfolioRisk.aggregateStopRiskMon,
@@ -405,19 +523,10 @@ export async function executeLeverUpEntry({ env, db, candidate, signalId, snapsh
     staleFeed: now - Number(snapshot.checkedAt || now) > 30_000, executionUncertain: false, killSwitchActive: false,
   });
   if (!risk.allowed) return { status: "REJECTED_RISK", reasons: risk.reasons, risk };
-  const feeToken = String(executionPlan.feeToken || ZERO);
-  const allowances = [{ tokenAddress: LEVERUP_TOKENS.WMON, amount: BigInt(executionPlan.amountInRaw) + BigInt(executionPlan.actionValues[10] || 0) }];
-  if (feeToken.toLowerCase() !== ZERO.toLowerCase() && BigInt(executionPlan.antiDdosFee || 0) > 0n) {
-    allowances.push({ tokenAddress: feeToken, amount: BigInt(executionPlan.antiDdosFee) });
-  }
-  const result = await submitLeverUpIntent({
-    env: effectiveEnv, db, signalId, action: OneClickAction.MARKET_OPEN, actionValues: executionPlan.actionValues,
-    traderAddress: snapshot.traderAddress, agentAddress: snapshot.agentAddress,
-    agentAuthorization: snapshot.agentAuthorization, nonce: executionPlan.nonce, deadline: executionPlan.deadline,
-    feeToken, antiDdosFee: executionPlan.antiDdosFee, preflight: executionPlan.preflight,
-    allowanceRequirements: allowances, pairBase: snapshot.market.base,
-    leverage: executionPlan.selectedLeverage, marginMon: executionPlan.marginMonUsed, notionalUsd: executionPlan.notionalUsd,
-    payload: { symbol: candidate.symbol, candidate, plan: serializable(executionPlan), stopRiskMon }, now, dependencies,
+  const result = await submitLeverUpNativeOnchainEntry({
+    env: effectiveEnv, db, signalId, candidate, plan: executionPlan,
+    traderAddress: snapshot.traderAddress, pairBase: snapshot.market.base,
+    oracleUpdate, now, dependencies,
   });
   return { ...result, risk };
 }
@@ -485,9 +594,25 @@ export async function reconcilePendingLeverUpIntents({ env, db, now = Date.now()
   let reconciled = 0, skipped = 0, rejected = 0, uncertain = 0;
   for (const row of rows) {
     try {
-      const state = await statusReader(LEVERUP_1CT.baseUrl, row.intent_hash, { fetchImpl });
       let payload = {};
       try { payload = JSON.parse(row.payload_json || "{}"); } catch {}
+      if (payload.executionPath === "ONCHAIN_NATIVE") {
+        const pairBase = String(row.pair_base || payload.plan?.preflight?.pairBase || "").toLowerCase();
+        const isLong = payload.candidate?.side === "LONG";
+        if (!/^0x[0-9a-f]{40}$/.test(pairBase)) throw new Error("ONCHAIN_PENDING_PAIR_BASE_MISSING");
+        const client = dependencies.publicClient || createLeverUpPublicClient(env?.LEVERUP_RPC_URL || "https://rpc2.monad.xyz");
+        const positions = await (dependencies.readPositions || readPositionsV4)(trader, pairBase, { publicClient: client });
+        const matches = (positions || []).filter((p) => Boolean(p.isLong) === isLong);
+        if (matches.length === 1) {
+          const position = normalizePositionAccrual(matches[0]);
+          await updateIntent(db, row.signal_id, "EXECUTED", { payload: { ...payload, positionHash: position.positionHash, executedAt: now, keeperPending: false } });
+          reconciled++;
+        } else {
+          await updateIntent(db, row.signal_id, "PENDING", { payload: { ...payload, lastPositionCheckAt: now, keeperPending: true, ambiguousPositionMatches: matches.length } });
+        }
+        continue;
+      }
+      const state = await statusReader(LEVERUP_1CT.baseUrl, row.intent_hash, { fetchImpl });
       if (state.skipped) {
         await updateIntent(db, row.signal_id, "SKIPPED", { payload: { ...payload, intentStatus: state } });
         skipped++; continue;
