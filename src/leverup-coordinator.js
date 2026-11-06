@@ -417,7 +417,8 @@ export async function submitLeverUpNativeOnchainEntry({
   let broadcastStarted = false;
   try {
     const rpcUrl = env?.LEVERUP_RPC_URL || "https://rpc2.monad.xyz";
-    const key = String(env?.LEVERUP_TRADER_PRIVATE_KEY || "").trim();
+    const rawKey = String(env?.LEVERUP_TRADER_PRIVATE_KEY || "").trim();
+    const key = rawKey.startsWith("0x") ? rawKey : "0x" + rawKey;
     if (!/^0x[0-9a-fA-F]{64}$/.test(key)) throw new Error("LEVERUP_TRADER_PRIVATE_KEY_MISSING_OR_INVALID");
     const account = privateKeyToAccount(key);
     if (account.address.toLowerCase() !== String(traderAddress).toLowerCase()) throw new Error("LEVERUP_TRADER_SIGNER_ADDRESS_MISMATCH");
