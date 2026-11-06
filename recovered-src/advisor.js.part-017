@@ -15,8 +15,8 @@ ON, leverage = PAPER_LEVERAGE;
         console.error("Automatic paper entry failed for " + candidate.symbol + ": " + String(error).slice(0, 250));
       }
       const paperLine = paperResult?.opened
-        ? "\n\n🧪 PAPER TRADE AUTO-OPENED — " + candidate.side + " " + candidate.symbol + "\nMargin: 22 MON | leverage: 50x | estimated notional: $" + (22 * prices.MON * PAPER_LEVERAGE).toFixed(2) + "\nPaper balance remaining: " + Number(paperResult.availableBalanceMon).toFixed(3) + " MON. Use /profits for live and realised P&L."
-        : "\n\n🧪 PAPER TRADE NOT OPENED: " + (paperResult?.reason || "paper ledger unavailable") + " Use /profits to inspect the paper account.";
+        ? "\\n\\n🧪 Paper: OPEN · " + candidate.side + " " + candidate.symbol + " · " + PAPER_LEVERAGE + "x · " + Number(paperResult.availableBalanceMon).toFixed(2) + " MON free"
+        : "\\n\\n🧪 Paper: " + (/paused/i.test(String(paperResult?.reason || "")) ? "PAUSED" : "NOT OPENED · " + String(paperResult?.reason || "ledger unavailable").slice(0, 90));
       await notify(env, setupMessage(position, candidate, reviewed, prices.MON, forecast, quality.market, intraday) + paperLine, [
         [{ text: "\u25B6\uFE0F START TRACKING", callback_data: "start:" + id }],
         [{ text: "Skip this setup", callback_data: "skip:" + id }]
