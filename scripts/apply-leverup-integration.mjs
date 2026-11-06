@@ -62,8 +62,8 @@ once(
 );
 
 once(
-  '      await notify(env, compactCielSetupMessage(position, candidate, reviewed, prices.MON, forecast) + paperLine, [',
-  '      const leverUpLine = formatLeverUpAdvisorLine(leverUpPlan);\n      await notify(env, setupMessage(position, candidate, reviewed, prices.MON, forecast, quality.market, intraday) + paperLine + "\\n\\n" + leverUpLine, [',
+  '      await notify(env, setupMessage(position, candidate, reviewed, prices.MON, forecast, quality.market, intraday) + paperLine, [',
+  '      const leverUpLine = formatLeverUpAdvisorLine(leverUpPlan);\n      await notify(env, compactCielSetupMessage(position, candidate, reviewed, prices.MON, forecast) + paperLine + "\\n\\n" + leverUpLine, [',
   "attach real LeverUp preflight, collateral and fee status to the CIEL trade card",
 );
 
