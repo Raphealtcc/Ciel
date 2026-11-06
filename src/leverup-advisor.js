@@ -220,8 +220,8 @@ export async function prepareLeverUpAdvisorPlan({
       entryBudgetCeilingMon: budgeted.budgetMon, totalAllocationMon, reserveMon, usdLimits };
     const traderSigner = inspectLeverUpTraderSigner({ env });
     const authorized = traderSigner.status === "PASS" && traderSigner.matchesConfiguredTrader === true;
-    const status = authorized ? (liveMode ? "PREFLIGHT_PASS_LIVE_ENABLED" : "PREFLIGHT_PASS_LIVE_DISABLED") : "BLOCKED_TRADER_SIGNER";
-    const reason = authorized
+    let status = authorized ? (liveMode ? "PREFLIGHT_PASS_LIVE_ENABLED" : "PREFLIGHT_PASS_LIVE_DISABLED") : "BLOCKED_TRADER_SIGNER";
+    let reason = authorized
       ? (liveMode
         ? "Live market, WMON collateral, tier, margin and slippage checks passed; entry is submitted through the LeverUp 1CT hosted agent."
         : "Live market, tier, margin, balance and fee checks passed. WMON and fee-token allowances are checked for live mode; the hosted-agent intent is locally signed only in dry-run, with no approval transaction or intent submission.")
@@ -250,6 +250,10 @@ export async function prepareLeverUpAdvisorPlan({
         });
       } catch (error) {
         dryRunSigning = { status: "FAILED", reason: errorMessage(error) };
+      }
+      if (dryRunSigning.signed !== true) {
+        status = "BLOCKED_AGENT_SIGNER";
+        reason = "The hosted-agent key or its on-chain market-open authorization failed local 1CT signing validation.";
       }
       try {
         const wmonState = snapshot.accountTokenStates?.[LEVERUP_TOKENS.WMON.toLowerCase()];
