@@ -130,6 +130,43 @@ var HyperliquidFeed = class {
   async fetch(request) {
     await this.ready;
     const path = new URL(request.url).pathname;
+    if (path === "/leverup/native-samples" && request.method === "POST") {
+      try {
+        const body = await request.json();
+        const sampleAt = Number(body?.sampleAt);
+        const rows = Array.isArray(body?.rows) ? body.rows : [];
+        if (!Number.isFinite(sampleAt) || sampleAt <= 0 || rows.length < 1 || rows.length > 100) {
+          return json({ ok: false, error: "LEVERUP_NATIVE_SAMPLE_PAYLOAD_INVALID" }, 400);
+        }
+        const cache = await this.state.storage.get("leverupNativeSamples") || { lastSampleAt: 0, samples: {} };
+        if (!cache.samples || typeof cache.samples !== "object" || Array.isArray(cache.samples)) cache.samples = {};
+        if (sampleAt > Number(cache.lastSampleAt || 0)) {
+          for (const raw of rows) {
+            const symbol = String(raw?.symbol || "").trim().toUpperCase();
+            const pairBase = String(raw?.pair_base || "").toLowerCase();
+            const price = Number(raw?.price);
+            if (!/^[A-Z0-9._-]{1,24}$/.test(symbol) || !/^0x[0-9a-f]{40}$/.test(pairBase) || !Number.isFinite(price) || price <= 0) {
+              return json({ ok: false, error: "LEVERUP_NATIVE_SAMPLE_ROW_INVALID" }, 400);
+            }
+            const series = Array.isArray(cache.samples[symbol]) ? cache.samples[symbol] : [];
+            const next = { symbol, pair_base: pairBase, price, observed_at_ms: sampleAt };
+            const existingIndex = series.findIndex((item) => Number(item?.observed_at_ms) === sampleAt);
+            if (existingIndex >= 0) series[existingIndex] = next;
+            else series.push(next);
+            cache.samples[symbol] = series
+              .filter((item) => Number(item?.observed_at_ms) > sampleAt - 3 * 60 * 60 * 1000)
+              .sort((a, b) => Number(a.observed_at_ms) - Number(b.observed_at_ms))
+              .slice(-180);
+          }
+          cache.lastSampleAt = sampleAt;
+          await this.state.storage.put("leverupNativeSamples", cache);
+        }
+        return json({ ok: true, sampledAt: Number(cache.lastSampleAt || 0), samples: cache.samples });
+      } catch (error) {
+        console.error("LeverUp native sample DO storage failed: " + String(error).slice(0, 180));
+        return json({ ok: false, error: "LEVERUP_NATIVE_SAMPLE_STORAGE_FAILED" }, 500);
+      }
+    }
     if (await this.hyperliquidDisabledForLiveMode()) {
       this.stopHyperliquidSocket();
       if (path === "/ensure" || path === "/status" || path === "/markets") {
