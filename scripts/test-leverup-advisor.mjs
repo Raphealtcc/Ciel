@@ -119,6 +119,10 @@ assert.equal(ready.killSwitchEnabled, true);
 assert.equal(ready.selectedLeverage, 100);
 assert.equal(seenPlanArgs.tokenIn.toLowerCase(), wmon,
   "hosted-agent 1CT planning must use the ERC-20 WMON collateral route");
+assert.equal(ready.dryRunSigning.signed, true,
+  "dry-run must locally verify the hosted-agent EIP-712 signature without submitting an intent");
+assert.equal(ready.coordination.status, "DRY_RUN_APPROVED",
+  "dry-run portfolio checks must use the WMON balance and remain non-submitting");
 assert.ok(Math.abs(ready.minimumMarginMon - (0.23737571 / 0.019038)) < 1e-6,
   "minimum WMON must preserve the prior 13 MON USD-equivalent floor, subject to venue minimum collateral");
 const expectedLiveMarginMon = Math.max(12, ready.minimumMarginMon);
