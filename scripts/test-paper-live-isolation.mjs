@@ -31,3 +31,7 @@ assert.ok(source.includes("prepareLeverUpAdvisorPlan({ env, candidate, reviewed,
 assert.ok(!source.includes("LEVERUP NATIVE TECHNICAL SETUP"));
 assert.ok(source.includes("if (paperTradingEnabled && sizingLimits.feasible)"), "only paper ledger entry remains paper-mode gated");
 console.log("PASS: paper pause, independent live candidate discovery, fresh-quote USD allocation sizing, and preserved adaptive history.");
+
+assert.ok(!source.includes("Ciel has no free 22 MON paper margin; no new recommendation will be issued until a paper slot is free."));
+assert.ok(source.includes("setupMessage(position, candidate, reviewed, prices.MON, forecast, quality.market, intraday)"));
+console.log("PASS: shared advisor does not depend on paper margin and common Telegram formatter is restored.");

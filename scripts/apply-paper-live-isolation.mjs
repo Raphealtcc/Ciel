@@ -3,6 +3,11 @@ import path from "node:path";
 const file=path.join(process.cwd(),"reconstructed","patched-worker.js");
 let source=await readFile(file,"utf8");
 function once(before,after,label){const n=source.split(before).length-1;if(n!==1)throw new Error(label+": expected one match, found "+n);source=source.replace(before,after);}
+once(
+  "  if (!paperStorage || paperCash + 1e-9 < PAPER_MARGIN_MON) {\n    console.log(\"Ciel has no free 22 MON paper margin; no new recommendation will be issued until a paper slot is free.\");\n    return;\n  }",
+  "  // Shared market analysis must run independently of paper account availability. Paper sizing and ledger writes are executor-only gates.",
+  "shared analysis must not require paper ledger"
+);
 once('const paperState = paperStorage ? await paperStorage.get(PAPER_ACCOUNT_KEY) : null;','const paperState = paperStorage ? await paperStorage.get(PAPER_ACCOUNT_KEY) : null;\n  const paperOverride = await readTradingControl(env, "ciel:control:paper-enabled", null);\n  const paperTradingEnabled = String(paperOverride ?? env?.PAPER_TRADING_ENABLED ?? "false").toLowerCase() === "true";',"paper toggle");
 once(
 'if (sym === "MON") { scanDiagnostics.push({symbol:sym,reason:"NON_TRADEABLE_BASE_ASSET"}); continue; }\n    if (requiredPaperMargin === null) { scanDiagnostics.push({symbol:sym,reason:"BELOW_50X_OR_UNSUPPORTED_LEVERAGE_TIER"}); continue; }\n    if (paperCash + 1e-9 < requiredPaperMargin) { scanDiagnostics.push({symbol:sym,reason:"INSUFFICIENT_FREE_MARGIN",requiredPaperMargin,availablePaperMargin:paperCash}); continue; }\n    if (openPaperSymbols.has(sym)) { scanDiagnostics.push({symbol:sym,reason:"POSITION_ALREADY_OPEN"}); continue; }',
