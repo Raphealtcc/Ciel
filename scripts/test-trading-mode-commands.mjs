@@ -27,7 +27,9 @@ assert.ok(advisor.includes('liveEntryOverride === "true"'),
   "advisor must require an explicit D1 live-entry enable before preparing live execution");
 assert.ok(!advisor.includes('env?.CIEL_STATE?.get("ciel:control:live-entry-enabled")'),
   "advisor must not read the live-entry control from KV");
-assert.ok(coordinator.includes('entryOverride === "false"'));
+assert.ok(coordinator.includes('readTradingControl(env, "ciel:control:live-enabled", null)'));
+assert.ok(coordinator.includes('readTradingControl(env, "ciel:control:live-entry-enabled", "false")'));
+assert.ok(!coordinator.includes('env?.CIEL_STATE?.get("ciel:control:live-entry-enabled")'));
 assert.ok(coordinator.includes("BLOCKED_POSITION_DISCOVERY"));
 assert.ok(worker.includes("This command will not bypass it"));
 assert.ok(worker.includes("LeverUp-native feed is not READY or its latest sample is stale"));
