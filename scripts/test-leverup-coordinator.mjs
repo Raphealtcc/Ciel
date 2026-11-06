@@ -4,7 +4,8 @@ assert.equal(MIN_LEVERUP_RISK_LIMIT_MON, 12);
 assert.equal(LEVERUP_RISK_DEFAULTS.maxDailyRealizedLossMon, 12);
 assert.equal(LEVERUP_RISK_DEFAULTS.maxRollingDrawdownMon, 12);
 assert.equal(LEVERUP_RISK_DEFAULTS.maxAggregateStopRiskMon, 12);
-import { prepareLeverUpExecution, reconcileLeverUpIntent, collectLeverUpPairBases, refreshLeverUpMarketOpenPlan, validateLeverUpTransferBalances } from "../src/leverup-coordinator.js";
+import { prepareLeverUpExecution, reconcileLeverUpIntent, collectLeverUpPairBases, refreshLeverUpMarketOpenPlan, validateLeverUpTransferBalances, submitLeverUpNativeOnchainEntry } from "../src/leverup-coordinator.js";
+import { privateKeyToAccount } from "viem/accounts";
 const WMON = "0x3bd359C1119dA7Da1D913D1C4D2B7c461115433A";
 const LVMON = "0x91b81bfbe3A747230F0529Aa28d8b2Bc898E6D56";
 const refreshed = refreshLeverUpMarketOpenPlan({
@@ -98,4 +99,100 @@ const fallbackBases = collectLeverUpPairBases([], [{ pairBase: "0x" + "12".repea
 assert.deepEqual(fallbackBases, ["0x" + "12".repeat(20)], "on-chain pair discovery must retain the pair base from active D1 entries");
 const combinedBases = collectLeverUpPairBases([{ pairBase: "0x" + "34".repeat(20) }], [{ pairBase: "0x" + "12".repeat(20) }]);
 assert.deepEqual(combinedBases.sort(), ["0x" + "12".repeat(20), "0x" + "34".repeat(20)].sort());
+
+function fakeIntentDb() {
+  const rows = new Map();
+  return {
+    rows,
+    prepare(sql) {
+      let params = [];
+      return {
+        bind(...values) { params = values; return this; },
+        async first() {
+          if (sql.includes("WHERE signal_id = ?")) return rows.get(params[0]) || null;
+          if (sql.includes("WHERE idempotency_key = ?")) return [...rows.values()].find((x) => x.idempotency_key === params[0]) || null;
+          return null;
+        },
+        async run() {
+          if (sql.startsWith("INSERT INTO leverup_execution_intents")) {
+            rows.set(params[0], {
+              signal_id: params[0], idempotency_key: params[1], status: "PREPARED",
+              pair_base: params[2], action: params[3], requested_leverage: params[4],
+              margin_mon: params[5], notional_usd: params[6], payload_json: params[7],
+            });
+            return { success: true };
+          }
+          if (sql.startsWith("UPDATE leverup_execution_intents")) {
+            const signalId = params[params.length - 1];
+            const row = rows.get(signalId);
+            if (!row) return { success: false };
+            const fields = sql.slice(sql.indexOf(" SET ") + 5, sql.indexOf(" WHERE ")).split(", ");
+            fields.forEach((field, index) => {
+              const key = field.split(" = ")[0];
+              const value = params[index];
+              if (key === "intent_hash") row.intent_hash = value;
+              else if (key === "last_error") row.last_error = value;
+              else if (key === "payload_json") row.payload_json = value;
+              else if (key === "status") row.status = value;
+            });
+            return { success: true };
+          }
+          return { success: true };
+        },
+      };
+    },
+  };
+}
+const testKey = "0x" + "0".repeat(63) + "1";
+const testTrader = privateKeyToAccount(testKey).address;
+const zero = "0x0000000000000000000000000000000000000000";
+const nativePlan = {
+  selectedLeverage: 50, marginMonUsed: "1", notionalUsd: 20,
+  actionValues: ["0x" + "11".repeat(20), true, zero, LVMON, "1000000000000000000",
+    "10000000000", "1000000000000000000", "0", "0", 0, "0"],
+};
+const nativeOracle = { updateData: { pythPriceUpdateData: [], pythProPriceUpdateData: [] }, value: 1n };
+const liveNativeEnv = { LEVERUP_LIVE_TRADING: "true", LEVERUP_KILL_SWITCH: "false", LEVERUP_TRADER_PRIVATE_KEY: testKey };
+const failedSimulationDb = fakeIntentDb();
+let failedSimulationWrites = 0;
+const failedSimulation = await submitLeverUpNativeOnchainEntry({
+  env: liveNativeEnv, db: failedSimulationDb, signalId: "NATIVE-SIM-FAIL",
+  candidate: { symbol: "BTC", side: "LONG" }, plan: nativePlan, traderAddress: testTrader,
+  pairBase: nativePlan.actionValues[0], oracleUpdate: nativeOracle, now: 10,
+  dependencies: {
+    publicClient: {
+      simulateContract: async () => { throw new Error("insufficient transfers"); },
+      getBalance: async () => 10n ** 20n,
+    },
+    walletClient: { writeContract: async () => { failedSimulationWrites++; return "0x" + "ab".repeat(32); } },
+    getBalance: async () => 10n ** 20n,
+  },
+});
+assert.equal(failedSimulation.status, "REJECTED");
+assert.equal(failedSimulation.submitted, false);
+assert.equal(failedSimulationWrites, 0, "a failed exact contract simulation must never broadcast");
+assert.equal(failedSimulationDb.rows.get("NATIVE-SIM-FAIL").status, "REJECTED");
+const submittedDb = fakeIntentDb();
+const txHash = "0x" + "cd".repeat(32);
+const submitted = await submitLeverUpNativeOnchainEntry({
+  env: liveNativeEnv, db: submittedDb, signalId: "NATIVE-SUBMITTED",
+  candidate: { symbol: "BTC", side: "LONG" }, plan: nativePlan, traderAddress: testTrader,
+  pairBase: nativePlan.actionValues[0], oracleUpdate: nativeOracle, now: 11,
+  dependencies: {
+    publicClient: {
+      simulateContract: async () => ({ request: { simulated: true } }),
+      waitForTransactionReceipt: async () => ({ status: "success", blockNumber: 123n }),
+      getBalance: async () => 10n ** 20n,
+    },
+    walletClient: { writeContract: async () => txHash },
+    getBalance: async () => 10n ** 20n,
+    readPositions: async () => [],
+  },
+});
+assert.equal(submitted.status, "SUBMITTED", "a mined pending-trade transaction must not be mislabeled as a filled position");
+assert.equal(submitted.submitted, true);
+assert.equal(submitted.transactionHash, txHash);
+assert.equal(submittedDb.rows.get("NATIVE-SUBMITTED").status, "SUBMITTED");
+assert.equal(submittedDb.rows.get("NATIVE-SUBMITTED").intent_hash, txHash);
+
 console.log("PASS: collateral budget incl. fees/buffers, portfolio risk gates, hard-off dry-run coordinator, intent reconciliation primitives.");

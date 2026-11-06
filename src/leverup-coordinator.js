@@ -605,6 +605,16 @@ export async function reconcilePendingLeverUpIntents({ env, db, now = Date.now()
         const isLong = payload.candidate?.side === "LONG";
         if (!/^0x[0-9a-f]{40}$/.test(pairBase)) throw new Error("ONCHAIN_PENDING_PAIR_BASE_MISSING");
         const client = dependencies.publicClient || createLeverUpPublicClient(env?.LEVERUP_RPC_URL || "https://rpc2.monad.xyz");
+        const receipt = client.getTransactionReceipt
+          ? await client.getTransactionReceipt({ hash: row.intent_hash }).catch(() => null)
+          : null;
+        if (receipt?.status === "reverted") {
+          await updateIntent(db, row.signal_id, "REJECTED", {
+            lastError: "ONCHAIN_MARKET_OPEN_TRANSACTION_REVERTED",
+            payload: { ...payload, transactionHash: row.intent_hash, receiptBlock: String(receipt.blockNumber), failedAt: now },
+          });
+          rejected++; continue;
+        }
         const positions = await (dependencies.readPositions || readPositionsV4)(trader, pairBase, { publicClient: client });
         const matches = (positions || []).filter((p) => Boolean(p.isLong) === isLong);
         if (matches.length === 1) {
