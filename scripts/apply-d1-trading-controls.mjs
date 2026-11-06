@@ -62,11 +62,16 @@ function replaceWorker(before, after, label, expected = 1) {
   if (count !== expected) throw new Error(label + ": expected " + expected + " matches, found " + count);
   worker = worker.split(before).join(after);
 }
-replaceWorker(
-  'this.env?.CIEL_STATE?.get("ciel:control:live-enabled").catch(() => null)',
-  'readTradingControl(this.env, "ciel:control:live-enabled", null).catch(() => null)',
-  "Hyperliquid feed live-control read"
-);
+const feedLiveControlRead = 'this.env?.CIEL_STATE?.get("ciel:control:live-enabled").catch(() => null)';
+if (worker.includes(feedLiveControlRead)) {
+  replaceWorker(
+    feedLiveControlRead,
+    'readTradingControl(this.env, "ciel:control:live-enabled", null).catch(() => null)',
+    "Hyperliquid feed live-control read"
+  );
+} else if (!worker.includes("async hyperliquidDisabledForLiveMode()") || !worker.includes("Hyperliquid remains a read-only market-data source for the shared CIEL signal pipeline")) {
+  throw new Error("Hyperliquid feed live-control source is neither D1-backed nor explicitly read-only in live mode.");
+}
 const liveModeKvRead = 'env?.CIEL_STATE?.get("ciel:control:live-enabled").catch(() => null)';
 const liveModeKvReadCount = worker.split(liveModeKvRead).length - 1;
 if (liveModeKvReadCount !== 4) throw new Error("Expected four remaining bundled env live-mode readers after the feed patch, found " + liveModeKvReadCount);
