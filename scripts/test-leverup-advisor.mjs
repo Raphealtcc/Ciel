@@ -129,6 +129,9 @@ assert.equal(liveWithoutExplicitEntryGrant.liveExecutionEnabled, false);
 
 assert.ok(formatLeverUpAdvisorLine(ready).includes("DRY RUN"),
   "compact LeverUp output must identify dry-run mode");
+assert.ok(formatLeverUpAdvisorLine({status:"PREFLIGHT_PASS_LIVE_ENABLED",selectedLeverage:50,marginMonUsed:26.19,notionalUsd:20.92,liveExecutionEnabled:true,coordination:{status:"REJECTED",reason:"insufficient transfers"}}).includes("NOT OPENED · insufficient transfers"), "rejected execution must not be shown as a preflight-only pass");
+assert.ok(formatLeverUpAdvisorLine({status:"PREFLIGHT_PASS_LIVE_ENABLED",selectedLeverage:50,marginMonUsed:26.19,notionalUsd:20.92,liveExecutionEnabled:true,coordination:{status:"SUBMITTED",submitted:true}}).includes("awaiting on-chain confirmation"), "submitted must be distinguished from a confirmed position");
+assert.ok(formatLeverUpAdvisorLine({status:"PREFLIGHT_PASS_LIVE_ENABLED",selectedLeverage:50,marginMonUsed:26.19,notionalUsd:20.92,liveExecutionEnabled:true,coordination:{status:"RECONCILED",positions:[{positionHash:"0xabc"}]}}).includes("POSITION OPEN"), "an open position requires reconciliation");
 assert.equal(formatLeverUpAdvisorLine(ready).split("\n").length, 1,
   "LeverUp suggestion output must stay on one concise line");
 assert.ok(formatLeverUpAdvisorLine(ready).length <= 100,
@@ -238,6 +241,7 @@ console.log("PASS: CIEL-to-LeverUp preflight is read-only, 50x-minimum, reserve-
 
 const integrationPatch = await readFile(new URL("./apply-leverup-integration.mjs", import.meta.url), "utf8");
 assert.ok(integrationPatch.includes("compactCielSetupMessage"), "trade alerts must use the compact suggestion formatter");
+assert.ok(integrationPatch.includes("compactCielSetupMessage(position, candidate, reviewed, prices.MON, forecast)"), "the notification must actually call the compact formatter");
 assert.ok(integrationPatch.includes('source.replace(coordinatorImport + "\\n"'), "compact formatter must be inserted after the coordinator import");
 assert.ok(integrationPatch.includes("/_internal/leverup-diagnostics-once"), "one-time read-only diagnostics route must be included in the build patcher");
 assert.ok(integrationPatch.includes("ciel:leverup:diagnostics:one-time-token"), "the diagnostics route must require and consume a one-time KV token");
