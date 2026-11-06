@@ -12,7 +12,7 @@ for (const command of ["/paperactive", "/paperdeactivate", "/liveactive", "/live
 assert.ok(worker.includes("ciel:control:paper-enabled"));
 assert.ok(worker.includes("ciel:control:live-enabled"));
 assert.ok(worker.includes("ciel:control:live-entry-enabled"));
-assert.ok(worker.includes("writeTradingControls(env, [[keys.live, true], [keys.entries, true]])"));
+assert.ok(worker.includes('writeTradingControls(env, [[keys.live, true], [keys.entries, true]])'));
 assert.equal((worker.match(/from "\.\.\/src\/trading-controls\.js";/g) || []).length, 1, "the bundled Worker must import the D1 controls module only once");
 for (const key of ["paper-enabled", "live-enabled", "live-entry-enabled"]) {
   assert.ok(worker.includes('readTradingControl(env, "ciel:control:' + key + '", ' + (key === "live-entry-enabled" ? '"false"' : "null") + ')'), "Telegram status/runtime must read " + key + " from D1");
@@ -21,7 +21,12 @@ for (const key of ["paper-enabled", "live-enabled", "live-entry-enabled"]) {
 assert.ok(isolation.includes("readTradingControl(env"));
 assert.ok(isolation.includes('await readTradingControl(env, "ciel:control:paper-enabled", null)'));
 assert.ok(advisor.includes('readTradingControl(env, "ciel:control:live-enabled", null)'));
-assert.ok(advisor.includes('liveEntryOverride !== "false"'));
+assert.ok(advisor.includes('readTradingControl(env, "ciel:control:live-entry-enabled", "false")'),
+  "live entries must fail closed when the D1 entry flag is missing");
+assert.ok(advisor.includes('liveEntryOverride === "true"'),
+  "advisor must require an explicit D1 live-entry enable before preparing live execution");
+assert.ok(!advisor.includes('env?.CIEL_STATE?.get("ciel:control:live-entry-enabled")'),
+  "advisor must not read the live-entry control from KV");
 assert.ok(coordinator.includes('entryOverride === "false"'));
 assert.ok(coordinator.includes("BLOCKED_POSITION_DISCOVERY"));
 assert.ok(worker.includes("This command will not bypass it"));
