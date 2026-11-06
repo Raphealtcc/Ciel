@@ -23,28 +23,26 @@ if (!source.includes(approvalSimulationImport)) source = approvalSimulationImpor
 if (!source.includes(profitsImport)) source = profitsImport + "\n" + source;
 if (!source.includes("function compactCielSetupMessage(")) {
   const compactHelper = `function compactCielSetupMessage(p, s, r, monUsd, forecast) {
-  const mode = s?.mode === "RANGE_SCALP" ? "RANGE" : "TREND";
   const score = Math.round(Number(s?.confidence || 0) * 100);
-  const details = s?.scoreDetails || null;
-  const coverage = details ? Number(details.coveragePct || 0) : null;
-  const components = Array.isArray(details?.components)
-    ? details.components.map((item) => item.key + " " + item.points + "/" + item.max)
-    : [];
-  const missing = Array.isArray(details?.missing) ? details.missing : [];
+  const mode = s?.mode === "RANGE_SCALP" ? "RANGE" : "TREND";
   const review = String(r?.verdict || "WAIT");
-  const forecastStatus = forecast?.available ? "forecast ready" : "forecast unavailable";
-  const hold = Number(s?.holdMinutes || (mode === "RANGE" ? 12 : 180));
+  const median = Number(forecast?.medianReturnPct);
+  const lower = Number(forecast?.lowerReturnPct);
+  const upper = Number(forecast?.upperReturnPct);
+  const forecastLine = forecast?.available && [median, lower, upper].every(Number.isFinite)
+    ? "Forecast 5m: " + median.toFixed(3) + "% (" + lower.toFixed(3) + " to " + upper.toFixed(3) + "%)"
+    : "Forecast: unavailable";
   return [
-    (review === "APPROVE" && forecast?.available ? "📈 " : "🟡 ") + String(p?.side || "—") + " " + String(p?.symbol || "—") + " · " + mode + " · technical " + score + "/100",
-    "Evidence coverage: " + (coverage == null ? "unavailable" : coverage + "%") + " · " + String(s?.scoreModel || "legacy"),
-    "Breakdown: " + (components.join(" · ") || "unavailable"),
-    missing.length ? "Missing evidence: " + missing.join(", ") : "All configured evidence groups available",
-    "Entry $" + fmt(p?.entry_price) + " | SL $" + fmt(p?.stop_price) + " | TP $" + fmt(p?.target_price),
-    "Review " + review + " · " + forecastStatus + " · hold ≤" + hold + "m",
-    "PROPOSED — not tracking"
+    (review === "APPROVE" ? "📈 " : "🟡 ") + String(p?.side || "—") + " " + String(p?.symbol || "—") + " · " + mode,
+    "Signal: " + String(p?.id || "—") + " · PROPOSED",
+    "Entry $" + fmt(p?.entry_price) + " · SL $" + fmt(p?.stop_price) + " · TP $" + fmt(p?.target_price),
+    "Technical: " + score + "/100 · " + String(s?.strategy || "—"),
+    forecastLine,
+    "Review: " + review + " · hold ≤" + Number(s?.holdMinutes || (mode === "RANGE" ? 12 : 180)) + "m"
   ].join("\\n");
 }
 `;
+
   source = source.replace(coordinatorImport + "\n", coordinatorImport + "\n" + compactHelper);
 }
 
@@ -64,7 +62,7 @@ once(
 );
 
 once(
-  '      await notify(env, setupMessage(position, candidate, reviewed, prices.MON, forecast, quality.market, intraday) + paperLine, [',
+  '      await notify(env, compactCielSetupMessage(position, candidate, reviewed, prices.MON, forecast) + paperLine, [',
   '      const leverUpLine = formatLeverUpAdvisorLine(leverUpPlan);\n      await notify(env, setupMessage(position, candidate, reviewed, prices.MON, forecast, quality.market, intraday) + paperLine + "\\n\\n" + leverUpLine, [',
   "attach real LeverUp preflight, collateral and fee status to the CIEL trade card",
 );
