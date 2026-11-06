@@ -279,4 +279,24 @@ const approvalReadyPlan = buildMarketOpenPlan({
 assert.equal(approvalReadyPlan.mode, "DRY_RUN_ONLY");
 
 
+
+// Direct native-MON collateral uses the documented native MON -> LVMON path,
+// needs no ERC-20 allowance, and must reserve the requested native MON buffer.
+const nativeSnapshot = {
+  ...planSnapshot,
+  collateralRatio: 1,
+  nativeMonBalanceRaw: (54n * 10n ** 18n).toString(),
+};
+const nativePlan = buildMarketOpenPlan({
+  snapshot: nativeSnapshot, desiredMarginMon: 24.5, maxTradeMarginMon: 25,
+  inferredLeverage: 50, side: "LONG", expectedHoldSeconds: 900,
+  reserveMon: 25, tokenIn: "0x0000000000000000000000000000000000000000",
+  requireExistingAllowance: true,
+});
+assert.equal(nativePlan.mode, "ONCHAIN_NATIVE");
+assert.equal(nativePlan.actionValues[2], "0x0000000000000000000000000000000000000000");
+assert.equal(nativePlan.actionValues[3].toLowerCase(), LVMON.toLowerCase());
+assert.equal(nativePlan.feeToken, "0x0000000000000000000000000000000000000000");
+assert.equal(nativePlan.antiDdosFee, 0n);
+
 console.log("PASS: 50x floor, dynamic tier sizing, WMON+fee-token balance/allowance checks, amountIn/open-fee calculation, cost estimates, and settlement reconciliation.");
