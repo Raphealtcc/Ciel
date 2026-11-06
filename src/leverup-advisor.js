@@ -255,9 +255,9 @@ export async function prepareLeverUpAdvisorPlan({
         const wmonState = snapshot.accountTokenStates?.[LEVERUP_TOKENS.WMON.toLowerCase()];
         if (!wmonState?.balance) throw new Error("WMON_BALANCE_NOT_AVAILABLE_FOR_DRY_RUN_RISK_CHECK");
         const wmonBalanceMon = Number(BigInt(wmonState.balance)) / 1e18;
-        const entryBudgetMon = Number(plan.entryBudgetMon ??
-          (BigInt(plan.amountInRaw) + BigInt(plan.actionValues?.[10] || 0) +
-            (String(plan.feeToken || "").toLowerCase() === LEVERUP_TOKENS.WMON.toLowerCase() ? BigInt(plan.antiDdosFee || 0) : 0n)) / 1e18);
+        const entrySpendRaw = BigInt(plan.amountInRaw) + BigInt(plan.actionValues?.[10] || 0) +
+          (String(plan.feeToken || "").toLowerCase() === LEVERUP_TOKENS.WMON.toLowerCase() ? BigInt(plan.antiDdosFee || 0) : 0n);
+        const entryBudgetMon = Number(plan.entryBudgetMon ?? (Number(entrySpendRaw) / 1e18));
         const stopRiskMon = Number(plan.marginMonUsed) * Number(plan.selectedLeverage) * stopPct / 100;
         coordination = await prepareLeverUpExecution({
           signal: { id: signalId },
