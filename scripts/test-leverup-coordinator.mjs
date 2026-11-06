@@ -195,4 +195,67 @@ assert.equal(submitted.transactionHash, txHash);
 assert.equal(submittedDb.rows.get("NATIVE-SUBMITTED").status, "SUBMITTED");
 assert.equal(submittedDb.rows.get("NATIVE-SUBMITTED").intent_hash, txHash);
 
+
+const hostedDb = fakeIntentDb();
+const hostedTrader = testTrader;
+const hostedAgentKey = "0x" + "0".repeat(63) + "2";
+const hostedAgent = privateKeyToAccount(hostedAgentKey).address;
+const hostedPair = "0x" + "44".repeat(20);
+const hostedWmon = WMON.toLowerCase();
+const hostedLvm = LVMON.toLowerCase();
+let hostedSubmitArgs = null, hostedApprovalCount = 0;
+const hostedNow = Date.now();
+const hostedEntry = await (await import("../src/leverup-coordinator.js")).executeLeverUpEntry({
+  env: {
+    LEVERUP_LIVE_TRADING: "true", LEVERUP_KILL_SWITCH: "false",
+    LEVERUP_AGENT_ADDRESS: hostedAgent, LEVERUP_TRADER_ADDRESS: hostedTrader,
+    LEVERUP_AGENT_PRIVATE_KEY: hostedAgentKey, LEVERUP_AUTO_APPROVE: "true",
+    LEVERUP_TOTAL_ALLOCATION_MON: "50", LEVERUP_RESERVE_MON: "25",
+  },
+  db: hostedDb, signalId: "HOSTED-AGENT-ENTRY",
+  candidate: { symbol: "BTC", side: "LONG", stopPct: 0.4 },
+  now: hostedNow,
+  snapshot: {
+    traderAddress: hostedTrader, agentAddress: hostedAgent, checkedAt: hostedNow,
+    market: { base: hostedPair },
+    pairView: { slippageConfig: { enabled: true, slippageLongP: 5, slippageShortP: 5, slippageType: 0 } },
+    indexedPositions: [],
+    agentAuthorization: { authorized: true, agentAddress: hostedAgent, canMarketOpen: true },
+    accountTokenStates: { [hostedWmon]: { balance: (100n * 10n ** 18n).toString(), allowance: "0" } },
+  },
+  plan: {
+    actionValues: [hostedPair, true, hostedWmon, hostedLvm, (101n * 10n ** 16n).toString(),
+      "2000000000", (100n * 10n ** 18n).toString(), (99n * 10n ** 18n).toString(),
+      (102n * 10n ** 18n).toString(), 0, "0"],
+    feeToken: "0x0000000000000000000000000000000000000000", antiDdosFee: "0",
+    nonce: "1", selectedLeverage: 50, marginMonUsed: "1", notionalUsd: 20,
+    totalAllocationMon: 50, reserveMon: 25,
+    preflight: { preflightPassed: true, status: "AVAILABLE", pairBase: hostedPair,
+      requestedLeverage: 50, marketMaxLeverage: 50, maxLeverageForNotional: 50,
+      checkedAt: hostedNow, notionalUsdRaw: (20n * 10n ** 18n).toString() },
+  },
+  dependencies: {
+    fetchLatestOraclePrices: async () => ({ [hostedPair.toLowerCase()]: (100n * 10n ** 18n).toString() }),
+    readNonce: async () => 77n,
+    readPortfolioRisk: async () => ({ aggregateStopRiskMon: 0, dailyRealizedLossMon: 0, rollingDrawdownMon: 0 }),
+    ensureAllowance: async () => { hostedApprovalCount++; return { status: "APPROVED" }; },
+    readTokenBalancesAndAllowances: async () => ({
+      [hostedWmon]: { balance: 100n * 10n ** 18n, allowance: 100n * 10n ** 18n },
+    }),
+    submit: async (args) => {
+      hostedSubmitArgs = args;
+      return { intentHash: "0x" + "ef".repeat(32), intent: { actionDataHash: "0x" + "cd".repeat(32) } };
+    },
+  },
+});
+assert.equal(hostedEntry.status, "SUBMITTED");
+assert.equal(hostedEntry.executionPath, "1CT_HOSTED_AGENT");
+assert.equal(hostedSubmitArgs.action, 0);
+assert.equal(hostedSubmitArgs.actionValues[2].toLowerCase(), hostedWmon);
+assert.equal(hostedSubmitArgs.actionValues[3].toLowerCase(), hostedLvm);
+assert.ok(BigInt(hostedSubmitArgs.nonce) > 77n, "hosted-agent entry must use a nonce above the latest on-chain nonce");
+assert.equal(hostedApprovalCount, 1);
+assert.equal(hostedDb.rows.get("HOSTED-AGENT-ENTRY").status, "SUBMITTED");
+assert.equal(JSON.parse(hostedDb.rows.get("HOSTED-AGENT-ENTRY").payload_json).executionPath, "1CT_HOSTED_AGENT");
+
 console.log("PASS: collateral budget incl. fees/buffers, portfolio risk gates, hard-off dry-run coordinator, intent reconciliation primitives.");

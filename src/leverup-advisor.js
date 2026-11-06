@@ -212,7 +212,7 @@ export async function prepareLeverUpAdvisorPlan({
       buildPlan,
       planArgs: { snapshot, desiredMarginMon, maxTradeMarginMon, inferredLeverage,
         side: candidate.side, expectedHoldSeconds, reserveMon, stopLossPriceRaw, takeProfitPriceRaw,
-        tokenIn: "0x0000000000000000000000000000000000000000",
+        tokenIn: LEVERUP_TOKENS.WMON,
         requireExistingAllowance: false, now,
         entryPriceToleranceBps: Number(env?.LEVERUP_ENTRY_PRICE_TOLERANCE_BPS ?? 30) },
       maxEntryBudgetMon: maxTradeMarginMon, minimumMarginMon,
@@ -224,7 +224,7 @@ export async function prepareLeverUpAdvisorPlan({
     const status = authorized ? (liveMode ? "PREFLIGHT_PASS_LIVE_ENABLED" : "PREFLIGHT_PASS_LIVE_DISABLED") : "BLOCKED_TRADER_SIGNER";
     const reason = authorized
       ? (liveMode
-        ? "Live market, native-MON collateral, tier, margin and slippage checks passed; entry is simulated before direct on-chain submission."
+        ? "Live market, WMON collateral, tier, margin and slippage checks passed; entry is submitted through the LeverUp 1CT hosted agent."
         : "Live market, tier, margin, balance and fee checks passed. Exact token approvals are prepared for live mode; no approval transaction or order was signed or submitted.")
        : "The configured trader private key does not match the trader wallet. No transaction was signed or submitted.";
     let ledgerId = null, ledgerPersisted = false;
