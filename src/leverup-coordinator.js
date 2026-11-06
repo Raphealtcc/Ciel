@@ -500,8 +500,12 @@ export async function executeLeverUpEntry({ env, db, candidate, signalId, snapsh
     return { status: "REJECTED", submitted: false, reason: "FRESH_ORACLE_REFRESH_FAILED: " + String(error?.message || error).slice(0, 180) };
   }
   const nativeBalance = Number(BigInt(snapshot.nativeMonBalanceRaw || "0")) / 1e18;
-  const oracleUpdate = await fetchLeverUpOnchainOracleUpdate(snapshot.market.base, dependencies.fetchImpl || fetch)
-    .catch((error) => { throw new Error("ONCHAIN_ORACLE_UPDATE_FAILED: " + String(error?.message || error).slice(0, 160)); });
+  let oracleUpdate;
+  try {
+    oracleUpdate = await fetchLeverUpOnchainOracleUpdate(snapshot.market.base, dependencies.fetchImpl || fetch);
+  } catch (error) {
+    return { status: "REJECTED", submitted: false, reason: "ONCHAIN_ORACLE_UPDATE_FAILED: " + String(error?.message || error).slice(0, 160) };
+  }
   const margin = Number(executionPlan.marginMonUsed);
   const entryBudget = Number(BigInt(executionPlan.amountInRaw) + BigInt(executionPlan.actionValues[10] || 0) + BigInt(oracleUpdate.value)) / 1e18;
   const stopPct = Number(candidate.stopPct);
