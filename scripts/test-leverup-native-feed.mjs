@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { evaluateLeverUpNativeSeries } from "../src/leverup-native-feed.js";
+import { evaluateLeverUpNativeSeries, runLeverUpNativeSampler } from "../src/leverup-native-feed.js";
 
 const now = 1_800_000_000_000;
 const rows = Array.from({length: 65}, (_, i) => ({
@@ -20,3 +20,48 @@ assert.equal(evaluateLeverUpNativeSeries("BTC", rows.map(r=>({...r,observed_at_m
 const flat = rows.map((r,i)=>({...r,price:100}));
 assert.equal(evaluateLeverUpNativeSeries("BTC", flat, now).status, "NO_SIGNAL");
 console.log("PASS: LeverUp-only sample freshness, warm-up, technical signal and no fabricated volume/depth evidence.");
+
+let cache = { lastSampleAt: 0, samples: {} };
+let durableWrites = 0;
+const doStub = {
+  async fetch(_url, init) {
+    const body = JSON.parse(init.body);
+    if (body.sampleAt > cache.lastSampleAt) {
+      for (const row of body.rows) {
+        const series = cache.samples[row.symbol] || [];
+        series.push({ ...row, observed_at_ms: body.sampleAt });
+        cache.samples[row.symbol] = series.slice(-180);
+      }
+      cache.lastSampleAt = body.sampleAt;
+      durableWrites++;
+    }
+    return new Response(JSON.stringify({ ok: true, sampledAt: cache.lastSampleAt, samples: cache.samples }), {
+      status: 200, headers: { "content-type": "application/json" }
+    });
+  }
+};
+const nativeEnv = {
+  WATCH_SYMBOLS: "BTC,ETH",
+  HYPERLIQUID_FEED: { idFromName: () => "primary", get: () => doStub },
+  CIEL_STATE: { get: async () => null, put: async () => {} }
+};
+const nativeDependencies = {
+  fetchPairs: async () => [
+    { symbol: "BTC", base: "0x0000000000000000000000000000000000000001" },
+    { symbol: "ETH", base: "0x0000000000000000000000000000000000000002" }
+  ],
+  fetchPrices: async () => ({
+    "0x0000000000000000000000000000000000000001": "100000000000000000000",
+    "0x0000000000000000000000000000000000000002": "200000000000000000000"
+  })
+};
+const nativeResult = await runLeverUpNativeSampler({ env: nativeEnv, now, dependencies: nativeDependencies });
+assert.equal(nativeResult.marketCount, 2);
+assert.equal(nativeResult.status, "WARMING_UP");
+assert.equal(durableWrites, 1);
+assert.equal(cache.samples.BTC.length, 1);
+assert.equal(cache.samples.ETH.length, 1);
+await runLeverUpNativeSampler({ env: nativeEnv, now, dependencies: nativeDependencies });
+assert.equal(durableWrites, 1, "repeated invocation in the same minute must not persist duplicate samples");
+assert.equal(cache.samples.BTC.length, 1);
+console.log("PASS: native sample history is persisted once per minute in Durable Object storage; no D1 binding is used.");
