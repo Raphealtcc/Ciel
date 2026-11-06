@@ -716,6 +716,7 @@ export function buildMarketOpenPlan({
   snapshot, desiredMarginMon, maxTradeMarginMon, inferredLeverage, side,
   expectedHoldSeconds, reserveMon = 0, stopLossPriceRaw = 0n,
   takeProfitPriceRaw = 0n, broker = 0, extraFeeRaw = 0n, requireExistingAllowance = true, now = Date.now(),
+  entryPriceToleranceBps = 30,
 }) {
   if (!snapshot?.market || !snapshot?.pairView || !snapshot?.accountTokenStates || !snapshot?.antiDdosConfig) {
     throw new Error("MARKET_OPEN_SNAPSHOT_INCOMPLETE");
@@ -812,8 +813,13 @@ export function buildMarketOpenPlan({
   if (qtyRaw <= 0n || qtyRaw > (2n ** 128n - 1n)) throw new Error("ONECLICK_QTY_OUT_OF_RANGE");
   const slippage = snapshot.pairView.slippageConfig;
   if (!slippage?.enabled) throw new Error("LIVE_SLIPPAGE_CONFIG_DISABLED_OR_MISSING");
-  const slippageP = BigInt(isLong ? slippage.slippageLongP : slippage.slippageShortP);
-  if (slippageP < 0n || slippageP > 10_000n) throw new Error("LIVE_SLIPPAGE_BOUND_INVALID");
+  if (Number(slippage.slippageType) !== 0) throw new Error("LIVE_SLIPPAGE_TYPE_UNSUPPORTED");
+  const protocolSlippageP = BigInt(isLong ? slippage.slippageLongP : slippage.slippageShortP);
+  if (protocolSlippageP < 0n || protocolSlippageP > 10_000n) throw new Error("LIVE_SLIPPAGE_BOUND_INVALID");
+  const requestedToleranceBps = Number(entryPriceToleranceBps);
+  if (!Number.isInteger(requestedToleranceBps) || requestedToleranceBps < 0 || requestedToleranceBps > 100) throw new Error("LIVE_ENTRY_PRICE_TOLERANCE_INVALID");
+  const toleranceP = BigInt(requestedToleranceBps);
+  const slippageP = protocolSlippageP > toleranceP ? protocolSlippageP : toleranceP;
   const worstPriceRaw = isLong
     ? pairPriceRaw * (10_000n + slippageP) / 10_000n
     : pairPriceRaw * (10_000n - slippageP) / 10_000n;
@@ -849,6 +855,8 @@ export function buildMarketOpenPlan({
     openFeeTokenInRaw: openFeeTokenInRaw.toString(),
     qtyRaw: qtyRaw.toString(),
     worstPriceRaw: worstPriceRaw.toString(),
+    protocolSlippageBps: protocolSlippageP.toString(),
+    slippageBps: slippageP.toString(),
     preflight,
     agentAuthorization: snapshot.agentAuthorization,
     agentAddress: snapshot.agentAddress,

@@ -206,7 +206,8 @@ export async function prepareLeverUpAdvisorPlan({
       buildPlan,
       planArgs: { snapshot, desiredMarginMon, maxTradeMarginMon, inferredLeverage,
         side: candidate.side, expectedHoldSeconds, reserveMon, stopLossPriceRaw, takeProfitPriceRaw,
-        requireExistingAllowance: false, now },
+        requireExistingAllowance: false, now,
+        entryPriceToleranceBps: Number(env?.LEVERUP_ENTRY_PRICE_TOLERANCE_BPS ?? 30) },
       maxEntryBudgetMon: maxTradeMarginMon, minimumMarginMon,
     });
     const plan = { ...budgeted.plan, entryBudgetMon: budgeted.entryBudgetMon,

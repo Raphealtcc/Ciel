@@ -10,12 +10,22 @@ const LVMON = "0x91b81bfbe3A747230F0529Aa28d8b2Bc898E6D56";
 const refreshed = refreshLeverUpMarketOpenPlan({
   plan: { actionValues: ["0x" + "11".repeat(20), true, WMON, LVMON, "10000000000000000000", "10000000000", "1010000000000000000", "990000000000000000", "1020000000000000000", 0, "0"],
     preflight: { notionalUsdRaw: "10000000000000000000", checkedAt: 1, oraclePriceRaw: "1000000000000000000", oraclePriceUsd: 1 } },
-  pairView: { slippageConfig: { enabled: true, slippageLongP: 10, slippageShortP: 10 } },
+  pairView: { slippageConfig: { enabled: true, slippageLongP: 10, slippageShortP: 10, slippageType: 0 } },
   freshOraclePriceRaw: "1010000000000000000", now: 200,
 });
 assert.equal(refreshed.actionValues[5], 99009900990n);
-assert.equal(refreshed.actionValues[6], 1011010000000000000n);
+assert.equal(refreshed.actionValues[6], 1013030000000000000n);
+assert.equal(refreshed.protocolSlippageBps, "10");
+assert.equal(refreshed.slippageBps, "30");
 assert.equal(refreshed.preflight.checkedAt, 200);
+const refreshedShort = refreshLeverUpMarketOpenPlan({
+  plan: { actionValues: ["0x" + "11".repeat(20), false, WMON, LVMON, "10000000000000000000", "10000000000", "1010000000000000000", "0", "0", 0, "0"], preflight: { notionalUsdRaw: "10000000000000000000", checkedAt: 1, oraclePriceRaw: "1000000000000000000", oraclePriceUsd: 1 } },
+  pairView: { slippageConfig: { enabled: true, slippageLongP: 10, slippageShortP: 10, slippageType: 0 } }, freshOraclePriceRaw: "1010000000000000000", now: 201,
+});
+assert.equal(refreshedShort.actionValues[6], 1006970000000000000n);
+assert.equal(refreshedShort.slippageBps, "30");
+assert.throws(() => refreshLeverUpMarketOpenPlan({ plan: { actionValues: ["0x" + "11".repeat(20), true, WMON, LVMON, "10000000000000000000", "10000000000", "1010000000000000000", "990000000000000000", "1020000000000000000", 0, "0"], preflight: { notionalUsdRaw: "10000000000000000000" } }, pairView: { slippageConfig: { enabled: true, slippageLongP: 10, slippageShortP: 10, slippageType: 1 } }, freshOraclePriceRaw: "1010000000000000000" }), /LIVE_SLIPPAGE_TYPE_UNSUPPORTED/);
+assert.throws(() => refreshLeverUpMarketOpenPlan({ plan: { actionValues: ["0x" + "11".repeat(20), true, WMON, LVMON, "10000000000000000000", "10000000000", "1010000000000000000", "990000000000000000", "1020000000000000000", 0, "0"], preflight: { notionalUsdRaw: "10000000000000000000" } }, pairView: { slippageConfig: { enabled: true, slippageLongP: 10, slippageShortP: 10, slippageType: 0 } }, freshOraclePriceRaw: "1010000000000000000", entryPriceToleranceBps: 101 }), /LIVE_ENTRY_PRICE_TOLERANCE_INVALID/);
 const wmonFeeCheck = validateLeverUpTransferBalances({
   action: 0,
   actionValues: ["0x" + "11".repeat(20), true, WMON, LVMON, "1000", "1", "1", "0", "0", 0, "50"],

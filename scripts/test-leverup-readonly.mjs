@@ -161,7 +161,7 @@ const planSnapshot = {
     longHoldingFeeRateRaw: "1000000",
     shortHoldingFeeRateRaw: "1000000",
     feeConfig: { openFeeP: 3, closeFeeP: 3, enabled: true, minCloseFeeP: 0, lvTokenDiscountP: 5000 },
-    slippageConfig: { enabled: true, slippageLongP: 5, slippageShortP: 5 },
+    slippageConfig: { enabled: true, slippageLongP: 5, slippageShortP: 5, slippageType: 0 },
   },
   marketInfo: { fundingFeeRate: "4000000000" },
   oraclePriceRaw: (1000n * 10n ** 18n).toString(),
@@ -205,6 +205,13 @@ assert.ok(BigInt(plan.amountInRaw) > 10n * 10n ** 18n, "amountIn includes the op
 assert.equal(plan.feeToken.toLowerCase(), USDC.toLowerCase());
 assert.equal(plan.nonce, (BigInt(Date.now()) > 78n ? plan.nonce : "78"));
 assert.equal(plan.mode, "DRY_RUN_ONLY");
+assert.equal(plan.protocolSlippageBps, "5");
+assert.equal(plan.slippageBps, "30");
+assert.equal(plan.worstPriceRaw, (1000n * 10n ** 18n * 10_030n / 10_000n).toString());
+const protocolFloorPlan = buildMarketOpenPlan({ snapshot: planSnapshot, desiredMarginMon: 20, maxTradeMarginMon: 50, inferredLeverage: 100, side: "LONG", expectedHoldSeconds: 3600, entryPriceToleranceBps: 2 });
+assert.equal(protocolFloorPlan.slippageBps, "5");
+assert.throws(() => buildMarketOpenPlan({ snapshot: planSnapshot, desiredMarginMon: 20, maxTradeMarginMon: 50, inferredLeverage: 100, side: "LONG", expectedHoldSeconds: 3600, entryPriceToleranceBps: 101 }), /LIVE_ENTRY_PRICE_TOLERANCE_INVALID/);
+assert.throws(() => buildMarketOpenPlan({ snapshot: { ...planSnapshot, pairView: { ...planSnapshot.pairView, slippageConfig: { ...planSnapshot.pairView.slippageConfig, slippageType: 1 } } }, desiredMarginMon: 20, maxTradeMarginMon: 50, inferredLeverage: 100, side: "LONG", expectedHoldSeconds: 3600 }), /LIVE_SLIPPAGE_TYPE_UNSUPPORTED/);
 
 const roundingSnapshot = {
   ...planSnapshot,
