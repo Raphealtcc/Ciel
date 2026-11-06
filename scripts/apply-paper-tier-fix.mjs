@@ -98,7 +98,7 @@ replaceExactlyOnce(
 );
 
 replaceExactlyOnce(
-  '? "\\n\\n🧪 PAPER TRADE AUTO-OPENED — " + candidate.side + " " + candidate.symbol + "\\nMargin: 22 MON | leverage: 50x | estimated notional: $" + (22 * prices.MON * PAPER_LEVERAGE).toFixed(2) + "\\nPaper balance remaining: " + Number(paperResult.availableBalanceMon).toFixed(3) + " MON. Use /profits for live and realised P&L."',
+  '? "\\n\\n🧪 Paper: OPEN · " + candidate.side + " " + candidate.symbol + " · " + paperResult.trade.leverage + "x · " + paperResult.trade.marginMon + " MON · " + Number(paperResult.availableBalanceMon).toFixed(2) + " MON free"',
   '? "\\n\\n🧪 PAPER TRADE AUTO-OPENED — " + candidate.side + " " + candidate.symbol + "\\nMargin: " + paperResult.trade.marginMon + " MON | leverage: " + paperResult.trade.leverage + "x | estimated notional: $" + (paperResult.trade.marginMon * prices.MON * paperResult.trade.leverage).toFixed(2) + "\\nPaper balance remaining: " + Number(paperResult.availableBalanceMon).toFixed(3) + " MON. Use /profits for live and realised P&L."',
   "show actual margin and leverage in paper entry alert",
 );
