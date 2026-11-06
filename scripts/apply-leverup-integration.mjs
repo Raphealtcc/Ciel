@@ -52,6 +52,12 @@ const nativeAdvisorBefore = "  if (liveMode) {\n    console.log(\"CIEL live sign
 once(nativeAdvisorBefore, "", "route live and paper through the same CIEL candidate generation, scoring and review pipeline");
 
 once(
+  "  async hyperliquidDisabledForLiveMode() {\n    const liveOverride = await this.env?.CIEL_STATE?.get(\"ciel:control:live-enabled\").catch(() => null);\n    return String(liveOverride ?? this.env?.LEVERUP_LIVE_TRADING).toLowerCase() === \"true\" &&\n      String(this.env?.LEVERUP_KILL_SWITCH).toLowerCase() === \"false\";\n  }",
+  "  async hyperliquidDisabledForLiveMode() {\n    // Hyperliquid remains a read-only market-data source for the shared CIEL signal pipeline.\n    // Live execution and position management remain exclusively on LeverUp.\n    return false;\n  }",
+  "keep Hyperliquid read-only market data active for shared paper/live signals",
+);
+
+once(
   '    const id = crypto.randomUUID().replace(/-/g, "").slice(0, 10).toUpperCase(), direction = candidate.side === "LONG" ? 1 : -1;\n    const stop = candidate.entry * (1 - direction * candidate.stopPct / 100), target = candidate.entry * (1 + direction * candidate.targetPct / 100), expires = now + 15 * 6e4;',
   '    const id = crypto.randomUUID().replace(/-/g, "").slice(0, 10).toUpperCase(), direction = candidate.side === "LONG" ? 1 : -1;\n    const stop = candidate.entry * (1 - direction * candidate.stopPct / 100), target = candidate.entry * (1 + direction * candidate.targetPct / 100), expires = now + 15 * 6e4;\n    const leverUpPlan = await prepareLeverUpAdvisorPlan({ env, candidate, reviewed, signalId: id, now, technicalOnly });',
   "run a live read-only LeverUp preflight for fully confirmed CIEL approvals",
@@ -169,7 +175,22 @@ once(
 once(
   '  async scheduled(_event, env, ctx) {\n    ctx.waitUntil(ensureTelegramWebhook(env));',
   `  async scheduled(_event, env, ctx) {\n    ctx.waitUntil(ensureTelegramWebhook(env));\n    if (String(env?.LEVERUP_PREFLIGHT_ENABLED).toLowerCase() === "true") {\n      ctx.waitUntil((async () => {\n        try {\n          const now = Date.now();\n          try {\n            const nativeFeed = await runLeverUpNativeSampler({ env, now });\n            await env.CIEL_STATE.put("ciel:leverup:native-feed:last-error", "", { expirationTtl: 3600 });
-            try { await runAdvisorCycle(env, {}, now, now, null, null, null); }
+            const marketResponse = await feedStub2(env).fetch("https://feed/ensure", { method: "POST" });
+            const marketSnapshot = await marketResponse.json().catch(() => ({}));
+            if (!marketResponse.ok || !Array.isArray(marketSnapshot.markets)) {
+              throw new Error("SHARED_SIGNAL_MARKET_FEED_UNAVAILABLE: " + String(marketSnapshot.status || marketResponse.status));
+            }
+            const prices = Object.fromEntries(marketSnapshot.markets
+              .filter((market) => market && market.symbol && Number.isFinite(Number(market.price)) && Number(market.price) > 0)
+              .map((market) => [String(market.symbol).toUpperCase(), Number(market.price)]));
+            const lastTickAt = Number(marketSnapshot.lastTickAt || 0);
+            if (!(prices.MON > 0) || !lastTickAt || now - lastTickAt > 180000) {
+              console.log("CIEL shared advisor waiting for fresh Hyperliquid prices; no setup emitted.");
+            } else {
+              await runAdvisorCycle(env, prices, now, lastTickAt, null, null, null);
+              const scan = await env.CIEL_STATE.get("ciel:advisor:last-scan", "json").catch(() => null);
+              console.log("CIEL shared paper/live advisor cycle evaluated: " + Number(scan?.historySymbols || 0) + " history markets, " + (Array.isArray(scan?.candidates) ? scan.candidates.length : 0) + " technical candidates.");
+            }
             catch (advisorError) {
               console.error("LeverUp-native advisor cycle failed: " + String(advisorError?.message || advisorError).slice(0, 180));
               await env.CIEL_STATE.put("ciel:leverup:native-feed:advisor-error", String(advisorError?.message || advisorError).slice(0, 180), { expirationTtl: 3600 }).catch(() => void 0);
