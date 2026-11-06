@@ -218,30 +218,30 @@ export async function prepareLeverUpAdvisorPlan({
     });
     const plan = { ...budgeted.plan, entryBudgetMon: budgeted.entryBudgetMon,
       entryBudgetCeilingMon: budgeted.budgetMon, totalAllocationMon, reserveMon, usdLimits };
-    const authorized = Boolean(snapshot.agentAuthorization?.authorized && snapshot.agentAuthorization?.canMarketOpen);
-    const status = authorized ? (liveMode ? "PREFLIGHT_PASS_LIVE_ENABLED" : "PREFLIGHT_PASS_LIVE_DISABLED") : "BLOCKED_AGENT_AUTHORIZATION";
+    const traderSigner = inspectLeverUpTraderSigner({ env });
+    const authorized = traderSigner.status === "PASS" && traderSigner.matchesConfiguredTrader === true;
+    const status = authorized ? (liveMode ? "PREFLIGHT_PASS_LIVE_ENABLED" : "PREFLIGHT_PASS_LIVE_DISABLED") : "BLOCKED_TRADER_SIGNER";
     const reason = authorized
       ? (liveMode
         ? "Live market, native-MON collateral, tier, margin and slippage checks passed; entry is simulated before direct on-chain submission."
         : "Live market, tier, margin, balance and fee checks passed. Exact token approvals are prepared for live mode; no approval transaction or order was signed or submitted.")
-      : "The agent wallet is not authorized for LeverUp market-open permission bit 0. No order was signed or submitted.";
+      : "The configured trader private key does not match the trader wallet. No transaction was signed or submitted.";
     let ledgerId = null, ledgerPersisted = false;
     try {
       const persist = dependencies.persistPreflight || persistLeverUpPreflight;
       if (env?.DB?.prepare) {
         ledgerId = await persist(env.DB, signalId, plan.preflight, {
           decision: authorized ? "PASS" : "REJECT",
-          rejectionReason: authorized ? null : "AGENT_MARKET_OPEN_PERMISSION_MISSING",
+          rejectionReason: authorized ? null : "TRADER_SIGNER_MISMATCH",
           blockNumber: snapshot.blockNumber,
         });
         ledgerPersisted = true;
       }
     } catch (error) { console.error("LeverUp preflight D1 ledger write failed: " + errorMessage(error)); }
-    let dryRunSigning = { status: "NOT_CONFIGURED" };
+    let dryRunSigning = traderSigner;
     let coordination = { status: "NOT_RUN" };
     if (authorized && dryRunMode) {
-      if (env?.LEVERUP_AGENT_PRIVATE_KEY) {
-        try {
+      try {
           dryRunSigning = await signIntentDryRun({
             env, traderAddress, agentAddress, agentAuthorization: snapshot.agentAuthorization,
             action: OneClickAction.MARKET_OPEN, nonce: plan.nonce, deadline: plan.deadline,
@@ -292,7 +292,8 @@ export function formatLeverUpAdvisorLine(record) {
   if (executionStatus.startsWith("REJECTED") || intent.success === false || record.status === "REJECTED") {
     return "LeverUp: NOT OPENED · " + String(failure || "execution rejected").slice(0, 100);
   }
-  if (executionStatus === "RECONCILED" && Array.isArray(execution.positions) && execution.positions.length > 0) {
+  if ((executionStatus === "RECONCILED" && Array.isArray(execution.positions) && execution.positions.length > 0) ||
+      (executionStatus === "EXECUTED" && /^0x[0-9a-fA-F]{64}$/.test(String(execution.positionHash || "")))) {
     return "LeverUp: POSITION OPEN · on-chain position confirmed";
   }
   if (["SUBMITTED", "PENDING", "UNCERTAIN"].includes(executionStatus) || execution.submitted === true || intent.submitted === true) {

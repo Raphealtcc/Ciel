@@ -132,6 +132,7 @@ assert.ok(formatLeverUpAdvisorLine(ready).includes("DRY RUN"),
 assert.ok(formatLeverUpAdvisorLine({status:"PREFLIGHT_PASS_LIVE_ENABLED",selectedLeverage:50,marginMonUsed:26.19,notionalUsd:20.92,liveExecutionEnabled:true,coordination:{status:"REJECTED",reason:"insufficient transfers"}}).includes("NOT OPENED · insufficient transfers"), "rejected execution must not be shown as a preflight-only pass");
 assert.ok(formatLeverUpAdvisorLine({status:"PREFLIGHT_PASS_LIVE_ENABLED",selectedLeverage:50,marginMonUsed:26.19,notionalUsd:20.92,liveExecutionEnabled:true,coordination:{status:"SUBMITTED",submitted:true}}).includes("awaiting on-chain confirmation"), "submitted must be distinguished from a confirmed position");
 assert.ok(formatLeverUpAdvisorLine({status:"PREFLIGHT_PASS_LIVE_ENABLED",selectedLeverage:50,marginMonUsed:26.19,notionalUsd:20.92,liveExecutionEnabled:true,coordination:{status:"RECONCILED",positions:[{positionHash:"0xabc"}]}}).includes("POSITION OPEN"), "an open position requires reconciliation");
+assert.ok(formatLeverUpAdvisorLine({status:"PREFLIGHT_PASS_LIVE_ENABLED",selectedLeverage:50,marginMonUsed:24.5,notionalUsd:20.92,liveExecutionEnabled:true,coordination:{status:"EXECUTED",positionHash:"0x"+"ab".repeat(32)}}).includes("POSITION OPEN"), "direct onchain execution must report open only when a position hash is confirmed");
 assert.equal(formatLeverUpAdvisorLine(ready).split("\n").length, 1,
   "LeverUp suggestion output must stay on one concise line");
 assert.ok(formatLeverUpAdvisorLine(ready).length <= 100,
