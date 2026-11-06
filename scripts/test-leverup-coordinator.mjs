@@ -208,7 +208,7 @@ const hostedNow = Date.now();
 const hostedEntry = await (await import("../src/leverup-coordinator.js")).executeLeverUpEntry({
   env: {
     LEVERUP_LIVE_TRADING: "true", LEVERUP_KILL_SWITCH: "false",
-    CIEL_STATE: { get: async (key) => key === "ciel:control:live-enabled" || key === "ciel:control:live-entry-enabled" ? "true" : null },
+    DB: { prepare: () => ({ bind: (key) => ({ first: async () => ({ control_value: "true" }) }) }) },
     LEVERUP_AGENT_ADDRESS: hostedAgent, LEVERUP_TRADER_ADDRESS: hostedTrader,
     LEVERUP_AGENT_PRIVATE_KEY: hostedAgentKey, LEVERUP_AUTO_APPROVE: "true",
     LEVERUP_TOTAL_ALLOCATION_MON: "50", LEVERUP_RESERVE_MON: "25",
