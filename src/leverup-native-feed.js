@@ -103,15 +103,12 @@ export function evaluateLeverUpNativeSeries(symbol, rows, now = Date.now()) {
 }
 
 export async function runLeverUpNativeSampler({ env, now = Date.now(), dependencies = {} }) {
-  if (!env?.DB?.prepare || !env?.CIEL_STATE?.put) throw new Error("LEVERUP_NATIVE_FEED_BINDINGS_MISSING");
+  if (!env?.HYPERLIQUID_FEED?.get || !env?.CIEL_STATE?.put) throw new Error("LEVERUP_NATIVE_FEED_BINDINGS_MISSING");
   const sampleAt = Math.floor(now / SAMPLE_INTERVAL_MS) * SAMPLE_INTERVAL_MS;
   const fetchImpl = dependencies.fetchImpl || fetch;
   const watch = [...new Set(String(env.WATCH_SYMBOLS || "BTC,ETH,MON,BNB,XRP,HYPE,ONDO,KPEPE,QNT,ZEC,TRX,AAVE,ADA,CASHCAT,DOGE,LINK,LIT,PONS,PUMP,SEI,SOL,SUI,UNI,VIRTUAL,XMR")
     .split(",").map(upper).filter(Boolean))];
-  const [pairs, previous] = await Promise.all([
-    (dependencies.fetchPairs || fetchLeverUpPairs)({ fetchImpl }),
-    env.CIEL_STATE.get("ciel:leverup:native-feed:last-sample").catch(() => null)
-  ]);
+  const pairs = await (dependencies.fetchPairs || fetchLeverUpPairs)({ fetchImpl });
   const pairBySymbol = new Map();
   for (const pair of pairs || []) {
     const symbol = pairSymbol(pair);
@@ -129,27 +126,17 @@ export async function runLeverUpNativeSampler({ env, now = Date.now(), dependenc
     if (!Number.isFinite(price) || price <= 0) throw new Error("LEVERUP_NATIVE_ORACLE_PRICE_INVALID_" + symbol);
     rows.push({ symbol, pair_base: pairBase(pair), price, observed_at_ms: sampleAt });
   }
-  if (Number(previous) !== sampleAt) {
-    const statements = rows.map((row) => env.DB.prepare(
-      "INSERT INTO leverup_market_samples(symbol,pair_base,price,observed_at_ms) VALUES(?,?,?,?) ON CONFLICT(symbol,observed_at_ms) DO UPDATE SET pair_base=excluded.pair_base,price=excluded.price"
-    ).bind(row.symbol, row.pair_base, row.price, row.observed_at_ms));
-    await env.DB.batch(statements);
-    await env.CIEL_STATE.put("ciel:leverup:native-feed:last-sample", String(sampleAt), { expirationTtl: 86400 });
+  const feed = env.HYPERLIQUID_FEED.get(env.HYPERLIQUID_FEED.idFromName("primary"));
+  const storedResponse = await feed.fetch("https://feed/leverup/native-samples", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ sampleAt, rows })
+  });
+  const stored = await storedResponse.json().catch(() => ({}));
+  if (!storedResponse.ok || stored.ok !== true || !stored.samples) {
+    throw new Error("LEVERUP_NATIVE_SAMPLE_STORAGE_FAILED: " + String(stored.error || storedResponse.status));
   }
-  const symbols = rows.map((row) => row.symbol);
-  const placeholders = symbols.map(() => "?").join(",");
-  const history = await Promise.all(symbols.map((symbol) => env.DB.prepare(
-    "SELECT symbol,price,observed_at_ms FROM leverup_market_samples WHERE symbol=? AND observed_at_ms>=? ORDER BY observed_at_ms DESC LIMIT 60"
-  ).bind(symbol, now - MAX_HISTORY_AGE_MS).all()));
-  const bySymbol = new Map(symbols.map((symbol, index) => [
-    symbol, (history[index].results || []).slice().reverse()
-  ]));
-  const pruneKey = "ciel:leverup:native-feed:last-prune";
-  const lastPrune = Number(await env.CIEL_STATE.get(pruneKey) || 0);
-  if (!lastPrune || now - lastPrune >= 24 * 60 * 60 * 1000) {
-    await env.DB.prepare("DELETE FROM leverup_market_samples WHERE observed_at_ms<?").bind(now - 24 * 60 * 60 * 1000).run();
-    await env.CIEL_STATE.put(pruneKey, String(now), { expirationTtl: 3 * 24 * 60 * 60 });
-  }
+  const bySymbol = new Map(symbols.map((symbol) => [symbol, stored.samples[symbol] || []]));
   const markets = symbols.map((symbol) => evaluateLeverUpNativeSeries(symbol, bySymbol.get(symbol), now));
   const warmed = markets.filter((market) => market.status !== "WARMING_UP" && market.status !== "STALE" && market.status !== "INSUFFICIENT_HISTORY");
   const allReady = markets.length > 0 && markets.every((market) => market.status === "NO_SIGNAL" || market.status === "SIGNAL_CANDIDATE");
