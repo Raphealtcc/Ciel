@@ -486,7 +486,7 @@ export async function executeLeverUpEntry({ env, db, candidate, signalId, snapsh
     ? await Promise.all([env.CIEL_STATE.get("ciel:control:live-enabled"), env.CIEL_STATE.get("ciel:control:live-entry-enabled")])
     : [null, null];
   const effectiveEnv = liveOverride == null ? env : { ...env, LEVERUP_LIVE_TRADING: liveOverride };
-  if (!liveEnabled(effectiveEnv) || entryOverride === "false") return { status: "LIVE_DISABLED", submitted: false };
+  if (!liveEnabled(effectiveEnv) || liveOverride !== "true" || entryOverride !== "true") return { status: "LIVE_DISABLED", submitted: false };
 
   const traderAddress = String(snapshot?.traderAddress || effectiveEnv?.LEVERUP_TRADER_ADDRESS || "");
   const agentAddress = String(snapshot?.agentAddress || effectiveEnv?.LEVERUP_AGENT_ADDRESS || "");

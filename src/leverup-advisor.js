@@ -118,7 +118,7 @@ export async function prepareLeverUpAdvisorPlan({
     ? await Promise.all([env.CIEL_STATE.get("ciel:control:live-enabled"), env.CIEL_STATE.get("ciel:control:live-entry-enabled")])
     : [null, null];
   const liveConfigured = String(liveOverride ?? env?.LEVERUP_LIVE_TRADING).toLowerCase() === "true";
-  const liveMode = liveConfigured && liveEntryOverride !== "false" && String(env?.LEVERUP_KILL_SWITCH).toLowerCase() === "false";
+  const liveMode = liveConfigured && liveOverride === "true" && liveEntryOverride === "true" && String(env?.LEVERUP_KILL_SWITCH).toLowerCase() === "false";
   const dryRunMode = !liveConfigured && String(env?.LEVERUP_KILL_SWITCH).toLowerCase() === "true";
   const result = (status, reason, extra = {}) => ({
     schemaVersion: 1, signalId: String(signalId || ""),
