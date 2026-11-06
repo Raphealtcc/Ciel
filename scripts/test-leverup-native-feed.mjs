@@ -57,6 +57,7 @@ const nativeDependencies = {
 };
 const nativeResult = await runLeverUpNativeSampler({ env: nativeEnv, now, dependencies: nativeDependencies });
 assert.equal(nativeResult.marketCount, 2);
+assert.deepEqual(nativeResult.markets.map((market) => market.symbol), ["BTC", "ETH"]);
 assert.equal(nativeResult.status, "WARMING_UP");
 assert.equal(durableWrites, 1);
 assert.equal(cache.samples.BTC.length, 1);
