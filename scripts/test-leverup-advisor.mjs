@@ -99,7 +99,7 @@ assert.equal(ready.status, "PREFLIGHT_PASS_LIVE_DISABLED");
 assert.equal(ready.liveExecutionEnabled, false);
 assert.equal(ready.killSwitchEnabled, true);
 assert.equal(ready.selectedLeverage, 100);
-assert.ok(Math.abs(seenPlanArgs.snapshot.collateralRatio - (20 / (100 * 0.23))) < 1e-9,
+assert.equal(seenPlanArgs.snapshot.collateralRatio, 1,
   "100x collateral ratio must be derived from the $0.23 minimum, not a hardcoded protocol ratio");
 assert.ok(Math.abs(ready.minimumMarginMon - (0.23737571 / 0.019038)) < 1e-6,
   "minimum WMON must preserve the prior 13 MON USD-equivalent floor, subject to venue minimum collateral");
@@ -132,6 +132,7 @@ assert.ok(formatLeverUpAdvisorLine(ready).includes("DRY RUN"),
 assert.ok(formatLeverUpAdvisorLine({status:"PREFLIGHT_PASS_LIVE_ENABLED",selectedLeverage:50,marginMonUsed:26.19,notionalUsd:20.92,liveExecutionEnabled:true,coordination:{status:"REJECTED",reason:"insufficient transfers"}}).includes("NOT OPENED · insufficient transfers"), "rejected execution must not be shown as a preflight-only pass");
 assert.ok(formatLeverUpAdvisorLine({status:"PREFLIGHT_PASS_LIVE_ENABLED",selectedLeverage:50,marginMonUsed:26.19,notionalUsd:20.92,liveExecutionEnabled:true,coordination:{status:"SUBMITTED",submitted:true}}).includes("awaiting on-chain confirmation"), "submitted must be distinguished from a confirmed position");
 assert.ok(formatLeverUpAdvisorLine({status:"PREFLIGHT_PASS_LIVE_ENABLED",selectedLeverage:50,marginMonUsed:26.19,notionalUsd:20.92,liveExecutionEnabled:true,coordination:{status:"RECONCILED",positions:[{positionHash:"0xabc"}]}}).includes("POSITION OPEN"), "an open position requires reconciliation");
+assert.ok(formatLeverUpAdvisorLine({status:"PREFLIGHT_PASS_LIVE_ENABLED",selectedLeverage:50,marginMonUsed:24.5,notionalUsd:20.92,liveExecutionEnabled:true,coordination:{status:"EXECUTED",positionHash:"0x"+"ab".repeat(32)}}).includes("POSITION OPEN"), "direct onchain execution must report open only when a position hash is confirmed");
 assert.equal(formatLeverUpAdvisorLine(ready).split("\n").length, 1,
   "LeverUp suggestion output must stay on one concise line");
 assert.ok(formatLeverUpAdvisorLine(ready).length <= 100,

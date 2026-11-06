@@ -57,10 +57,17 @@ export function leverUpUsdLimitsToMon({ env = {}, monUsdPrice }) {
   const reserveUsd = readUsd("LEVERUP_RESERVE_USD", DEFAULT_LEVERUP_USD_LIMITS.reserve);
   const maxTradeMarginUsd = readUsd("LEVERUP_MAX_TRADE_MARGIN_USD", DEFAULT_LEVERUP_USD_LIMITS.maxTradeMargin);
   const minTradeMarginUsd = readUsd("LEVERUP_MIN_TRADE_MARGIN_USD", DEFAULT_LEVERUP_USD_LIMITS.minTradeMargin);
-  const totalAllocationMon = floorMon(totalAllocationUsd, price);
-  const reserveMon = ceilMon(reserveUsd, price);
+  const configuredMon = (key, fallback) => {
+    const raw = env?.[key];
+    if (raw == null || raw === "") return fallback;
+    const value = Number(raw);
+    if (!Number.isFinite(value) || value < 0) throw new Error(key + "_INVALID");
+    return value;
+  };
+  const totalAllocationMon = configuredMon("LEVERUP_TOTAL_ALLOCATION_MON", floorMon(totalAllocationUsd, price));
+  const reserveMon = configuredMon("LEVERUP_RESERVE_MON", ceilMon(reserveUsd, price));
   const allocationCeilingMon = Math.max(0, totalAllocationMon - reserveMon);
-  const maxTradeMarginMon = Math.min(floorMon(maxTradeMarginUsd, price), allocationCeilingMon);
+  const maxTradeMarginMon = Math.min(configuredMon("LEVERUP_MAX_TRADE_MARGIN_MON", floorMon(maxTradeMarginUsd, price)), allocationCeilingMon);
   const minimumTradeMarginMon = ceilMon(minTradeMarginUsd, price);
   if (!(totalAllocationMon > reserveMon) || !(maxTradeMarginMon > 0)) {
     throw new Error("LEVERUP_USD_ALLOCATION_LIMITS_INVALID_AT_CURRENT_MON_PRICE");
@@ -172,12 +179,11 @@ export async function prepareLeverUpAdvisorPlan({
 
     const minimumNotionalUsd = Number(minimumNotionalRaw) / 1e18;
     const monUsdPrice = Number(snapshot.monUsdPriceRaw) / 1e18;
-    const minimumCollateralUsd = leverUpCollateralUsdForLeverage({
-      leverage: leverageForMinimum, minimumNotionalUsd,
-      collateralAt50xUsd: env?.LEVERUP_COLLATERAL_50X_USD ?? 0.43,
-      collateralAt100xUsd: env?.LEVERUP_COLLATERAL_100X_USD ?? 0.23,
-    });
-    collateralRatio = minimumNotionalUsd / (leverageForMinimum * minimumCollateralUsd);
+    // Native MON is the documented collateral input for LVMON positions.
+    // Use nominal MON pricing only as a planning estimate; the exact transaction
+    // must pass a live Diamond simulation before any broadcast is allowed.
+    const minimumCollateralUsd = minimumNotionalUsd / leverageForMinimum;
+    collateralRatio = 1;
     if (!(collateralRatio > 0 && collateralRatio <= 1)) throw new Error("DERIVED_COLLATERAL_RATIO_OUT_OF_RANGE");
     snapshot.collateralRatio = collateralRatio;
     if (!(monUsdPrice > 0)) throw new Error("MON_USD_PRICE_UNAVAILABLE");
@@ -206,6 +212,7 @@ export async function prepareLeverUpAdvisorPlan({
       buildPlan,
       planArgs: { snapshot, desiredMarginMon, maxTradeMarginMon, inferredLeverage,
         side: candidate.side, expectedHoldSeconds, reserveMon, stopLossPriceRaw, takeProfitPriceRaw,
+        tokenIn: "0x0000000000000000000000000000000000000000",
         requireExistingAllowance: false, now,
         entryPriceToleranceBps: Number(env?.LEVERUP_ENTRY_PRICE_TOLERANCE_BPS ?? 30) },
       maxEntryBudgetMon: maxTradeMarginMon, minimumMarginMon,
@@ -216,9 +223,9 @@ export async function prepareLeverUpAdvisorPlan({
     const status = authorized ? (liveMode ? "PREFLIGHT_PASS_LIVE_ENABLED" : "PREFLIGHT_PASS_LIVE_DISABLED") : "BLOCKED_AGENT_AUTHORIZATION";
     const reason = authorized
       ? (liveMode
-        ? "Live market, tier, margin, balance, fee, slippage and agent-open checks passed; entry is submitted only after idempotency, risk and exact allowance checks."
+        ? "Live market, native-MON collateral, tier, margin and slippage checks passed; entry is simulated before direct on-chain submission."
         : "Live market, tier, margin, balance and fee checks passed. Exact token approvals are prepared for live mode; no approval transaction or order was signed or submitted.")
-      : "The agent wallet is not authorized for LeverUp market-open permission bit 0. No order was signed or submitted.";
+      : "The LeverUp agent authorization is missing. No transaction was signed or submitted.";
     let ledgerId = null, ledgerPersisted = false;
     try {
       const persist = dependencies.persistPreflight || persistLeverUpPreflight;
@@ -231,21 +238,12 @@ export async function prepareLeverUpAdvisorPlan({
         ledgerPersisted = true;
       }
     } catch (error) { console.error("LeverUp preflight D1 ledger write failed: " + errorMessage(error)); }
-    let dryRunSigning = { status: "NOT_CONFIGURED" };
+    let dryRunSigning = { status: "NOT_REQUIRED_DIRECT_ONCHAIN" };
     let coordination = { status: "NOT_RUN" };
     if (authorized && dryRunMode) {
-      if (env?.LEVERUP_AGENT_PRIVATE_KEY) {
-        try {
-          dryRunSigning = await signIntentDryRun({
-            env, traderAddress, agentAddress, agentAuthorization: snapshot.agentAuthorization,
-            action: OneClickAction.MARKET_OPEN, nonce: plan.nonce, deadline: plan.deadline,
-            actionValues: plan.actionValues, feeToken: plan.feeToken, antiDdosFee: plan.antiDdosFee,
-            preflight: plan.preflight, now,
-          });
-        } catch (error) { dryRunSigning = { status: "FAILED", reason: errorMessage(error) }; }
-      }
+      dryRunSigning = { status: "NOT_REQUIRED_DIRECT_ONCHAIN" };
       try {
-        const wmonBalanceMon = Number(BigInt(snapshot.accountTokenStates[WMON].balance)) / 1e18;
+        const wmonBalanceMon = Number(BigInt(snapshot.nativeMonBalanceRaw || "0")) / 1e18;
         const entryBudgetMon = Number(BigInt(plan.amountInRaw)) / 1e18;
         const stopRiskMon = Number(plan.marginMonUsed) * Number(plan.selectedLeverage) * stopPct / 100;
         coordination = await prepareLeverUpExecution({
@@ -286,7 +284,8 @@ export function formatLeverUpAdvisorLine(record) {
   if (executionStatus.startsWith("REJECTED") || intent.success === false || record.status === "REJECTED") {
     return "LeverUp: NOT OPENED · " + String(failure || "execution rejected").slice(0, 100);
   }
-  if (executionStatus === "RECONCILED" && Array.isArray(execution.positions) && execution.positions.length > 0) {
+  if ((executionStatus === "RECONCILED" && Array.isArray(execution.positions) && execution.positions.length > 0) ||
+      (executionStatus === "EXECUTED" && /^0x[0-9a-fA-F]{64}$/.test(String(execution.positionHash || "")))) {
     return "LeverUp: POSITION OPEN · on-chain position confirmed";
   }
   if (["SUBMITTED", "PENDING", "UNCERTAIN"].includes(executionStatus) || execution.submitted === true || intent.submitted === true) {

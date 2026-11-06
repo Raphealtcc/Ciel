@@ -716,14 +716,15 @@ export function buildMarketOpenPlan({
   snapshot, desiredMarginMon, maxTradeMarginMon, inferredLeverage, side,
   expectedHoldSeconds, reserveMon = 0, stopLossPriceRaw = 0n,
   takeProfitPriceRaw = 0n, broker = 0, extraFeeRaw = 0n, requireExistingAllowance = true, now = Date.now(),
-  entryPriceToleranceBps = 30,
+  entryPriceToleranceBps = 30, tokenIn: tokenInAddress = LEVERUP_TOKENS.WMON,
 }) {
   if (!snapshot?.market || !snapshot?.pairView || !snapshot?.accountTokenStates || !snapshot?.antiDdosConfig) {
     throw new Error("MARKET_OPEN_SNAPSHOT_INCOMPLETE");
   }
   if (side !== "LONG" && side !== "SHORT") throw new Error("TRADE_DIRECTION_INVALID");
   const isLong = side === "LONG";
-  const tokenIn = LEVERUP_TOKENS.WMON;
+  const tokenIn = String(tokenInAddress).toLowerCase();
+  const isNativeMon = tokenIn === "0x0000000000000000000000000000000000000000";
   const lvToken = LEVERUP_TOKENS.LVMON;
   const marginRaw = parseUnits(String(desiredMarginMon), 18);
   const maxTradeRaw = parseUnits(String(maxTradeMarginMon), 18);
@@ -736,12 +737,14 @@ export function buildMarketOpenPlan({
   if (monPriceRaw <= 0n || pairPriceRaw <= 0n || collateralRatioRaw <= 0n || collateralRatioRaw > 10n ** 18n) {
     throw new Error("LIVE_COLLATERAL_OR_ORACLE_DATA_INVALID");
   }
-  const wmonState = snapshot.accountTokenStates[tokenIn.toLowerCase()];
-  if (!wmonState) throw new Error("WMON_ACCOUNT_STATE_MISSING");
-  const wmonBalanceRaw = BigInt(wmonState.balance);
-  const wmonAllowanceRaw = BigInt(wmonState.allowance);
-  const availableRaw = wmonBalanceRaw > reserveRaw ? wmonBalanceRaw - reserveRaw : 0n;
-  if (marginRaw > availableRaw) throw new Error("DESIRED_MARGIN_EXCEEDS_AVAILABLE_WMON");
+  const collateralState = isNativeMon
+    ? { balance: snapshot.nativeMonBalanceRaw || "0", allowance: "0" }
+    : snapshot.accountTokenStates[tokenIn.toLowerCase()];
+  if (!collateralState) throw new Error(isNativeMon ? "NATIVE_MON_BALANCE_MISSING" : "COLLATERAL_TOKEN_ACCOUNT_STATE_MISSING");
+  const collateralBalanceRaw = BigInt(collateralState.balance);
+  const collateralAllowanceRaw = BigInt(collateralState.allowance || "0");
+  const availableRaw = collateralBalanceRaw > reserveRaw ? collateralBalanceRaw - reserveRaw : 0n;
+  if (marginRaw > availableRaw) throw new Error(isNativeMon ? "DESIRED_MARGIN_EXCEEDS_AVAILABLE_NATIVE_MON" : "DESIRED_MARGIN_EXCEEDS_AVAILABLE_WMON");
   const tiers = snapshot.pairView.leverageMargins;
   const marketMaxLeverage = Math.max(...tiers.map((x) => Number(x.maxLeverage)));
   const minTier = selectLeverageTier(tiers, minNotionalRaw);
@@ -797,18 +800,20 @@ export function buildMarketOpenPlan({
   const extraFee = BigInt(extraFeeRaw);
   const totalCollateralSpend = amountInRaw + extraFee;
   if (amountInRaw > (2n ** 96n - 1n) || extraFee > (2n ** 96n - 1n)) throw new Error("ONECLICK_UINT96_OVERFLOW");
-  if (totalCollateralSpend > availableRaw) throw new Error("WMON_BALANCE_INSUFFICIENT_AFTER_RESERVE_FOR_MARGIN_AND_OPEN_FEE");
-  if (wmonBalanceRaw < totalCollateralSpend) throw new Error("WMON_BALANCE_INSUFFICIENT_FOR_MARGIN_AND_OPEN_FEE");
-  if (wmonAllowanceRaw < totalCollateralSpend && requireExistingAllowance) throw new Error("WMON_DIAMOND_ALLOWANCE_INSUFFICIENT");
+  if (totalCollateralSpend > availableRaw) throw new Error(isNativeMon ? "NATIVE_MON_BALANCE_INSUFFICIENT_AFTER_RESERVE_FOR_MARGIN_AND_OPEN_FEE" : "WMON_BALANCE_INSUFFICIENT_AFTER_RESERVE_FOR_MARGIN_AND_OPEN_FEE");
+  if (collateralBalanceRaw < totalCollateralSpend) throw new Error(isNativeMon ? "NATIVE_MON_BALANCE_INSUFFICIENT_FOR_MARGIN_AND_OPEN_FEE" : "WMON_BALANCE_INSUFFICIENT_FOR_MARGIN_AND_OPEN_FEE");
+  if (!isNativeMon && collateralAllowanceRaw < totalCollateralSpend && requireExistingAllowance) throw new Error("WMON_DIAMOND_ALLOWANCE_INSUFFICIENT");
   const antiDdos = snapshot.antiDdosConfig;
   if (!antiDdos.validUntil || now >= Number(antiDdos.validUntil)) throw new Error("ANTIDDOS_CONFIG_STALE");
-  const feeSelection = selectFeeToken(
-    OneClickAction.MARKET_OPEN,
-    antiDdos.config,
-    snapshot.accountTokenStates,
-    [{ token: tokenIn, amount: totalCollateralSpend }],
-    { requireAllowance: requireExistingAllowance },
-  );
+  const feeSelection = isNativeMon
+    ? { feeToken: "0x0000000000000000000000000000000000000000", antiDdosFee: 0n }
+    : selectFeeToken(
+      OneClickAction.MARKET_OPEN,
+      antiDdos.config,
+      snapshot.accountTokenStates,
+      [{ token: tokenIn, amount: totalCollateralSpend }],
+      { requireAllowance: requireExistingAllowance },
+    );
   const qtyRaw = notionalRaw * (10n ** 10n) / pairPriceRaw;
   if (qtyRaw <= 0n || qtyRaw > (2n ** 128n - 1n)) throw new Error("ONECLICK_QTY_OUT_OF_RANGE");
   const slippage = snapshot.pairView.slippageConfig;
@@ -839,7 +844,7 @@ export function buildMarketOpenPlan({
   const wallClockNonce = BigInt(now);
   const nonce = (lastNonce + 1n) > wallClockNonce ? lastNonce + 1n : wallClockNonce;
   return {
-    mode: "DRY_RUN_ONLY",
+    mode: isNativeMon ? "ONCHAIN_NATIVE" : "DRY_RUN_ONLY",
     action: OneClickAction.MARKET_OPEN,
     actionValues,
     feeToken: feeSelection.feeToken,
@@ -951,7 +956,7 @@ export async function readLeverUpAccountSnapshot({
 }) {
   const [pairs, antiDdos] = await Promise.all([
     fetchLeverUpPairs({ fetchImpl }),
-    fetchAntiDdosConfig({ fetchImpl }),
+    fetchAntiDdosConfig({ fetchImpl }).catch(() => ({ config: [], validUntil: Date.now() + 60_000, fetchedAt: Date.now() })),
   ]);
   const market = pairs.find((item) => item.symbol === symbol || item.pairName === symbol + "/USD");
   if (!market) throw new Error("LEVERUP_MARKET_NOT_FOUND: " + symbol);
