@@ -33,5 +33,6 @@ assert.ok(source.includes("if (paperTradingEnabled && sizingLimits.feasible)"), 
 console.log("PASS: paper pause, independent live candidate discovery, fresh-quote USD allocation sizing, and preserved adaptive history.");
 
 assert.ok(!source.includes("Ciel has no free 22 MON paper margin; no new recommendation will be issued until a paper slot is free."));
-assert.ok(source.includes("setupMessage(position, candidate, reviewed, prices.MON, forecast, quality.market, intraday)"));
-console.log("PASS: shared advisor does not depend on paper margin and common Telegram formatter is restored.");
+assert.ok(source.includes("compactCielSetupMessage(position, candidate, reviewed, prices.MON, forecast)"));
+assert.ok(source.includes("formatLeverUpAdvisorLine(leverUpPlan)"));
+console.log("PASS: shared advisor does not depend on paper margin and the compact CIEL/LeverUp formatter is attached.");
