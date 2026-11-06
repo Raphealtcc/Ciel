@@ -108,7 +108,7 @@ function decodeLeverUpIntentFailureReason(value) {
  * If a request becomes ambiguous after the claim, it is marked UNCERTAIN and is never
  * resubmitted automatically. This prefers a manual reconciliation over a duplicate order.
  */
-export function refreshLeverUpMarketOpenPlan({ plan, pairView, freshOraclePriceRaw, now = Date.now() }) {
+export function refreshLeverUpMarketOpenPlan({ plan, pairView, freshOraclePriceRaw, now = Date.now(), entryPriceToleranceBps = 30 }) {
   if (!plan?.preflight || !Array.isArray(plan.actionValues) || plan.actionValues.length < 11 || !pairView?.slippageConfig) {
     throw new Error("MARKET_OPEN_PLAN_REFRESH_INPUT_INVALID");
   }
@@ -121,8 +121,13 @@ export function refreshLeverUpMarketOpenPlan({ plan, pairView, freshOraclePriceR
   if (qtyRaw <= 0n || qtyRaw > (2n ** 128n - 1n)) throw new Error("FRESH_ORACLE_QTY_OUT_OF_RANGE");
   const slippage = pairView.slippageConfig;
   if (!slippage.enabled) throw new Error("LIVE_SLIPPAGE_CONFIG_DISABLED_OR_MISSING");
-  const slippageP = BigInt(isLong ? slippage.slippageLongP : slippage.slippageShortP);
-  if (slippageP < 0n || slippageP > 10_000n) throw new Error("LIVE_SLIPPAGE_BOUND_INVALID");
+  if (Number(slippage.slippageType) !== 0) throw new Error("LIVE_SLIPPAGE_TYPE_UNSUPPORTED");
+  const protocolSlippageP = BigInt(isLong ? slippage.slippageLongP : slippage.slippageShortP);
+  if (protocolSlippageP < 0n || protocolSlippageP > 10_000n) throw new Error("LIVE_SLIPPAGE_BOUND_INVALID");
+  const requestedToleranceBps = Number(entryPriceToleranceBps);
+  if (!Number.isInteger(requestedToleranceBps) || requestedToleranceBps < 0 || requestedToleranceBps > 100) throw new Error("LIVE_ENTRY_PRICE_TOLERANCE_INVALID");
+  const toleranceP = BigInt(requestedToleranceBps);
+  const slippageP = protocolSlippageP > toleranceP ? protocolSlippageP : toleranceP;
   const worstPriceRaw = isLong
     ? price * (10_000n + slippageP) / 10_000n
     : price * (10_000n - slippageP) / 10_000n;
@@ -141,6 +146,8 @@ export function refreshLeverUpMarketOpenPlan({ plan, pairView, freshOraclePriceR
     actionValues: values,
     qtyRaw: qtyRaw.toString(),
     worstPriceRaw: worstPriceRaw.toString(),
+    protocolSlippageBps: protocolSlippageP.toString(),
+    slippageBps: slippageP.toString(),
     preflight: {
       ...plan.preflight,
       checkedAt: now,
@@ -369,6 +376,7 @@ export async function executeLeverUpEntry({ env, db, candidate, signalId, snapsh
     if (freshPrice == null) throw new Error("FRESH_ORACLE_PRICE_MISSING");
     executionPlan = refreshLeverUpMarketOpenPlan({
       plan, pairView: snapshot.pairView, freshOraclePriceRaw: freshPrice, now,
+      entryPriceToleranceBps: Number(env?.LEVERUP_ENTRY_PRICE_TOLERANCE_BPS ?? 30),
     });
   } catch (error) {
     return { status: "REJECTED", submitted: false, reason: "FRESH_ORACLE_REFRESH_FAILED: " + String(error?.message || error).slice(0, 180) };
