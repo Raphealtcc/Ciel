@@ -162,7 +162,7 @@ assert.equal(notApproved.status, "NOT_APPROVED");
 
 
 import { runLeverUpDiagnostics } from "../src/leverup-advisor.js";
-import { privateKeyToAccount } from "viem/accounts";
+
 const diagKey = `0x${"02".repeat(32)}`;
 const diagAgent = privateKeyToAccount(diagKey).address;
 const diag = await runLeverUpDiagnostics({
