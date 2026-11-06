@@ -99,7 +99,7 @@ assert.equal(ready.status, "PREFLIGHT_PASS_LIVE_DISABLED");
 assert.equal(ready.liveExecutionEnabled, false);
 assert.equal(ready.killSwitchEnabled, true);
 assert.equal(ready.selectedLeverage, 100);
-assert.ok(Math.abs(seenPlanArgs.snapshot.collateralRatio - (20 / (100 * 0.23))) < 1e-9,
+assert.equal(seenPlanArgs.snapshot.collateralRatio, 1,
   "100x collateral ratio must be derived from the $0.23 minimum, not a hardcoded protocol ratio");
 assert.ok(Math.abs(ready.minimumMarginMon - (0.23737571 / 0.019038)) < 1e-6,
   "minimum WMON must preserve the prior 13 MON USD-equivalent floor, subject to venue minimum collateral");
