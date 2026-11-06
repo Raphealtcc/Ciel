@@ -118,7 +118,7 @@ export async function prepareLeverUpAdvisorPlan({
     ? await Promise.all([env.CIEL_STATE.get("ciel:control:live-enabled"), env.CIEL_STATE.get("ciel:control:live-entry-enabled")])
     : [null, null];
   const liveConfigured = String(liveOverride ?? env?.LEVERUP_LIVE_TRADING).toLowerCase() === "true";
-  const liveMode = liveConfigured && liveEntryOverride !== "false" && String(env?.LEVERUP_KILL_SWITCH).toLowerCase() === "false";
+  const liveMode = liveConfigured && liveOverride === "true" && liveEntryOverride === "true" && String(env?.LEVERUP_KILL_SWITCH).toLowerCase() === "false";
   const dryRunMode = !liveConfigured && String(env?.LEVERUP_KILL_SWITCH).toLowerCase() === "true";
   const result = (status, reason, extra = {}) => ({
     schemaVersion: 1, signalId: String(signalId || ""),
@@ -179,9 +179,8 @@ export async function prepareLeverUpAdvisorPlan({
 
     const minimumNotionalUsd = Number(minimumNotionalRaw) / 1e18;
     const monUsdPrice = Number(snapshot.monUsdPriceRaw) / 1e18;
-    // Native MON is the documented collateral input for LVMON positions.
-    // Use nominal MON pricing only as a planning estimate; the exact transaction
-    // must pass a live Diamond simulation before any broadcast is allowed.
+    // 1CT accepts ERC-20 collateral only. MON-denominated sizing is converted
+    // into WMON units and the hosted-agent relayer supplies oracle updates.
     const minimumCollateralUsd = minimumNotionalUsd / leverageForMinimum;
     collateralRatio = 1;
     if (!(collateralRatio > 0 && collateralRatio <= 1)) throw new Error("DERIVED_COLLATERAL_RATIO_OUT_OF_RANGE");
@@ -212,7 +211,7 @@ export async function prepareLeverUpAdvisorPlan({
       buildPlan,
       planArgs: { snapshot, desiredMarginMon, maxTradeMarginMon, inferredLeverage,
         side: candidate.side, expectedHoldSeconds, reserveMon, stopLossPriceRaw, takeProfitPriceRaw,
-        tokenIn: "0x0000000000000000000000000000000000000000",
+        tokenIn: LEVERUP_TOKENS.WMON,
         requireExistingAllowance: false, now,
         entryPriceToleranceBps: Number(env?.LEVERUP_ENTRY_PRICE_TOLERANCE_BPS ?? 30) },
       maxEntryBudgetMon: maxTradeMarginMon, minimumMarginMon,
@@ -221,11 +220,11 @@ export async function prepareLeverUpAdvisorPlan({
       entryBudgetCeilingMon: budgeted.budgetMon, totalAllocationMon, reserveMon, usdLimits };
     const traderSigner = inspectLeverUpTraderSigner({ env });
     const authorized = traderSigner.status === "PASS" && traderSigner.matchesConfiguredTrader === true;
-    const status = authorized ? (liveMode ? "PREFLIGHT_PASS_LIVE_ENABLED" : "PREFLIGHT_PASS_LIVE_DISABLED") : "BLOCKED_TRADER_SIGNER";
-    const reason = authorized
+    let status = authorized ? (liveMode ? "PREFLIGHT_PASS_LIVE_ENABLED" : "PREFLIGHT_PASS_LIVE_DISABLED") : "BLOCKED_TRADER_SIGNER";
+    let reason = authorized
       ? (liveMode
-        ? "Live market, native-MON collateral, tier, margin and slippage checks passed; entry is simulated before direct on-chain submission."
-        : "Live market, tier, margin, balance and fee checks passed. Exact token approvals are prepared for live mode; no approval transaction or order was signed or submitted.")
+        ? "Live market, WMON collateral, tier, margin and slippage checks passed; entry is submitted through the LeverUp 1CT hosted agent."
+        : "Live market, tier, margin, balance and fee checks passed. WMON and fee-token allowances are checked for live mode; the hosted-agent intent is locally signed only in dry-run, with no approval transaction or intent submission.")
        : "The configured trader private key does not match the trader wallet. No transaction was signed or submitted.";
     let ledgerId = null, ledgerPersisted = false;
     try {
@@ -242,10 +241,27 @@ export async function prepareLeverUpAdvisorPlan({
     let dryRunSigning = traderSigner;
     let coordination = { status: "NOT_RUN" };
     if (authorized && dryRunMode) {
-      dryRunSigning = { status: "NOT_REQUIRED_DIRECT_ONCHAIN" };
       try {
-        const wmonBalanceMon = Number(BigInt(snapshot.nativeMonBalanceRaw || "0")) / 1e18;
-        const entryBudgetMon = Number(BigInt(plan.amountInRaw)) / 1e18;
+        dryRunSigning = await signIntentDryRun({
+          env, traderAddress, agentAddress, agentAuthorization: snapshot.agentAuthorization,
+          action: OneClickAction.MARKET_OPEN, nonce: plan.nonce, deadline: plan.deadline,
+          actionValues: plan.actionValues, feeToken: plan.feeToken, antiDdosFee: plan.antiDdosFee,
+          preflight: plan.preflight, now,
+        });
+      } catch (error) {
+        dryRunSigning = { status: "FAILED", reason: errorMessage(error) };
+      }
+      if (dryRunSigning.signed !== true) {
+        status = "BLOCKED_AGENT_SIGNER";
+        reason = "The hosted-agent key or its on-chain market-open authorization failed local 1CT signing validation.";
+      }
+      try {
+        const wmonState = snapshot.accountTokenStates?.[LEVERUP_TOKENS.WMON.toLowerCase()];
+        if (!wmonState?.balance) throw new Error("WMON_BALANCE_NOT_AVAILABLE_FOR_DRY_RUN_RISK_CHECK");
+        const wmonBalanceMon = Number(BigInt(wmonState.balance)) / 1e18;
+        const entrySpendRaw = BigInt(plan.amountInRaw) + BigInt(plan.actionValues?.[10] || 0) +
+          (String(plan.feeToken || "").toLowerCase() === LEVERUP_TOKENS.WMON.toLowerCase() ? BigInt(plan.antiDdosFee || 0) : 0n);
+        const entryBudgetMon = Number(plan.entryBudgetMon ?? (Number(entrySpendRaw) / 1e18));
         const stopRiskMon = Number(plan.marginMonUsed) * Number(plan.selectedLeverage) * stopPct / 100;
         coordination = await prepareLeverUpExecution({
           signal: { id: signalId },

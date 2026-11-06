@@ -287,7 +287,7 @@ export async function submitLeverUpIntent({
   } catch (error) {
     const message = String(error?.message || error).slice(0, 300);
     await updateIntent(db, signalId, markedUncertain ? "UNCERTAIN" : "REJECTED", { lastError: message }).catch(() => void 0);
-    return { status: markedUncertain ? "UNCERTAIN" : "REJECTED", submitted: false, signalId, reason: message };
+    return { status: markedUncertain ? "UNCERTAIN" : "REJECTED", submitted: markedUncertain, signalId, reason: message };
   }
 }
 
@@ -486,7 +486,19 @@ export async function executeLeverUpEntry({ env, db, candidate, signalId, snapsh
     ? await Promise.all([env.CIEL_STATE.get("ciel:control:live-enabled"), env.CIEL_STATE.get("ciel:control:live-entry-enabled")])
     : [null, null];
   const effectiveEnv = liveOverride == null ? env : { ...env, LEVERUP_LIVE_TRADING: liveOverride };
-  if (!liveEnabled(effectiveEnv) || entryOverride === "false") return { status: "LIVE_DISABLED", submitted: false };
+  if (!liveEnabled(effectiveEnv) || liveOverride !== "true" || entryOverride !== "true") return { status: "LIVE_DISABLED", submitted: false };
+
+  const traderAddress = String(snapshot?.traderAddress || effectiveEnv?.LEVERUP_TRADER_ADDRESS || "");
+  const agentAddress = String(snapshot?.agentAddress || effectiveEnv?.LEVERUP_AGENT_ADDRESS || "");
+  if (!/^0x[0-9a-fA-F]{40}$/.test(traderAddress) || !/^0x[0-9a-fA-F]{40}$/.test(agentAddress)) {
+    return { status: "REJECTED", submitted: false, reason: "HOSTED_AGENT_WALLET_CONFIGURATION_INVALID" };
+  }
+  if (!snapshot?.agentAuthorization?.authorized ||
+      String(snapshot.agentAuthorization.agentAddress || "").toLowerCase() !== agentAddress.toLowerCase() ||
+      snapshot.agentAuthorization.canMarketOpen !== true) {
+    return { status: "REJECTED", submitted: false, reason: "HOSTED_AGENT_MARKET_OPEN_PERMISSION_NOT_VERIFIED" };
+  }
+
   let executionPlan = plan;
   try {
     const fetchPrices = dependencies.fetchLatestOraclePrices || fetchLatestOraclePrices;
@@ -495,45 +507,93 @@ export async function executeLeverUpEntry({ env, db, candidate, signalId, snapsh
     if (freshPrice == null) throw new Error("FRESH_ORACLE_PRICE_MISSING");
     executionPlan = refreshLeverUpMarketOpenPlan({
       plan, pairView: snapshot.pairView, freshOraclePriceRaw: freshPrice, now,
-      entryPriceToleranceBps: Number(env?.LEVERUP_ENTRY_PRICE_TOLERANCE_BPS ?? 30),
+      entryPriceToleranceBps: Number(effectiveEnv?.LEVERUP_ENTRY_PRICE_TOLERANCE_BPS ?? 30),
     });
   } catch (error) {
     return { status: "REJECTED", submitted: false, reason: "FRESH_ORACLE_REFRESH_FAILED: " + String(error?.message || error).slice(0, 180) };
   }
-  const nativeBalance = Number(BigInt(snapshot.nativeMonBalanceRaw || "0")) / 1e18;
-  let oracleUpdate;
-  try {
-    oracleUpdate = await fetchLeverUpOnchainOracleUpdate(snapshot.market.base, dependencies.fetchImpl || fetch);
-  } catch (error) {
-    return { status: "REJECTED", submitted: false, reason: "ONCHAIN_ORACLE_UPDATE_FAILED: " + String(error?.message || error).slice(0, 160) };
+
+  // Production entries must use LeverUp 1CT hosted-agent mode. Native MON is
+  // deliberately rejected here; 1CT requires ERC-20 WMON collateral.
+  const actionValues = executionPlan.actionValues || [];
+  if (String(actionValues[2] || "").toLowerCase() !== WMON ||
+      String(actionValues[3] || "").toLowerCase() !== LEVERUP_TOKENS.LVMON.toLowerCase()) {
+    return { status: "REJECTED", submitted: false, reason: "HOSTED_AGENT_REQUIRES_WMON_LVMON_COLLATERAL_PAIR" };
   }
+  if (!executionPlan.preflight?.preflightPassed || executionPlan.preflight.status !== "AVAILABLE") {
+    return { status: "REJECTED", submitted: false, reason: "HOSTED_AGENT_PREFLIGHT_NOT_PASSED" };
+  }
+
+  const wmonState = snapshot.accountTokenStates?.[WMON];
+  if (!wmonState || wmonState.balance == null) {
+    return { status: "REJECTED", submitted: false, reason: "WMON_BALANCE_NOT_AVAILABLE_FOR_RISK_CHECK" };
+  }
+  const wmonBalanceMon = Number(BigInt(wmonState.balance)) / 1e18;
   const margin = Number(executionPlan.marginMonUsed);
-  const entryBudget = Number(BigInt(executionPlan.amountInRaw) + BigInt(executionPlan.actionValues[10] || 0) + BigInt(oracleUpdate.value)) / 1e18;
+  const feeToken = String(executionPlan.feeToken || ZERO).toLowerCase();
+  const antiDdosFee = BigInt(executionPlan.antiDdosFee || 0);
+  const amountIn = BigInt(actionValues[4] || 0);
+  const extraFee = BigInt(actionValues[10] || 0);
+  const wmonEntrySpend = amountIn + extraFee + (feeToken === WMON ? antiDdosFee : 0n);
+  const entryBudgetMon = Number(wmonEntrySpend) / 1e18;
   const stopPct = Number(candidate.stopPct);
   const stopRiskMon = margin * Number(executionPlan.selectedLeverage) * stopPct / 100;
-  const portfolioRisk = await readPortfolioRiskFromLedger(db, now);
+  let portfolioRisk;
+  try {
+    portfolioRisk = dependencies.readPortfolioRisk
+      ? await dependencies.readPortfolioRisk(db, now)
+      : await readPortfolioRiskFromLedger(db, now);
+  } catch (error) {
+    return { status: "REJECTED_RISK", submitted: false, reason: "PORTFOLIO_RISK_READ_FAILED: " + String(error?.message || error).slice(0, 160) };
+  }
   const risk = evaluateLeverUpPortfolioRisk({
     requestedLeverage: executionPlan.selectedLeverage,
-    totalAllocationMon: executionPlan.totalAllocationMon ?? env.LEVERUP_TOTAL_ALLOCATION_MON ?? 50,
-    reserveMon: executionPlan.reserveMon ?? env.LEVERUP_RESERVE_MON ?? 25,
-    availableWmonMon: nativeBalance, requestedMarginMon: margin, entryBudgetMon: entryBudget,
+    totalAllocationMon: executionPlan.totalAllocationMon ?? effectiveEnv.LEVERUP_TOTAL_ALLOCATION_MON ?? 50,
+    reserveMon: executionPlan.reserveMon ?? effectiveEnv.LEVERUP_RESERVE_MON ?? 25,
+    availableWmonMon: wmonBalanceMon, requestedMarginMon: margin, entryBudgetMon,
     currentOpenPositions: snapshot.indexedPositions || [],
-    maxConcurrentPositions: env.LEVERUP_MAX_CONCURRENT_POSITIONS ?? 1,
+    maxConcurrentPositions: effectiveEnv.LEVERUP_MAX_CONCURRENT_POSITIONS ?? 1,
     proposedStopRiskMon: stopRiskMon, aggregateStopRiskMon: portfolioRisk.aggregateStopRiskMon,
-    maxAggregateStopRiskMon: env.LEVERUP_MAX_AGGREGATE_STOP_RISK_MON ?? 12,
+    maxAggregateStopRiskMon: effectiveEnv.LEVERUP_MAX_AGGREGATE_STOP_RISK_MON ?? 12,
     dailyRealizedLossMon: portfolioRisk.dailyRealizedLossMon,
-    maxDailyRealizedLossMon: env.LEVERUP_MAX_DAILY_LOSS_MON ?? 12,
+    maxDailyRealizedLossMon: effectiveEnv.LEVERUP_MAX_DAILY_LOSS_MON ?? 12,
     rollingDrawdownMon: portfolioRisk.rollingDrawdownMon,
-    maxRollingDrawdownMon: env.LEVERUP_MAX_DRAWDOWN_MON ?? 12,
-    staleFeed: now - Number(snapshot.checkedAt || now) > 30_000, executionUncertain: false, killSwitchActive: false,
+    maxRollingDrawdownMon: effectiveEnv.LEVERUP_MAX_DRAWDOWN_MON ?? 12,
+    staleFeed: now - Number(snapshot.checkedAt || now) > 30_000,
+    executionUncertain: false, killSwitchActive: false,
   });
   if (!risk.allowed) return { status: "REJECTED_RISK", reasons: risk.reasons, risk };
-  const result = await submitLeverUpNativeOnchainEntry({
-    env: effectiveEnv, db, signalId, candidate, plan: executionPlan,
-    traderAddress: snapshot.traderAddress, pairBase: snapshot.market.base,
-    oracleUpdate, now, dependencies,
+
+  let nonce;
+  try {
+    const client = dependencies.publicClient || createLeverUpPublicClient(effectiveEnv?.LEVERUP_RPC_URL || "https://rpc2.monad.xyz");
+    const readNonce = dependencies.readNonce || readLastAgentNonce;
+    const lastNonce = BigInt(await readNonce(traderAddress, agentAddress, { publicClient: client }));
+    const candidates = [lastNonce + 1n, BigInt(now), BigInt(executionPlan.nonce || 0)];
+    nonce = candidates.reduce((max, value) => value > max ? value : max, 0n).toString();
+  } catch (error) {
+    return { status: "REJECTED", submitted: false, reason: "HOSTED_AGENT_NONCE_READ_FAILED: " + String(error?.message || error).slice(0, 160) };
+  }
+
+  const allowanceRequirements = [{ tokenAddress: WMON, amount: amountIn + extraFee }];
+  if (feeToken !== ZERO.toLowerCase() && antiDdosFee > 0n) {
+    allowanceRequirements.push({ tokenAddress: feeToken, amount: antiDdosFee });
+  }
+  const result = await submitLeverUpIntent({
+    env: effectiveEnv, db, signalId, action: OneClickAction.MARKET_OPEN, actionValues,
+    traderAddress, agentAddress, agentAuthorization: snapshot.agentAuthorization,
+    nonce, deadline: Math.floor(now / 1000) + 300,
+    feeToken, antiDdosFee, preflight: executionPlan.preflight,
+    allowanceRequirements, pairBase: snapshot.market.base,
+    leverage: executionPlan.selectedLeverage, marginMon: executionPlan.marginMonUsed,
+    notionalUsd: executionPlan.notionalUsd,
+    payload: {
+      executionPath: "1CT_HOSTED_AGENT", candidate, plan: serializable(executionPlan),
+      stopRiskMon, entryBudgetMon, submittedAt: now,
+    },
+    now, dependencies,
   });
-  return { ...result, risk };
+  return { ...result, risk, executionPath: "1CT_HOSTED_AGENT" };
 }
 
 export async function reconcileLeverUpIntent({ intentHash, pollStatus, readPositions, previousState }) {

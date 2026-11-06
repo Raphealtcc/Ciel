@@ -268,7 +268,12 @@ export async function signAndSubmitIntent(options) {
   if (!response.ok) {
     throw new Error(`LeverUp submit-intent HTTP ${response.status}: ${(await response.text()).slice(0, 300)}`);
   }
-  const intentHash = (await response.text()).replace(/^"|"$/g, "");
+  const rawBody = (await response.text()).trim();
+  let parsedBody = rawBody;
+  try { parsedBody = JSON.parse(rawBody); } catch { /* LeverUp may return a bare hash string. */ }
+  const intentHash = typeof parsedBody === "string"
+    ? parsedBody
+    : String(parsedBody?.intentHash || parsedBody?.intent_hash || parsedBody?.hash || "");
   if (!/^0x[0-9a-fA-F]{64}$/.test(intentHash)) {
     throw new Error("LeverUp returned an invalid intent hash");
   }

@@ -2,17 +2,16 @@
 
 ## Current implementation status
 
-- `src/leverup-1ct.js`: EIP-712 signing and action-data encoding for LeverUp 1CT.
-- `src/leverup-readonly.js`: read-only market preflight, live pair/oracle reads, fee-token configuration, onchain position accruals, agent authorization/nonce reads, token balance/allowance reads, and settlement reconciliation.
-- `migrations/0002_leverup_execution_ledger.sql`: additive D1 ledger tables for preflight snapshots, position fee snapshots, and closed-settlement reconciliations. The tier-specific max leverage column is included to match the persistence insert.
-- `scripts/test-leverup-1ct.mjs` and `scripts/test-leverup-readonly.mjs`: safety and accounting tests.
-- `src/leverup-advisor.js` connects fully confirmed CIEL approvals to a read-only LeverUp account snapshot and market-open preflight. Successful and permission-rejected preflights are persisted to the additive D1 ledger and KV.
-- `scripts/apply-leverup-integration.mjs` injects that coordinator into the recovered Worker build; the Telegram trade card shows the actual LeverUp preflight result.
-- The integration rejects unknown collateral ratios, existing open LeverUp positions, missing WMON balance/allowance, unsupported tiers, missing market data, and missing market-open permission.
-- Exact token approval is wired into the guarded live submission coordinator. It validates the trader key against `LEVERUP_TRADER_ADDRESS`, allowlists WMON/LVMON/USDC/LVUSD, approves only the exact amount required by the current intent, waits for confirmation, and rereads allowance. It refuses to run unless `LEVERUP_LIVE_TRADING=true` and `LEVERUP_KILL_SWITCH=false`.
-- The CIEL approved-signal path now has a D1 idempotency claim, exact allowance preparation, guarded EIP-712 submission, ambiguous-submission quarantine, status polling/reconciliation, and on-chain position confirmation. An uncertain submit is never automatically replayed.
-- The minute cron runs read-only account diagnostics, open-position monitoring, fee snapshots, stop/target/max-hold checks, configured partial take-profits, and closed-position settlement reconciliation. It only submits management intents when live mode is explicitly enabled.
-- The current Worker configuration remains `LEVERUP_LIVE_TRADING=false` and `LEVERUP_KILL_SWITCH=true`. No approval or order transaction is permitted in the deployed configuration.
+- `src/leverup-1ct.js` implements LeverUp 1CT action encoding, EIP-712 signing, fee-token selection, intent submission, and status polling.
+- `src/leverup-advisor.js` now constructs market-open plans with WMON collateral, not native MON.
+- `executeLeverUpEntry` in `src/leverup-coordinator.js` routes production entries through the hosted-agent 1CT path. It checks the authorized agent's market-open permission, refreshes the oracle price, reads a fresh nonce, applies portfolio risk checks, and submits through the LeverUp relayer.
+- The hosted-agent key is used only to sign restricted trading intents. The trader key is used only for exact ERC-20 approvals when `LEVERUP_AUTO_APPROVE=true` and live execution is explicitly enabled.
+- WMON collateral and the selected 1CT fee token are checked and approved for the required exact amounts. The D1 intent claim is created before submission; ambiguous network outcomes remain `UNCERTAIN` and are not automatically replayed.
+- Full closes, partial closes, and purge already use the 1CT intent path. The legacy direct-native helper remains in the source for regression coverage but is no longer called by the production entry coordinator.
+- Dry-run mode locally signs the hosted-agent EIP-712 intent and checks the WMON-based risk budget. It does not approve tokens, submit an intent, or place a trade.
+- This hosted-agent change is on the feature branch `fix/leverup-hosted-agent-entry` in MR !27. It has not been merged or deployed. The currently deployed Worker therefore does not yet contain this change.
+- No Pyth Pro API key is used by the 1CT route. LeverUp's relayer fetches the oracle payload for submitted intents.
+
 
 ## Confirmed public wallet identities
 
@@ -55,7 +54,7 @@ The staging `wrangler.jsonc` now contains the two confirmed public addresses and
 | `LEVERUP_COLLATERAL_50X_USD` | Plain text | `0.43` USD minimum collateral at 50x |\n| `LEVERUP_COLLATERAL_100X_USD` | Plain text | `0.23` USD minimum collateral at 100x; linear interpolation between 50x and 100x; 0.23 USD floor above 100x |
 | `LEVERUP_MAX_TRADE_MARGIN_MON` | Plain text | Intentionally unset; no per-trade budget has been authorized |
 
-The additive migrations `0002_leverup_execution_ledger.sql` and `0003_leverup_execution_coordination.sql` are applied to the isolated `ciel-paper-staging` D1 database; all five LeverUp tables were verified. On 2026-11-03, the main-branch read-only CIEL/LeverUp preflight bundle was deployed to the isolated `ciel2` Worker (version `09e69cf9-4a29-4643-bdf7-cf0ab8f74dfa`, deployment `294ad345-78d7-4cea-868a-b4014dc5b694`). The public health endpoint returned HTTP 200, and the protected diagnostics endpoint returned HTTP 401 when called without authorization. All six existing secret bindings, D1, KV, Durable Object namespaces, exports, and the one-minute cron schedule were preserved. Live trading remains `false`, the kill switch remains `true`, and no wallet approval or order was submitted. The approval helper remains isolated in source and is not yet wired into a live order lifecycle.
+The additive migrations `0002_leverup_execution_ledger.sql` and `0003_leverup_execution_coordination.sql` are applied to the isolated `ciel-paper-staging` D1 database; all five LeverUp tables were verified. On 2026-11-03, the main-branch read-only CIEL/LeverUp preflight bundle was deployed to the isolated `ciel2` Worker (version `09e69cf9-4a29-4643-bdf7-cf0ab8f74dfa`, deployment `294ad345-78d7-4cea-868a-b4014dc5b694`). The public health endpoint returned HTTP 200, and the protected diagnostics endpoint returned HTTP 401 when called without authorization. All six existing secret bindings, D1, KV, Durable Object namespaces, exports, and the one-minute cron schedule were preserved. Live trading remains `false`, the kill switch remains `true`, and no wallet approval or order was submitted. The exact-allowance helper is wired into the guarded 1CT submission lifecycle. It can submit an approval transaction only when the explicit live-mode and kill-switch gates are satisfied.
 
 ## Wallet and token setup
 
@@ -96,27 +95,11 @@ The Worker no longer invents a protocol collateral-ratio value. It uses the oper
 
 The venue minimum notional is read from the live contract, not hardcoded. Minimum WMON collateral is calculated from the current MON/USD price, selected leverage, and verified WMON collateral ratio. The total 50 MON ceiling is not a per-trade allocation. The current per-trade margin ceiling is 25 MON, with 25 MON reserved.
 
-## Remaining implementation / activation sequence
+## Remaining verification / activation sequence
 
-1. Read `getAgentAuth` and `getLastNonce`; verify the agent is authorized for the required action bits (0 open, 1 close, 9 partial close).
-2. Read WMON and all enabled fee-token balances/allowances. No approvals are sent automatically.
-3. Verify the current WMON collateral ratio from the live LeverUp UI/API.
-4. Finish integrating preflight and account-state checks into the CIEL signal candidate loop.
-5. Add idempotent entry/exit intent orchestration and persist preflight, position accrual and settlement records to the new D1 tables.
-6. Apply the D1 migration to the isolated staging D1 database.
-7. Run a full dry-run using live prices and current account state. No intent submission.
-8. Only after explicit approval: deploy the code with live trading still OFF, verify endpoints, and separately decide whether to enable live execution.
+1. Restore GitLab CI capacity and run the full branch test suite; the current pipelines are blocked by `ci_quota_exceeded` before test execution.
+2. Confirm the latest Cloudflare Worker build contains MR !27 after merge, while leaving live activation controls unchanged.
+3. Run the protected read-only diagnostics and confirm the trader/agent addresses, agent permissions, fresh nonce, WMON balance, WMON Diamond allowance, selected fee-token balance/allowance, and D1 ledger are all valid.
+4. Run hosted-agent dry-run signing and confirm it produces a valid local EIP-712 signature without submitting an intent.
+5. Only after the above checks pass, separately authorize any required WMON/fee-token approval transactions and a controlled live test. Do not treat a successful deploy or dry-run signature as proof of a filled trade.
 
-Official references:
-- https://developer-docs.leverup.xyz/gasless/overview
-- https://developer-docs.leverup.xyz/gasless/authorization
-- https://developer-docs.leverup.xyz/gasless/fees
-- https://developer-docs.leverup.xyz/gasless/actions
-- https://developer-docs.leverup.xyz/gasless/signing
-- https://developer-docs.leverup.xyz/api/pairs
-- https://developer-docs.leverup.xyz/api/oracle
-- https://developer-docs.leverup.xyz/api/positions
-- https://developer-docs.leverup.xyz/api/history
-- https://developer-docs.leverup.xyz/onchain/reading-data
-- https://leverup.gitbook.io/docs/trading/fee-breakdown
-- https://leverup.gitbook.io/docs/liquidity-layer/anycollateral

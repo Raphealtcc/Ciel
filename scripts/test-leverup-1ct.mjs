@@ -168,4 +168,30 @@ await assert.rejects(() => signIntentDryRun({
   actionValues: [pairBase, true, tokenIn, lvToken, 11n * 10n ** 18n, 10000000000n, 2n * 10n ** 18n, 0n, 0n, 0, 0n],
   preflight: { preflightPassed: true, requestedLeverage: 50, marketMaxLeverage: 100, maxLeverageForNotional: 50, pairBase, status: "AVAILABLE", checkedAt: Date.now() },
 }), /LEVERUP_SIGNER_KEY_DOES_NOT_MATCH_AUTHORIZED_AGENT/);
+
+const submitKey = "0x" + "01".repeat(32);
+const submitAgent = privateKeyToAccount(submitKey).address;
+let capturedRequest = null;
+const submittedIntent = await signAndSubmitIntent({
+  enabled: true, killSwitchActive: false,
+  agentAuthorization: { authorized: true, agentAddress: submitAgent, canMarketOpen: true },
+  agentAddress: submitAgent, traderAddress: trader, signerPrivateKey: submitKey,
+  action: OneClickAction.MARKET_OPEN, nonce: "1785312000126",
+  deadline: Math.floor(Date.now() / 1000) + 300,
+  actionValues: [pairBase, true, tokenIn, lvToken, 11n * 10n ** 18n,
+    10000000000n, 2n * 10n ** 18n, 0n, 0n, 0, 0n],
+  preflight: { preflightPassed: true, requestedLeverage: 50, marketMaxLeverage: 100,
+    maxLeverageForNotional: 50, pairBase, status: "AVAILABLE", checkedAt: Date.now() },
+  fetchImpl: async (url, options) => {
+    capturedRequest = { url, options };
+    return { ok: true, text: async () => JSON.stringify({ intentHash: hash }) };
+  },
+});
+assert.equal(submittedIntent.intentHash, hash,
+  "1CT submit must accept the documented intentHash response when returned in a JSON object");
+assert.equal(capturedRequest.url, LEVERUP_1CT.baseUrl + "/v2/trading/submit-intent?blockchain=MONAD");
+assert.equal(JSON.parse(capturedRequest.options.body).trader, trader);
+assert.equal(JSON.parse(capturedRequest.options.body).action, OneClickAction.MARKET_OPEN);
+assert.match(JSON.parse(capturedRequest.options.body).signature, /^0x[0-9a-f]+$/);
+
 console.log("PASS: 1CT ABI encoding, dynamic offsets, EIP-712, fee-token selection, hard-off, kill-switch, fresh preflight and 50x execution floor and local-only signer address verification.");
