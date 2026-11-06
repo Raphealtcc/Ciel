@@ -277,13 +277,27 @@ export async function prepareLeverUpAdvisorPlan({
 }
 
 export function formatLeverUpAdvisorLine(record) {
-  if (!record) return "LeverUp: no preflight.";
-  if (record.status === "PREFLIGHT_PASS_LIVE_DISABLED" || record.status === "PREFLIGHT_PASS_LIVE_ENABLED") {
-    return "LeverUp: PASS · " + record.selectedLeverage + "x · " +
-      Number(record.marginMonUsed).toFixed(2) + " MON · $" + Number(record.notionalUsd).toFixed(2) +
-      " notional · " + (record.status === "PREFLIGHT_PASS_LIVE_ENABLED" ? "LIVE" : "DRY RUN");
+  if (!record) return "LeverUp: NOT CHECKED";
+  const execution = record.coordination || {};
+  const intent = execution.intentStatus || record.intentStatus || record.plan?.intentStatus || {};
+  const executionStatus = String(execution.status || "").toUpperCase();
+  const failure = execution.reason || execution.lastError || execution.error ||
+    execution.failureReason || intent.failureReason || record.failureReason || "";
+  if (executionStatus.startsWith("REJECTED") || intent.success === false || record.status === "REJECTED") {
+    return "LeverUp: NOT OPENED · " + String(failure || "execution rejected").slice(0, 100);
   }
-  return "LeverUp: BLOCKED · " + String(record.reason || record.status || "preflight failed").slice(0, 120);
+  if (executionStatus === "RECONCILED" && Array.isArray(execution.positions) && execution.positions.length > 0) {
+    return "LeverUp: POSITION OPEN · on-chain position confirmed";
+  }
+  if (["SUBMITTED", "PENDING", "UNCERTAIN"].includes(executionStatus) || execution.submitted === true || intent.submitted === true) {
+    return "LeverUp: ORDER SUBMITTED · awaiting on-chain confirmation";
+  }
+  if (record.status === "PREFLIGHT_PASS_LIVE_ENABLED" || record.status === "PREFLIGHT_PASS_LIVE_DISABLED") {
+    return "LeverUp: PREFLIGHT PASS · " + record.selectedLeverage + "x · " +
+      Number(record.marginMonUsed).toFixed(2) + " MON · $" + Number(record.notionalUsd).toFixed(2) +
+      " notional · " + (record.liveExecutionEnabled ? "LIVE" : "DRY RUN") + " · fill unconfirmed";
+  }
+  return "LeverUp: BLOCKED · " + String(record.reason || record.status || "preflight failed").slice(0, 100);
 }
 
 
