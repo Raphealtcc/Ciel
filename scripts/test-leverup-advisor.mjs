@@ -20,10 +20,10 @@ const baseSnapshot = (ratio) => ({
 });
 const env = {
   LEVERUP_PREFLIGHT_ENABLED: "true", LEVERUP_LIVE_TRADING: "false", LEVERUP_KILL_SWITCH: "true",
-  LEVERUP_MIN_LEVERAGE: "50", LEVERUP_TOTAL_ALLOCATION_MON: "50", LEVERUP_RESERVE_MON: "25",
+  LEVERUP_MIN_LEVERAGE: "50",
   LEVERUP_TOTAL_ALLOCATION_USD: "0.9129835", LEVERUP_RESERVE_USD: "0.45649175",
   LEVERUP_MAX_TRADE_MARGIN_USD: "0.45649175", LEVERUP_MIN_TRADE_MARGIN_USD: "0.23737571",
-  LEVERUP_COLLATERAL_50X_USD: "0.43", LEVERUP_COLLATERAL_100X_USD: "0.23", LEVERUP_MAX_TRADE_MARGIN_MON: "25",
+  LEVERUP_COLLATERAL_50X_USD: "0.43", LEVERUP_COLLATERAL_100X_USD: "0.23",
   LEVERUP_TRADER_ADDRESS: trader, LEVERUP_TRADER_PRIVATE_KEY: testTraderKey, LEVERUP_AGENT_ADDRESS: agent,
   CIEL_STATE: { put: async () => {} }, DB: { prepare: () => ({ bind() { return this; }, first: async () => null }) },
 };
@@ -71,6 +71,14 @@ assert.equal(limitsAfterPriceRise.totalAllocationMon, 25);
 assert.equal(limitsAfterPriceRise.reserveMon, 12.5);
 assert.equal(limitsAfterPriceRise.maxTradeMarginMon, 12.5);
 assert.equal(limitsAfterPriceRise.minimumTradeMarginMon, 6.5);
+const fixedMonOverrides = { ...env, LEVERUP_TOTAL_ALLOCATION_MON: "50", LEVERUP_RESERVE_MON: "25", LEVERUP_MAX_TRADE_MARGIN_MON: "25" };
+const fixedMonAtReference = leverUpUsdLimitsToMon({ env: fixedMonOverrides, monUsdPrice: 0.01825967 });
+const fixedMonAfterPriceRise = leverUpUsdLimitsToMon({ env: fixedMonOverrides, monUsdPrice: 0.03651934 });
+for (const fixed of [fixedMonAtReference, fixedMonAfterPriceRise]) {
+  assert.equal(fixed.totalAllocationMon, 50, "explicit MON allocation override must remain fixed");
+  assert.equal(fixed.reserveMon, 25, "explicit MON reserve override must remain fixed");
+  assert.equal(fixed.maxTradeMarginMon, 25, "explicit MON trade ceiling must remain fixed");
+}
 const budgetProbe = buildBudgetedLeverUpPlan({
   buildPlan: ({ desiredMarginMon }) => ({
     marginMonUsed: String(desiredMarginMon),
