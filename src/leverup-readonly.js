@@ -956,7 +956,9 @@ export async function readLeverUpAccountSnapshot({
 }) {
   const [pairs, antiDdos] = await Promise.all([
     fetchLeverUpPairs({ fetchImpl }),
-    fetchAntiDdosConfig({ fetchImpl }).catch(() => ({ config: [], validUntil: Date.now() + 60_000, fetchedAt: Date.now() })),
+    // Never invent a zero-fee 1CT config when the keeper endpoint is unavailable.
+    // Missing fee data must stop preflight rather than create a likely-rejected intent.
+    fetchAntiDdosConfig({ fetchImpl }),
   ]);
   const market = pairs.find((item) => item.symbol === symbol || item.pairName === symbol + "/USD");
   if (!market) throw new Error("LEVERUP_MARKET_NOT_FOUND: " + symbol);
