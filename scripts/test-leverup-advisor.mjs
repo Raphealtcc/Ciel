@@ -6,7 +6,8 @@ import { privateKeyToAccount } from "viem/accounts";
 
 const testTraderKey = "0x" + "0".repeat(63) + "1";
 const trader = privateKeyToAccount(testTraderKey).address;
-const agent = "0xd422fc040ad9294d553150Cf5646Ab0B1729E443";
+const testAgentKey = "0x" + "0".repeat(63) + "2";
+const agent = privateKeyToAccount(testAgentKey).address;
 const wmon = LEVERUP_TOKENS.WMON.toLowerCase();
 const baseSnapshot = (ratio) => ({
   checkedAt: 1_800_000_000_000, blockNumber: "123", traderAddress: trader, agentAddress: agent,
@@ -16,7 +17,7 @@ const baseSnapshot = (ratio) => ({
   nativeMonBalanceRaw: (50n * 10n ** 18n).toString(), nativeMonBalanceMon: 50,
   oraclePriceRaw: (1000n * 10n ** 18n).toString(), monUsdPriceRaw: (19038n * 10n ** 12n).toString(),
   accountTokenStates: { [wmon]: { balance: (50n * 10n ** 18n).toString(), allowance: (50n * 10n ** 18n).toString() } },
-  indexedPositions: [], agentAuthorization: { authorized: true, canMarketOpen: true, canMarketClose: true, canPartialClose: true },
+  indexedPositions: [], agentAuthorization: { authorized: true, agentAddress: agent, canMarketOpen: true, canMarketClose: true, canPartialClose: true },
   collateralRatio: ratio,
 });
 const env = {
@@ -26,6 +27,7 @@ const env = {
   LEVERUP_MAX_TRADE_MARGIN_USD: "0.45649175", LEVERUP_MIN_TRADE_MARGIN_USD: "0.23737571",
   LEVERUP_COLLATERAL_50X_USD: "0.43", LEVERUP_COLLATERAL_100X_USD: "0.23",
   LEVERUP_TRADER_ADDRESS: trader, LEVERUP_TRADER_PRIVATE_KEY: testTraderKey, LEVERUP_AGENT_ADDRESS: agent,
+  LEVERUP_AGENT_PRIVATE_KEY: testAgentKey,
   CIEL_STATE: { put: async () => {} }, DB: { prepare: () => ({ bind() { return this; }, first: async () => null }) },
 };
 const candidate = { symbol: "BTC", side: "LONG", stopPct: 0.4, targetPct: 0.64, holdMinutes: 180, mode: "TREND_HOLD" };
@@ -42,8 +44,13 @@ const dependencies = {
       selectedLeverage: 100, tierMaxLeverage: 100, marginMonUsed: String(args.desiredMarginMon),
       amountInRaw: BigInt(Math.ceil(Number(args.desiredMarginMon) * 1.014 * 1e18)).toString(),
       feeToken: "0x0000000000000000000000000000000000000000", antiDdosFee: "0",
+      nonce: String(args.now), deadline: Math.floor(args.now / 1000) + 300,
+      actionValues: [args.snapshot.market.base, true, LEVERUP_TOKENS.WMON, LEVERUP_TOKENS.LVMON,
+        BigInt(Math.ceil(Number(args.desiredMarginMon) * 1.014 * 1e18)), 10000000000n,
+        BigInt(args.snapshot.oraclePriceRaw), args.stopLossPriceRaw, args.takeProfitPriceRaw, 0, 0n],
       notionalUsd: 20, preflight: {
-        requestedLeverage: 100, marketMaxLeverage: 100, maxLeverageForNotional: 100, checkedAt: args.now,
+        preflightPassed: true, status: "AVAILABLE", requestedLeverage: 100,
+        marketMaxLeverage: 100, maxLeverageForNotional: 100, checkedAt: args.now,
         pair: "BTC/USD", pairBase: "0x3333333333333333333333333333333333333333",
         notionalUsdRaw: "20000000000000000000", oraclePriceRaw: "1000000000000000000000",
         monUsdPriceRaw: "19038000000000000", collateralRatio: 0.95, minimumCollateralMon: 11.0,
@@ -110,8 +117,8 @@ assert.equal(ready.status, "PREFLIGHT_PASS_LIVE_DISABLED");
 assert.equal(ready.liveExecutionEnabled, false);
 assert.equal(ready.killSwitchEnabled, true);
 assert.equal(ready.selectedLeverage, 100);
-assert.equal(seenPlanArgs.snapshot.collateralRatio, 1,
-  "native-MON planning must not reuse the old collateral haircut inferred from USD estimates");
+assert.equal(seenPlanArgs.tokenIn.toLowerCase(), wmon,
+  "hosted-agent 1CT planning must use the ERC-20 WMON collateral route");
 assert.ok(Math.abs(ready.minimumMarginMon - (0.23737571 / 0.019038)) < 1e-6,
   "minimum WMON must preserve the prior 13 MON USD-equivalent floor, subject to venue minimum collateral");
 const expectedLiveMarginMon = Math.max(12, ready.minimumMarginMon);
