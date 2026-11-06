@@ -390,7 +390,7 @@ async function fetchLeverUpOnchainOracleUpdate(pairBase, fetchImpl = fetch) {
     method: "POST", headers: { "content-type": "application/json" },
     body: JSON.stringify({
       pairBase, collateral: LEVERUP_TOKENS.WMON, blockChain: "MONAD",
-      options: { includeEncodingData: true, includeFee: true, includePrice: true, includePublishTime: false },
+      options: { includeEncodingData: true, includeFee: true, includePrice: true, includePublishTime: false, includeEncodingDataByOracleId: false, includePriceSafety: false, allowPartial: false },
     }),
   });
   if (!response.ok) throw new Error("LEVERUP_ORACLE_UPDATE_HTTP_" + response.status);

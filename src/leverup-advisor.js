@@ -179,8 +179,9 @@ export async function prepareLeverUpAdvisorPlan({
 
     const minimumNotionalUsd = Number(minimumNotionalRaw) / 1e18;
     const monUsdPrice = Number(snapshot.monUsdPriceRaw) / 1e18;
-    // Native MON is passed directly to the Diamond and settles 1:1 into LVMON.
-    // Do not infer a live collateral ratio from stale operator USD estimates.
+    // Native MON is the documented collateral input for LVMON positions.
+    // Use nominal MON pricing only as a planning estimate; the exact transaction
+    // must pass a live Diamond simulation before any broadcast is allowed.
     const minimumCollateralUsd = minimumNotionalUsd / leverageForMinimum;
     collateralRatio = 1;
     if (!(collateralRatio > 0 && collateralRatio <= 1)) throw new Error("DERIVED_COLLATERAL_RATIO_OUT_OF_RANGE");
@@ -218,38 +219,29 @@ export async function prepareLeverUpAdvisorPlan({
     });
     const plan = { ...budgeted.plan, entryBudgetMon: budgeted.entryBudgetMon,
       entryBudgetCeilingMon: budgeted.budgetMon, totalAllocationMon, reserveMon, usdLimits };
-    const traderSigner = inspectLeverUpTraderSigner({ env });
-    const authorized = traderSigner.status === "PASS" && traderSigner.matchesConfiguredTrader === true;
-    const status = authorized ? (liveMode ? "PREFLIGHT_PASS_LIVE_ENABLED" : "PREFLIGHT_PASS_LIVE_DISABLED") : "BLOCKED_TRADER_SIGNER";
+    const authorized = Boolean(snapshot.agentAuthorization?.authorized && snapshot.agentAuthorization?.canMarketOpen);
+    const status = authorized ? (liveMode ? "PREFLIGHT_PASS_LIVE_ENABLED" : "PREFLIGHT_PASS_LIVE_DISABLED") : "BLOCKED_AGENT_AUTHORIZATION";
     const reason = authorized
       ? (liveMode
         ? "Live market, native-MON collateral, tier, margin and slippage checks passed; entry is simulated before direct on-chain submission."
         : "Live market, tier, margin, balance and fee checks passed. Exact token approvals are prepared for live mode; no approval transaction or order was signed or submitted.")
-      : "The configured trader private key does not match the trader wallet. No transaction was signed or submitted.";
+      : "The LeverUp agent authorization is missing. No transaction was signed or submitted.";
     let ledgerId = null, ledgerPersisted = false;
     try {
       const persist = dependencies.persistPreflight || persistLeverUpPreflight;
       if (env?.DB?.prepare) {
         ledgerId = await persist(env.DB, signalId, plan.preflight, {
           decision: authorized ? "PASS" : "REJECT",
-          rejectionReason: authorized ? null : "TRADER_SIGNER_MISMATCH",
+          rejectionReason: authorized ? null : "AGENT_MARKET_OPEN_PERMISSION_MISSING",
           blockNumber: snapshot.blockNumber,
         });
         ledgerPersisted = true;
       }
     } catch (error) { console.error("LeverUp preflight D1 ledger write failed: " + errorMessage(error)); }
-    let dryRunSigning = traderSigner;
+    let dryRunSigning = { status: "NOT_REQUIRED_DIRECT_ONCHAIN" };
     let coordination = { status: "NOT_RUN" };
     if (authorized && dryRunMode) {
-      try {
-          dryRunSigning = await signIntentDryRun({
-            env, traderAddress, agentAddress, agentAuthorization: snapshot.agentAuthorization,
-            action: OneClickAction.MARKET_OPEN, nonce: plan.nonce, deadline: plan.deadline,
-            actionValues: plan.actionValues, feeToken: plan.feeToken, antiDdosFee: plan.antiDdosFee,
-            preflight: plan.preflight, now,
-          });
-        } catch (error) { dryRunSigning = { status: "FAILED", reason: errorMessage(error) }; }
-      }
+      dryRunSigning = { status: "NOT_REQUIRED_DIRECT_ONCHAIN" };
       try {
         const wmonBalanceMon = Number(BigInt(snapshot.nativeMonBalanceRaw || "0")) / 1e18;
         const entryBudgetMon = Number(BigInt(plan.amountInRaw)) / 1e18;
