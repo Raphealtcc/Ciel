@@ -219,26 +219,27 @@ export async function prepareLeverUpAdvisorPlan({
     });
     const plan = { ...budgeted.plan, entryBudgetMon: budgeted.entryBudgetMon,
       entryBudgetCeilingMon: budgeted.budgetMon, totalAllocationMon, reserveMon, usdLimits };
-    const authorized = Boolean(snapshot.agentAuthorization?.authorized && snapshot.agentAuthorization?.canMarketOpen);
-    const status = authorized ? (liveMode ? "PREFLIGHT_PASS_LIVE_ENABLED" : "PREFLIGHT_PASS_LIVE_DISABLED") : "BLOCKED_AGENT_AUTHORIZATION";
+    const traderSigner = inspectLeverUpTraderSigner({ env });
+    const authorized = traderSigner.status === "PASS" && traderSigner.matchesConfiguredTrader === true;
+    const status = authorized ? (liveMode ? "PREFLIGHT_PASS_LIVE_ENABLED" : "PREFLIGHT_PASS_LIVE_DISABLED") : "BLOCKED_TRADER_SIGNER";
     const reason = authorized
       ? (liveMode
         ? "Live market, native-MON collateral, tier, margin and slippage checks passed; entry is simulated before direct on-chain submission."
         : "Live market, tier, margin, balance and fee checks passed. Exact token approvals are prepared for live mode; no approval transaction or order was signed or submitted.")
-      : "The LeverUp agent authorization is missing. No transaction was signed or submitted.";
+       : "The configured trader private key does not match the trader wallet. No transaction was signed or submitted.";
     let ledgerId = null, ledgerPersisted = false;
     try {
       const persist = dependencies.persistPreflight || persistLeverUpPreflight;
       if (env?.DB?.prepare) {
         ledgerId = await persist(env.DB, signalId, plan.preflight, {
           decision: authorized ? "PASS" : "REJECT",
-          rejectionReason: authorized ? null : "AGENT_MARKET_OPEN_PERMISSION_MISSING",
+          rejectionReason: authorized ? null : "TRADER_SIGNER_MISMATCH",
           blockNumber: snapshot.blockNumber,
         });
         ledgerPersisted = true;
       }
     } catch (error) { console.error("LeverUp preflight D1 ledger write failed: " + errorMessage(error)); }
-    let dryRunSigning = { status: "NOT_REQUIRED_DIRECT_ONCHAIN" };
+    let dryRunSigning = traderSigner;
     let coordination = { status: "NOT_RUN" };
     if (authorized && dryRunMode) {
       dryRunSigning = { status: "NOT_REQUIRED_DIRECT_ONCHAIN" };
