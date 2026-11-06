@@ -13,6 +13,7 @@ const baseSnapshot = (ratio) => ({
   market: { symbol: "BTC", pairName: "BTC/USD", base: "0x3333333333333333333333333333333333333333", status: "AVAILABLE", executionVenue: "POOL" },
   pairView: { leverageMargins: [{ notionalUsdRaw: (20n * 10n ** 18n).toString(), maxLeverage: 100, tier: 0 }], minHoldingSeconds: 60 },
   minimumNotionalRaw: (20n * 10n ** 18n).toString(),
+  nativeMonBalanceRaw: (50n * 10n ** 18n).toString(), nativeMonBalanceMon: 50,
   oraclePriceRaw: (1000n * 10n ** 18n).toString(), monUsdPriceRaw: (19038n * 10n ** 12n).toString(),
   accountTokenStates: { [wmon]: { balance: (50n * 10n ** 18n).toString(), allowance: (50n * 10n ** 18n).toString() } },
   indexedPositions: [], agentAuthorization: { authorized: true, canMarketOpen: true, canMarketClose: true, canPartialClose: true },
