@@ -520,8 +520,8 @@ export async function executeLeverUpEntry({ env, db, candidate, signalId, snapsh
   // deliberately rejected here; 1CT requires ERC-20 WMON collateral.
   const actionValues = executionPlan.actionValues || [];
   if (String(actionValues[2] || "").toLowerCase() !== WMON ||
-      String(actionValues[3] || "").toLowerCase() !== LEVERUP_TOKENS.LV.toLowerCase()) {
-    return { status: "REJECTED", submitted: false, reason: "HOSTED_AGENT_REQUIRES_WMON_LV_TOKEN_PAIR" };
+      String(actionValues[3] || "").toLowerCase() !== LEVERUP_TOKENS.LVMON.toLowerCase()) {
+    return { status: "REJECTED", submitted: false, reason: "HOSTED_AGENT_REQUIRES_WMON_LVMON_TOKEN_PAIR" };
   }
   if (!executionPlan.preflight?.preflightPassed || executionPlan.preflight.status !== "AVAILABLE") {
     return { status: "REJECTED", submitted: false, reason: "HOSTED_AGENT_PREFLIGHT_NOT_PASSED" };

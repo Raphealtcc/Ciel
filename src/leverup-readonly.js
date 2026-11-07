@@ -726,9 +726,11 @@ export function buildMarketOpenPlan({
   const isLong = side === "LONG";
   const tokenIn = String(tokenInAddress).toLowerCase();
   const isNativeMon = tokenIn === "0x0000000000000000000000000000000000000000";
-  // WMON collateral routes pass LV as the reward token; native MON retains the LVMON settlement route.
+  // WMON-backed 1CT market opens require LVMON in the lvToken field.
+  // Keep native MON and LVMON-input routes distinct; do not substitute LV governance token.
   const lvToken = isNativeMon ? LEVERUP_TOKENS.LVMON :
-    tokenIn === LEVERUP_TOKENS.LVMON.toLowerCase() ? "0x0000000000000000000000000000000000000000" : LEVERUP_TOKENS.LV;
+    tokenIn === LEVERUP_TOKENS.LVMON.toLowerCase() ? "0x0000000000000000000000000000000000000000" :
+    tokenIn === LEVERUP_TOKENS.WMON.toLowerCase() ? LEVERUP_TOKENS.LVMON : LEVERUP_TOKENS.LV;
   const marginRaw = parseUnits(String(desiredMarginMon), 18);
   const maxTradeRaw = parseUnits(String(maxTradeMarginMon), 18);
   const reserveRaw = parseUnits(String(reserveMon), 18);

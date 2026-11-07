@@ -437,7 +437,7 @@ export async function runLeverUpDiagnostics({ env, now = Date.now(), dependencie
         action: OneClickAction.MARKET_OPEN,
         nonce: (BigInt(snapshot.lastAgentNonce || "0") + 1n).toString(),
         deadline: Math.floor(now / 1000) + 300,
-        actionValues: [pairBase.toLowerCase(), true, LEVERUP_TOKENS.WMON, LEVERUP_TOKENS.LV,
+        actionValues: [pairBase.toLowerCase(), true, LEVERUP_TOKENS.WMON, LEVERUP_TOKENS.LVMON,
           1n, 1n, 1n, 0n, 0n, 0, 0n],
         preflight: { preflightPassed: true, status: "AVAILABLE", requestedLeverage: 50,
           marketMaxLeverage: 50, maxLeverageForNotional: 50, checkedAt: now },

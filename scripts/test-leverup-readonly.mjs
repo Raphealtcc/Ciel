@@ -199,7 +199,8 @@ const plan = buildMarketOpenPlan({
   snapshot: planSnapshot, desiredMarginMon: 20, maxTradeMarginMon: 50,
   inferredLeverage: 100, side: "LONG", expectedHoldSeconds: 3600,
 });
-assert.equal(plan.actionValues[3].toLowerCase(), LV.toLowerCase(), "WMON collateral must pass the LV token address in the lvToken field");
+assert.equal(plan.actionValues[2].toLowerCase(), WMON.toLowerCase(), "WMON-backed 1CT opens must use WMON as tokenIn");
+assert.equal(plan.actionValues[3].toLowerCase(), LVMON.toLowerCase(), "WMON-backed 1CT opens must use LVMON in the lvToken field, never the LV governance token");
 assert.equal(plan.selectedLeverage, 100);
 assert.equal(plan.notionalUsd, 20);
 assert.equal(plan.marginMonUsed, "10");
