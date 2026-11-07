@@ -215,6 +215,22 @@ export function calculateLeverUpQuoteDriftBps(referencePriceRaw, currentPriceRaw
   return (difference * 10_000n + reference - 1n) / reference;
 }
 
+export function validateLeverUpQuoteAge(checkedAt, observedAt, maxAgeMs = 30_000) {
+  const checked = Number(checkedAt);
+  const observed = Number(observedAt);
+  const maximum = Number(maxAgeMs);
+  if (!Number.isFinite(checked) || checked <= 0 || !Number.isFinite(observed) || observed <= 0) {
+    throw new Error("LEVERUP_QUOTE_TIMESTAMP_INVALID");
+  }
+  if (!Number.isInteger(maximum) || maximum < 1_000 || maximum > 120_000) {
+    throw new Error("LEVERUP_MAX_QUOTE_AGE_CONFIG_INVALID");
+  }
+  const age = observed - checked;
+  if (age < 0) throw new Error("LEVERUP_QUOTE_CLOCK_SKEW");
+  if (age > maximum) throw new Error("LEVERUP_QUOTE_STALE: " + age + "ms > " + maximum + "ms");
+  return age;
+}
+
 export function validateLeverUpTransferBalances({ action, actionValues, feeToken = ZERO, antiDdosFee = 0n, tokenStates = {} }) {
   if (Number(action) !== OneClickAction.MARKET_OPEN) return { ok: true, required: {}, observed: {} };
   if (!Array.isArray(actionValues) || actionValues.length < 11) throw new Error("MARKET_OPEN_TRANSFER_INPUT_INVALID");
@@ -647,6 +663,11 @@ export async function executeLeverUpEntry({ env, db, candidate, signalId, snapsh
         const quoteObservedAt = Date.now();
         const latestPrice = latestPrices?.[String(snapshot.market.base).toLowerCase()];
         if (latestPrice == null) throw new Error("LEVERUP_FINAL_ORACLE_PRICE_MISSING");
+        const quoteAgeMs = validateLeverUpQuoteAge(
+          executionPlan.preflight.checkedAt,
+          quoteObservedAt,
+          Number(effectiveEnv?.LEVERUP_MAX_QUOTE_AGE_MS ?? 30_000),
+        );
         const referencePrice = BigInt(executionPlan.preflight.oraclePriceRaw);
         const finalPrice = BigInt(latestPrice);
         if (referencePrice <= 0n || finalPrice <= 0n) throw new Error("LEVERUP_FINAL_ORACLE_PRICE_INVALID");
@@ -668,7 +689,7 @@ export async function executeLeverUpEntry({ env, db, candidate, signalId, snapsh
           payload: {
             executionPath: "1CT_HOSTED_AGENT", candidate, plan: serializable(finalPlan),
             stopRiskMon, entryBudgetMon, submittedAt: now,
-            finalQuoteObservedAt: quoteObservedAt, quoteDriftBps: driftRaw.toString(),
+            finalQuoteObservedAt: quoteObservedAt, finalQuoteAgeMs: quoteAgeMs, quoteDriftBps: driftRaw.toString(),
           },
         };
       },
