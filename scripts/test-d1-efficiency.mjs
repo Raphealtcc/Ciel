@@ -23,7 +23,11 @@ assert.ok(advisor.includes("coreScalpCandles = {}"), "advisor cycle must accept 
 assert.ok(advisor.includes("coreScalpCandles?.[symbol]"), "core scalp must use the same 1m candle rows");
 assert.ok(!advisor.includes("interval=\'1m\'"), "core scalp must not read the duplicated 1m candle table from D1");
 assert.ok(advisor.includes("coreTrendCandles?.[symbol]"), "native 5m confirmation candles must come from the persistent DO cache");
-assert.ok(!advisor.includes("FROM market_candles"), "the minute-by-minute advisor cycle must not reread 5m candles from D1");
+const d1FallbackGuard = advisor.indexOf("if (missingTrendSymbols.length)");
+const d1FallbackQuery = advisor.indexOf("FROM market_candles", d1FallbackGuard);
+assert.ok(advisor.includes("const missingTrendSymbols = coreScalpSymbols.filter"), "5m D1 fallback must identify only missing/stale Durable Object buffers");
+assert.ok(advisor.includes("now - latest > 7 * 60 * 1000"), "5m D1 fallback must require a stale Durable Object candle cache");
+assert.ok(d1FallbackGuard > 0 && d1FallbackQuery > d1FallbackGuard, "5m candle history may be read from D1 only inside the missing/stale-cache fallback, never unconditionally each minute");
 
 assert.ok(source.includes("this.liveMarketInputs(now), this.state.storage, this.coreScalpCandles, this.coreTrendCandles"), "the feed must pass both persistent candle caches to the advisor");
 assert.ok(source.includes('this.state.storage.get("coreTrendCandles")'), "the DO must restore the 5m cache");
@@ -41,7 +45,7 @@ assert.ok(candlesRoute.includes("FROM market_samples WHERE symbol=?"), "the publ
 
 assert.ok(source.includes("const persistAllSamples = Math.floor(now / (6 * 60 * 1e3))"), "watchlist D1 samples must retain their current six-minute persistence cadence");
 assert.ok(source.includes("BENCHMARK_PRICE_SYMBOLS.has(row.symbol) || persistAllSamples"), "one-minute benchmark samples and wider-watchlist samples must both remain");
-console.log("PASS: CIEL keeps full one-minute core scalp candles in persistent DO state, retains the public candle endpoint, 5m candles, live context, alerts and market-sample history, while removing only duplicate D1 1m candle writes.");
+console.log("PASS: CIEL keeps full one-minute core scalp candles in persistent DO state, retains the public candle endpoint, 5m candles, live context, alerts and market-sample history, while avoiding unconditional D1 5m reads and duplicate D1 1m candle writes.");
 
 const trendWriterStart = source.indexOf("  async writeCandleSnapshots(now) {");
 const trendWriterEnd = source.indexOf("  async hydrateHistoryFromD1(now) {", trendWriterStart);
