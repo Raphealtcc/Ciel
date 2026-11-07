@@ -16,9 +16,12 @@ for (const isLong of [true, false]) {
     now: 1_800_000_000_000,
   });
   const worstNotionalRaw = BigInt(refreshed.qtyRaw) * BigInt(refreshed.worstPriceRaw) / (10n ** 10n);
-  assert.ok(worstNotionalRaw <= notionalRaw, "slippage-adjusted notional must remain within the preflight tier ceiling");
+  const oracleNotionalRaw = BigInt(refreshed.qtyRaw) * oracleRaw / (10n ** 10n);
+  const bufferedCap = notionalRaw * 9950n / 10000n;
+  assert.ok(worstNotionalRaw <= notionalRaw, "slippage-guard notional must remain within the preflight tier ceiling");
+  assert.ok(oracleNotionalRaw <= bufferedCap, "oracle-valued notional must preserve leverage headroom for both directions");
   assert.ok(BigInt(refreshed.qtyRaw) < notionalRaw * (10n ** 10n) / oracleRaw,
-    "quantity must be sized from worst-case execution price, not oracle mid");
+    "quantity must be sized against the upper price bound and leverage headroom");
 }
 
 class FakeD1 {
@@ -32,6 +35,7 @@ class FakeD1 {
         if (sql.startsWith("INSERT INTO leverup_execution_intents")) {
           const [signal_id,idempotency_key,pair_base,action,requested_leverage,margin_mon,notional_usd,payload_json,created_at_ms,updated_at_ms] = values;
           if (db.rows.has(signal_id) || [...db.rows.values()].some((r) => r.idempotency_key === idempotency_key)) throw new Error("UNIQUE constraint failed");
+          if (Number(action) === 0 && [...db.rows.values()].some((r) => Number(r.action) === 0 && ["PREPARED","UNCERTAIN","SUBMITTED","PENDING","EXECUTED"].includes(r.status))) throw new Error("UNIQUE constraint failed: idx_leverup_one_active_entry");
           db.rows.set(signal_id,{signal_id,idempotency_key,status:"PREPARED",pair_base,action,requested_leverage,margin_mon,notional_usd,payload_json,created_at_ms,updated_at_ms});
           return { meta: { changes: 1 } };
         }
@@ -49,6 +53,7 @@ class FakeD1 {
       async first() {
         if (sql.includes("WHERE signal_id = ?")) return db.rows.get(values[0]) || null;
         if (sql.includes("WHERE idempotency_key = ?")) return [...db.rows.values()].find((r) => r.idempotency_key === values[0]) || null;
+        if (sql.includes("WHERE action = ? AND status IN")) return [...db.rows.values()].filter((r) => Number(r.action) === Number(values[0]) && ["PREPARED","UNCERTAIN","SUBMITTED","PENDING","EXECUTED"].includes(r.status)).sort((a,b)=>b.created_at_ms-a.created_at_ms)[0] || null;
         return null;
       },
       async all() {
@@ -92,6 +97,12 @@ const duplicate = await submitLeverUpIntent(args);
 assert.equal(duplicate.duplicate, true);
 assert.equal(approvalCalls, 1);
 assert.equal(submitCalls, 1);
+const reserved = await submitLeverUpIntent({ ...args, signalId: "ciel-signal-002" });
+assert.equal(reserved.status, "ENTRY_SLOT_RESERVED");
+assert.equal(reserved.blockedByActiveEntry, true);
+assert.equal(reserved.reservedSignalId, args.signalId);
+assert.equal(approvalCalls, 1, "reserved entry must not trigger approvals");
+assert.equal(submitCalls, 1, "reserved entry must not reach the hosted relayer");
 
 const failedReconciliation = await reconcilePendingLeverUpIntents({
   env, db, now: Date.now(),

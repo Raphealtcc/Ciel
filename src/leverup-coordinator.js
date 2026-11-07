@@ -105,6 +105,12 @@ async function claimIntent(db, { signalId, action, pairBase, leverage, marginMon
   } catch (error) {
     const duplicate = await findExistingIntent(db, signalId, idempotencyKey).catch(() => null);
     if (duplicate) return { created: false, row: duplicate };
+    if (Number(action) === OneClickAction.MARKET_OPEN) {
+      const activeEntry = await db.prepare(`SELECT * FROM leverup_execution_intents
+        WHERE action = ? AND status IN ('PREPARED','UNCERTAIN','SUBMITTED','PENDING','EXECUTED')
+        ORDER BY created_at_ms DESC LIMIT 1`).bind(OneClickAction.MARKET_OPEN).first().catch(() => null);
+      if (activeEntry) return { created: false, row: activeEntry, blockedByActiveEntry: true };
+    }
     throw new Error("LEVERUP_IDEMPOTENCY_CLAIM_FAILED: " + String(error?.message || error).slice(0, 220));
   }
 
@@ -134,7 +140,10 @@ function decodeLeverUpIntentFailureReason(value) {
  * If a request becomes ambiguous after the claim, it is marked UNCERTAIN and is never
  * resubmitted automatically. This prefers a manual reconciliation over a duplicate order.
  */
-export function refreshLeverUpMarketOpenPlan({ plan, pairView, freshOraclePriceRaw, now = Date.now(), entryPriceToleranceBps = 30 }) {
+export function refreshLeverUpMarketOpenPlan({
+  plan, pairView, freshOraclePriceRaw, now = Date.now(),
+  entryPriceToleranceBps = 30, leverageHeadroomBps = 50,
+}) {
   if (!plan?.preflight || !Array.isArray(plan.actionValues) || plan.actionValues.length < 11 || !pairView?.slippageConfig) {
     throw new Error("MARKET_OPEN_PLAN_REFRESH_INPUT_INVALID");
   }
@@ -143,6 +152,7 @@ export function refreshLeverUpMarketOpenPlan({ plan, pairView, freshOraclePriceR
   const values = [...plan.actionValues];
   const isLong = Boolean(values[1]);
   const notionalRaw = BigInt(plan.preflight.notionalUsdRaw);
+  if (notionalRaw <= 0n) throw new Error("PREFLIGHT_NOTIONAL_INVALID");
   const slippage = pairView.slippageConfig;
   if (!slippage.enabled) throw new Error("LIVE_SLIPPAGE_CONFIG_DISABLED_OR_MISSING");
   if (Number(slippage.slippageType) !== 0) throw new Error("LIVE_SLIPPAGE_TYPE_UNSUPPORTED");
@@ -150,15 +160,22 @@ export function refreshLeverUpMarketOpenPlan({ plan, pairView, freshOraclePriceR
   if (protocolSlippageP < 0n || protocolSlippageP > 10_000n) throw new Error("LIVE_SLIPPAGE_BOUND_INVALID");
   const requestedToleranceBps = Number(entryPriceToleranceBps);
   if (!Number.isInteger(requestedToleranceBps) || requestedToleranceBps < 0 || requestedToleranceBps > 100) throw new Error("LIVE_ENTRY_PRICE_TOLERANCE_INVALID");
+  const headroomBps = Number(leverageHeadroomBps);
+  if (!Number.isInteger(headroomBps) || headroomBps < 0 || headroomBps > 1_000) throw new Error("LIVE_LEVERAGE_HEADROOM_INVALID");
   const toleranceP = BigInt(requestedToleranceBps);
   const slippageP = protocolSlippageP > toleranceP ? protocolSlippageP : toleranceP;
+  const denominator = 10_000n;
+  const upperPriceRaw = (price * (denominator + slippageP) + denominator - 1n) / denominator;
+  // Keep the actual contract slippage bound directional: longs use the upper
+  // bound and shorts retain the lower bound. Quantity sizing is different:
+  // both directions are sized against the upper price so a short cannot exceed
+  // its leverage tier when the checker values qty at the live oracle price.
   const worstPriceRaw = isLong
-    ? price * (10_000n + slippageP) / 10_000n
-    : price * (10_000n - slippageP) / 10_000n;
-  // Size quantity against the worst permitted execution price, not the oracle
-  // mid. Otherwise a long can exceed the market's leverage cap by the slippage
-  // allowance even though the preflight notional was exactly at the cap.
-  const qtyRaw = notionalRaw * (10n ** 10n) / worstPriceRaw;
+    ? upperPriceRaw
+    : price * (denominator - slippageP) / denominator;
+  const sizingPriceRaw = upperPriceRaw;
+  const bufferedNotionalRaw = notionalRaw * (denominator - BigInt(headroomBps)) / denominator;
+  const qtyRaw = bufferedNotionalRaw * (10n ** 10n) / sizingPriceRaw;
   if (qtyRaw <= 0n || qtyRaw > (2n ** 128n - 1n)) throw new Error("FRESH_ORACLE_QTY_OUT_OF_RANGE");
   const stop = BigInt(values[7] || 0);
   const target = BigInt(values[8] || 0);
@@ -175,6 +192,8 @@ export function refreshLeverUpMarketOpenPlan({ plan, pairView, freshOraclePriceR
     actionValues: values,
     qtyRaw: qtyRaw.toString(),
     worstPriceRaw: worstPriceRaw.toString(),
+    sizingPriceRaw: sizingPriceRaw.toString(),
+    leverageHeadroomBps: String(headroomBps),
     protocolSlippageBps: protocolSlippageP.toString(),
     slippageBps: slippageP.toString(),
     preflight: {
@@ -182,6 +201,8 @@ export function refreshLeverUpMarketOpenPlan({ plan, pairView, freshOraclePriceR
       checkedAt: now,
       oraclePriceRaw: price.toString(),
       oraclePriceUsd: Number(price) / 1e18,
+      sizingPriceRaw: sizingPriceRaw.toString(),
+      leverageHeadroomBps: String(headroomBps),
     },
   };
 }
@@ -232,7 +253,12 @@ export async function submitLeverUpIntent({
   if (!signalId || !Number.isInteger(Number(action))) throw new Error("LEVERUP_INTENT_INPUT_INVALID");
   const claim = await claimIntent(db, { signalId, action, pairBase, leverage, marginMon, notionalUsd,
     payload: { ...payload, action, actionValues: serializable(actionValues), feeToken, antiDdosFee: String(antiDdosFee) }, now });
-  if (!claim.created) return { status: claim.row?.status || "DUPLICATE", duplicate: true, intentHash: claim.row?.intent_hash || null };
+  if (!claim.created) {
+    if (claim.blockedByActiveEntry) {
+      return { status: "ENTRY_SLOT_RESERVED", submitted: false, blockedByActiveEntry: true, reservedSignalId: claim.row?.signal_id || null };
+    }
+    return { status: claim.row?.status || "DUPLICATE", duplicate: true, intentHash: claim.row?.intent_hash || null };
+  }
 
   let markedUncertain = false;
   let transferPreflight = null;
@@ -267,7 +293,16 @@ export async function submitLeverUpIntent({
         throw new Error("LEVERUP_TRANSFER_PREFLIGHT_FAILED: " + JSON.stringify(transferCheck.failures));
       }
     }
-    await updateIntent(db, signalId, "UNCERTAIN", { payload: { ...payload, action, actionValues: serializable(actionValues), transferPreflight, submissionStartedAt: now } });
+    if (typeof dependencies.beforeSubmit === "function") {
+      const finalQuote = await dependencies.beforeSubmit({ actionValues, preflight, payload, now });
+      if (!finalQuote || !Array.isArray(finalQuote.actionValues) || finalQuote.actionValues.length < 11) {
+        throw new Error("LEVERUP_FINAL_QUOTE_REFRESH_INVALID");
+      }
+      actionValues = finalQuote.actionValues;
+      preflight = finalQuote.preflight || preflight;
+      payload = finalQuote.payload || payload;
+    }
+    await updateIntent(db, signalId, "UNCERTAIN", { payload: { ...payload, action, actionValues: serializable(actionValues), preflight: serializable(preflight), transferPreflight, submissionStartedAt: Date.now() } });
     markedUncertain = true;
     const submit = dependencies.submit || signAndSubmitIntent;
     const result = await submit({
@@ -511,6 +546,7 @@ export async function executeLeverUpEntry({ env, db, candidate, signalId, snapsh
     executionPlan = refreshLeverUpMarketOpenPlan({
       plan, pairView: snapshot.pairView, freshOraclePriceRaw: freshPrice, now,
       entryPriceToleranceBps: Number(effectiveEnv?.LEVERUP_ENTRY_PRICE_TOLERANCE_BPS ?? 30),
+      leverageHeadroomBps: Number(effectiveEnv?.LEVERUP_LEVERAGE_HEADROOM_BPS ?? 50),
     });
   } catch (error) {
     return { status: "REJECTED", submitted: false, reason: "FRESH_ORACLE_REFRESH_FAILED: " + String(error?.message || error).slice(0, 180) };
@@ -594,7 +630,41 @@ export async function executeLeverUpEntry({ env, db, candidate, signalId, snapsh
       executionPath: "1CT_HOSTED_AGENT", candidate, plan: serializable(executionPlan),
       stopRiskMon, entryBudgetMon, submittedAt: now,
     },
-    now, dependencies,
+    now,
+    dependencies: {
+      ...dependencies,
+      beforeSubmit: async () => {
+        const fetchPrices = dependencies.fetchLatestOraclePrices || fetchLatestOraclePrices;
+        const quoteObservedAt = Date.now();
+        const latestPrices = await fetchPrices([snapshot.market.base], { fetchImpl: dependencies.fetchImpl || fetch });
+        const latestPrice = latestPrices?.[String(snapshot.market.base).toLowerCase()];
+        if (latestPrice == null) throw new Error("LEVERUP_FINAL_ORACLE_PRICE_MISSING");
+        const referencePrice = BigInt(executionPlan.preflight.oraclePriceRaw);
+        const finalPrice = BigInt(latestPrice);
+        if (referencePrice <= 0n || finalPrice <= 0n) throw new Error("LEVERUP_FINAL_ORACLE_PRICE_INVALID");
+        const driftRaw = (finalPrice >= referencePrice ? finalPrice - referencePrice : referencePrice - finalPrice) * 10_000n / referencePrice;
+        const maxDriftBps = Number(effectiveEnv?.LEVERUP_MAX_QUOTE_DRIFT_BPS ?? 10);
+        if (!Number.isInteger(maxDriftBps) || maxDriftBps < 0 || maxDriftBps > 30) throw new Error("LEVERUP_MAX_QUOTE_DRIFT_CONFIG_INVALID");
+        if (driftRaw > BigInt(maxDriftBps)) {
+          throw new Error("LEVERUP_QUOTE_DRIFT_EXCEEDED: " + driftRaw.toString() + "bps > " + maxDriftBps + "bps; refresh the signal and rerun preflight");
+        }
+        const finalPlan = refreshLeverUpMarketOpenPlan({
+          plan: executionPlan, pairView: snapshot.pairView, freshOraclePriceRaw: finalPrice,
+          now: quoteObservedAt,
+          entryPriceToleranceBps: Number(effectiveEnv?.LEVERUP_ENTRY_PRICE_TOLERANCE_BPS ?? 30),
+          leverageHeadroomBps: Number(effectiveEnv?.LEVERUP_LEVERAGE_HEADROOM_BPS ?? 50),
+        });
+        return {
+          actionValues: finalPlan.actionValues,
+          preflight: finalPlan.preflight,
+          payload: {
+            executionPath: "1CT_HOSTED_AGENT", candidate, plan: serializable(finalPlan),
+            stopRiskMon, entryBudgetMon, submittedAt: now,
+            finalQuoteObservedAt: quoteObservedAt, quoteDriftBps: driftRaw.toString(),
+          },
+        };
+      },
+    },
   });
   return { ...result, risk, executionPath: "1CT_HOSTED_AGENT" };
 }

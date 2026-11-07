@@ -849,7 +849,7 @@ export function buildMarketOpenPlan({
   const wallClockNonce = BigInt(now);
   const nonce = (lastNonce + 1n) > wallClockNonce ? lastNonce + 1n : wallClockNonce;
   return {
-    mode: isNativeMon ? "ONCHAIN_NATIVE" : "DRY_RUN_ONLY",
+    mode: isNativeMon ? "ONCHAIN_NATIVE" : tokenIn === LEVERUP_TOKENS.WMON.toLowerCase() ? "HOSTED_AGENT_1CT" : "UNSUPPORTED_ROUTE",
     action: OneClickAction.MARKET_OPEN,
     actionValues,
     feeToken: feeSelection.feeToken,

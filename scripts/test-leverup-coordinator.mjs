@@ -17,7 +17,9 @@ const refreshed = refreshLeverUpMarketOpenPlan({
   pairView: { slippageConfig: { enabled: true, slippageLongP: 10, slippageShortP: 10, slippageType: 0 } },
   freshOraclePriceRaw: "1010000000000000000", now: 200,
 });
-assert.equal(refreshed.actionValues[5], 99009900990n);
+assert.equal(refreshed.actionValues[5], refreshed.qtyRaw);
+assert.equal(refreshed.actionValues[5], (9950000000000000000n * 10n ** 10n) / 1013030000000000000n);
+assert.equal(refreshed.sizingPriceRaw, "1013030000000000000");
 assert.equal(refreshed.actionValues[6], 1013030000000000000n);
 assert.equal(refreshed.protocolSlippageBps, "10");
 assert.equal(refreshed.slippageBps, "30");
@@ -27,6 +29,9 @@ const refreshedShort = refreshLeverUpMarketOpenPlan({
   pairView: { slippageConfig: { enabled: true, slippageLongP: 10, slippageShortP: 10, slippageType: 0 } }, freshOraclePriceRaw: "1010000000000000000", now: 201,
 });
 assert.equal(refreshedShort.actionValues[6], 1006970000000000000n);
+assert.equal(refreshedShort.sizingPriceRaw, "1013030000000000000");
+assert.ok(BigInt(refreshedShort.qtyRaw) < 10000000000000000000n * 10n ** 10n / 1010000000000000000n,
+  "short quantity must use the higher leverage-sizing price and headroom, not the lower slippage floor");
 assert.equal(refreshedShort.slippageBps, "30");
 assert.throws(() => refreshLeverUpMarketOpenPlan({ plan: { actionValues: ["0x" + "11".repeat(20), true, WMON, LVMON, "10000000000000000000", "10000000000", "1010000000000000000", "990000000000000000", "1020000000000000000", 0, "0"], preflight: { notionalUsdRaw: "10000000000000000000" } }, pairView: { slippageConfig: { enabled: true, slippageLongP: 10, slippageShortP: 10, slippageType: 1 } }, freshOraclePriceRaw: "1010000000000000000" }), /LIVE_SLIPPAGE_TYPE_UNSUPPORTED/);
 assert.throws(() => refreshLeverUpMarketOpenPlan({ plan: { actionValues: ["0x" + "11".repeat(20), true, WMON, LVMON, "10000000000000000000", "10000000000", "1010000000000000000", "990000000000000000", "1020000000000000000", 0, "0"], preflight: { notionalUsdRaw: "10000000000000000000" } }, pairView: { slippageConfig: { enabled: true, slippageLongP: 10, slippageShortP: 10, slippageType: 0 } }, freshOraclePriceRaw: "1010000000000000000", entryPriceToleranceBps: 101 }), /LIVE_ENTRY_PRICE_TOLERANCE_INVALID/);
