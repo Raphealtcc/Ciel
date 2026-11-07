@@ -82,7 +82,8 @@ const oneTimeMarketDiagnosticRoute = `    if (url.pathname === "/_internal/lever
       if (!expected || supplied !== expected) return json2({ ok: false, error: "Unauthorized", orderSubmitted: false }, 401);
       await env.CIEL_STATE.delete(tokenKey);
       const requestedSymbol = String(url.searchParams.get("symbol") || "BTC").toUpperCase();
-      if (!["BTC","ETH","SOL"].includes(requestedSymbol)) return json2({ ok: false, error: "Unsupported market symbol", orderSubmitted: false }, 400);
+      const allowedSymbols = ["BTC","ETH","BNB","XRP","HYPE","ONDO","KPEPE","TRX","AAVE","ADA","DOGE","LINK","PUMP","SEI","SOL","SUI","UNI","VIRTUAL"];
+      if (!allowedSymbols.includes(requestedSymbol)) return json2({ ok: false, error: "Unsupported market symbol", allowedSymbols, orderSubmitted: false }, 400);
       const skipCoordinator = url.searchParams.get("skipCoordinator") === "true";
       const candidates = [
         ["ALCHEMY_RPC", env?.ALCHEMY_RPC],
