@@ -73,18 +73,18 @@ function patchFunctionMonUsd(startMarker, endMarker, gate, replacement, label) {
 
 patchFunctionMonUsd("async function runAdvisorCycle(", "__name(runAdvisorCycle",
   "if (now - lastTickAt > MAX_AGE || !(monUsdPrice > 0)) return;",
-  "const monUsdPrice = Number(prices.MON) > 0 ? Number(prices.MON) : liveMode ? await getCachedLeverUpMonUsd(env, now) : 0;\n  if (now - lastTickAt > MAX_AGE || !(monUsdPrice > 0)) return;",
-  "allow live advisor scans without a Hyperliquid MON market");
+  "const monUsdPrice = Number(prices.MON) > 0 ? Number(prices.MON) : 0;\n  if (now - lastTickAt > MAX_AGE) return;",
+  "run technical analysis without requiring a collateral conversion quote; LeverUp obtains its own fresh oracle quote during candidate preflight");
 
 patchFunctionMonUsd("async function manageOpenPositions(", "__name(manageOpenPositions",
   "if (now - lastTickAt > MAX_AGE || !(monUsdPrice > 0)) return;",
-  "const monUsdPrice = Number(prices.MON) > 0 ? Number(prices.MON) : await getCachedLeverUpMonUsd(env, now);\n  if (now - lastTickAt > MAX_AGE || !(monUsdPrice > 0)) return;",
-  "restore tracked-position stop, target and profit-protection alerts without Hyperliquid MON");
+  "const monUsdPrice = Number(prices.MON) > 0 ? Number(prices.MON) : await getCachedLeverUpMonUsd(env, now);\n  if (now - lastTickAt > MAX_AGE) return;",
+  "keep stop/target/profit-protection monitoring active when MON/USD conversion is unavailable; P&L remains unavailable until a valid quote exists");
 
 patchFunctionMonUsd("async function handleAdvisorCallback(", "__name(handleAdvisorCallback",
   'if (!lastTickAt || now - lastTickAt > MAX_AGE || !(monUsdPrice > 0)) return { handled: true, removeButtons: false, reply: "Market data is stale. Tracking was not started; try again when the feed is fresh." };',
-  'const monUsdPrice = Number(prices.MON) > 0 ? Number(prices.MON) : await getCachedLeverUpMonUsd(env, now);\n    if (!lastTickAt || now - lastTickAt > MAX_AGE || !(monUsdPrice > 0)) return { handled: true, removeButtons: false, reply: "Market data is stale. Tracking was not started; try again when the feed is fresh." };',
-  "restore Start Tracking and close-button callback processing without Hyperliquid MON");
+  'const monUsdPrice = Number(prices.MON) > 0 ? Number(prices.MON) : await getCachedLeverUpMonUsd(env, now);\n    if (!lastTickAt || now - lastTickAt > MAX_AGE) return { handled: true, removeButtons: false, reply: "Market data is stale. Tracking was not started; try again when the feed is fresh." };',
+  "allow reference-price tracking and close confirmations without blocking on a MON/USD display conversion");
 
 const oldLiveMon = 'async function liveMon(env) {\n  const x = await env.DB.prepare("SELECT mid_price,ts_ms FROM market_samples WHERE symbol=\'MON\' ORDER BY ts_ms DESC LIMIT 1").first();\n  return x && Date.now() - x.ts_ms <= MAX_AGE ? Number(x.mid_price) || 0 : 0;\n}';
 const newLiveMon = 'async function liveMon(env) {\n  const x = await env.DB.prepare("SELECT mid_price,ts_ms FROM market_samples WHERE symbol=\'MON\' ORDER BY ts_ms DESC LIMIT 1").first();\n  const sampled = x && Date.now() - Number(x.ts_ms) <= MAX_AGE ? Number(x.mid_price) || 0 : 0;\n  return sampled > 0 ? sampled : await getCachedLeverUpMonUsd(env, Date.now());\n}';

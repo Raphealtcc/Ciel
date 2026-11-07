@@ -7,18 +7,21 @@ const advisorEnd = worker.indexOf("__name(runAdvisorCycle", advisorStart);
 assert.ok(advisorStart >= 0 && advisorEnd > advisorStart, "advisor cycle must exist");
 const advisor = worker.slice(advisorStart, advisorEnd);
 assert.ok(worker.includes("async function getCachedLeverUpMonUsd"), "fresh cached LeverUp MON/USD quote helper must exist");
-assert.ok(advisor.includes("liveMode ? await getCachedLeverUpMonUsd(env, now)"), "live advisor must not require a Hyperliquid MON market");
-assert.ok(!advisor.includes("if (now - lastTickAt > MAX_AGE || !(prices.MON > 0))"), "old MON hard gate must be removed");
+assert.ok(advisor.includes("const monUsdPrice = Number(prices.MON) > 0 ? Number(prices.MON) : 0"), "advisor must use an explicit unavailable sentinel instead of requiring a cached collateral quote");
+assert.ok(advisor.includes("if (now - lastTickAt > MAX_AGE) return;"), "advisor may skip stale Hyperliquid prices but must not skip technical analysis for missing MON/USD");
+assert.ok(!advisor.includes("!(monUsdPrice > 0)"), "MON/USD must not gate technical candidate generation");
 
 const managerStart = worker.indexOf("async function manageOpenPositions");
 const managerEnd = worker.indexOf("__name(manageOpenPositions", managerStart);
 const manager = worker.slice(managerStart, managerEnd);
-assert.ok(manager.includes("await getCachedLeverUpMonUsd(env, now)"), "position management must use the cached MON/USD quote");
+assert.ok(manager.includes("await getCachedLeverUpMonUsd(env, now)"), "position management may use a cached MON/USD quote when available");
+assert.ok(manager.includes("if (now - lastTickAt > MAX_AGE) return;"), "position stop/target monitoring must continue without MON/USD");
 
 const callbackStart = worker.indexOf("async function handleAdvisorCallback");
 const callbackEnd = worker.indexOf("__name(handleAdvisorCallback", callbackStart);
 const callback = worker.slice(callbackStart, callbackEnd);
-assert.ok(callback.includes("await getCachedLeverUpMonUsd(env, now)"), "Telegram tracking callbacks must use the cached MON/USD quote");
+assert.ok(callback.includes("await getCachedLeverUpMonUsd(env, now)"), "Telegram tracking callbacks may use the cached MON/USD quote");
+assert.ok(!callback.includes("!(monUsdPrice > 0)"), "Telegram tracking must not be blocked by missing MON/USD conversion");
 
 assert.ok(worker.includes("return sampled > 0 ? sampled : await getCachedLeverUpMonUsd(env, Date.now())"), "Telegram commands must use the cached MON/USD quote");
 assert.ok(worker.includes("if (!lastTickAt || now - lastTickAt > 18e4)"), "scheduled advisor must run without requiring prices.MON");

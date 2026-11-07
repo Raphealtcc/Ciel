@@ -21,9 +21,14 @@ const replacement = `  async scheduled(_event, env, ctx) {
         const lastTickAt = Number(marketSnapshot.lastTickAt || 0);
         if (!lastTickAt || now - lastTickAt > 18e4) console.log("CIEL shared advisor waiting for fresh Hyperliquid prices; no setup emitted.");
         else {
+          const scanBefore = await env.CIEL_STATE.get("ciel:advisor:last-scan", "json").catch(() => null);
           await runAdvisorCycle(env, prices, now, lastTickAt, null, null, null);
           const scan = await env.CIEL_STATE.get("ciel:advisor:last-scan", "json").catch(() => null);
-          console.log("CIEL Hyperliquid-led advisor evaluated: " + Number(scan?.historySymbols || 0) + " markets, " + (Array.isArray(scan?.candidates) ? scan.candidates.length : 0) + " technical candidates.");
+          if (Number(scan?.at || 0) === now) {
+            console.log("CIEL ADVISOR SCAN COMPLETED: " + Number(scan?.historySymbols || 0) + " markets, " + (Array.isArray(scan?.candidates) ? scan.candidates.length : 0) + " technical candidates.");
+          } else {
+            console.log("CIEL ADVISOR SCAN SKIPPED: no fresh scan committed; last successful scan=" + (scan?.at ? new Date(Number(scan.at)).toISOString() : "none") + "; previous scan=" + (scanBefore?.at ? new Date(Number(scanBefore.at)).toISOString() : "none") + ". Cached candidates are not reported as new.");
+          }
         }
       } catch (advisorError) { console.error("CIEL Hyperliquid advisor cycle failed: " + String(advisorError?.message || advisorError).slice(0, 220)); }
       // Only reconcile LeverUp while there are active/pending entry records.
