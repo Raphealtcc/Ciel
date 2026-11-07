@@ -119,6 +119,46 @@ assert.equal(failedReconciliation.rejected, 1);
 assert.equal(db.rows.get(args.signalId).status, "REJECTED");
 assert.match(db.rows.get(args.signalId).last_error, /price acceptable/);
 
+const finalQuoteDb = new FakeD1();
+let submittedWithFinalQuote = null;
+const finalQuoteResult = await submitLeverUpIntent({
+  ...args,
+  db: finalQuoteDb,
+  signalId: "ciel-signal-final-quote",
+  dependencies: {
+    ...args.dependencies,
+    beforeSubmit: async ({ actionValues, preflight, payload }) => ({
+      actionValues: actionValues.map((value, index) => index === 5 ? 2n : value),
+      preflight: { ...preflight, checkedAt: 123456 },
+      payload: { ...payload, finalQuoteObservedAt: 123456 },
+    }),
+    submit: async (input) => {
+      submittedWithFinalQuote = input;
+      return { intentHash: "0x" + "ef".repeat(32), intent: { actionDataHash: "0x" + "cd".repeat(32) } };
+    },
+  },
+});
+assert.equal(finalQuoteResult.status, "SUBMITTED");
+assert.equal(submittedWithFinalQuote.actionValues[5], 2n, "the final refreshed quantity must be the quantity signed");
+assert.equal(submittedWithFinalQuote.preflight.checkedAt, 123456, "the final quote preflight must be signed with the intent");
+
+const driftDb = new FakeD1();
+let driftSubmitCalls = 0;
+const driftRejected = await submitLeverUpIntent({
+  ...args,
+  db: driftDb,
+  signalId: "ciel-signal-drift-rejected",
+  dependencies: {
+    ...args.dependencies,
+    beforeSubmit: async () => { throw new Error("LEVERUP_QUOTE_DRIFT_EXCEEDED"); },
+    submit: async () => { driftSubmitCalls++; return { intentHash: "0x" + "ff".repeat(32) }; },
+  },
+});
+assert.equal(driftRejected.status, "REJECTED");
+assert.equal(driftRejected.submitted, false);
+assert.equal(driftSubmitCalls, 0, "a stale quote must be rejected before signing/submission");
+assert.equal(driftDb.rows.get("ciel-signal-drift-rejected").status, "REJECTED");
+
 const position = {
   positionHash: "0x" + "aa".repeat(32), qtyRaw: "1000", entryPriceRaw: "100000000000000000000",
   stopLossRaw: "99000000000000000000", takeProfitRaw: "101000000000000000000",
