@@ -48,6 +48,48 @@ if (!source.includes("function compactCielSetupMessage(")) {
 
 const nativeAdvisorBefore = "  if (liveMode) {\n    console.log(\"CIEL live signal cycle skipped: Hyperliquid-derived signals are not eligible for live mode.\");\n    return;\n  }";
 once(nativeAdvisorBefore, "", "route live and paper through the same CIEL candidate generation, scoring and review pipeline");
+const monUsdHelper = [
+  "async function getCachedLeverUpMonUsd(env, now = Date.now()) {",
+  "  try {",
+  '    const diagnostics = await env?.CIEL_STATE?.get("ciel:leverup:diagnostics:v1", "json");',
+  '    const quotes = Object.values(diagnostics?.marketPreflights || {}).map((item) => ({ at: Number(item?.checkedAt || 0), price: Number(item?.usdLimits?.monUsdPrice), status: String(item?.status || "") })).filter((item) => item.status === "PASS" && item.at > 0 && now >= item.at && now - item.at <= 10 * 60 * 1000 && Number.isFinite(item.price) && item.price > 0).sort((a, b) => b.at - a.at);',
+  "    return quotes[0]?.price || 0;",
+  "  } catch { return 0; }",
+  "}",
+  ""
+].join("\n");
+once("async function runAdvisorCycle(", monUsdHelper + "async function runAdvisorCycle(", "use a fresh cached LeverUp MON/USD oracle quote when Hyperliquid has no MON market");
+
+function patchFunctionMonUsd(startMarker, endMarker, gate, replacement, label) {
+  const start = source.indexOf(startMarker), end = source.indexOf(endMarker, start);
+  if (start < 0 || end < start) throw new Error(label + ": function boundaries missing");
+  let segment = source.slice(start, end).replaceAll("prices.MON", "monUsdPrice");
+  const count = segment.split(gate).length - 1;
+  if (count !== 1) throw new Error(label + ": expected one MON gate, found " + count);
+  segment = segment.replace(gate, replacement);
+  source = source.slice(0, start) + segment + source.slice(end);
+  console.log("Applied LeverUp advisor integration: " + label);
+}
+
+patchFunctionMonUsd("async function runAdvisorCycle(", "__name(runAdvisorCycle",
+  "if (now - lastTickAt > MAX_AGE || !(monUsdPrice > 0)) return;",
+  "const monUsdPrice = Number(prices.MON) > 0 ? Number(prices.MON) : liveMode ? await getCachedLeverUpMonUsd(env, now) : 0;\n  if (now - lastTickAt > MAX_AGE || !(monUsdPrice > 0)) return;",
+  "allow live advisor scans without a Hyperliquid MON market");
+
+patchFunctionMonUsd("async function manageOpenPositions(", "__name(manageOpenPositions",
+  "if (now - lastTickAt > MAX_AGE || !(monUsdPrice > 0)) return;",
+  "const monUsdPrice = Number(prices.MON) > 0 ? Number(prices.MON) : await getCachedLeverUpMonUsd(env, now);\n  if (now - lastTickAt > MAX_AGE || !(monUsdPrice > 0)) return;",
+  "restore tracked-position stop, target and profit-protection alerts without Hyperliquid MON");
+
+patchFunctionMonUsd("async function handleAdvisorCallback(", "__name(handleAdvisorCallback",
+  'if (!lastTickAt || now - lastTickAt > MAX_AGE || !(monUsdPrice > 0)) return { handled: true, removeButtons: false, reply: "Market data is stale. Tracking was not started; try again when the feed is fresh." };',
+  'const monUsdPrice = Number(prices.MON) > 0 ? Number(prices.MON) : await getCachedLeverUpMonUsd(env, now);\n    if (!lastTickAt || now - lastTickAt > MAX_AGE || !(monUsdPrice > 0)) return { handled: true, removeButtons: false, reply: "Market data is stale. Tracking was not started; try again when the feed is fresh." };',
+  "restore Start Tracking and close-button callback processing without Hyperliquid MON");
+
+const oldLiveMon = 'async function liveMon(env) {\n  const x = await env.DB.prepare("SELECT mid_price,ts_ms FROM market_samples WHERE symbol=\'MON\' ORDER BY ts_ms DESC LIMIT 1").first();\n  return x && Date.now() - x.ts_ms <= MAX_AGE ? Number(x.mid_price) || 0 : 0;\n}';
+const newLiveMon = 'async function liveMon(env) {\n  const x = await env.DB.prepare("SELECT mid_price,ts_ms FROM market_samples WHERE symbol=\'MON\' ORDER BY ts_ms DESC LIMIT 1").first();\n  const sampled = x && Date.now() - Number(x.ts_ms) <= MAX_AGE ? Number(x.mid_price) || 0 : 0;\n  return sampled > 0 ? sampled : await getCachedLeverUpMonUsd(env, Date.now());\n}';
+once(oldLiveMon, newLiveMon, "use the LeverUp MON/USD quote for /signals, /positions and /entered when no Hyperliquid MON sample exists");
+
 
 once(
   "  async hyperliquidDisabledForLiveMode() {\n    const liveOverride = await this.env?.CIEL_STATE?.get(\"ciel:control:live-enabled\").catch(() => null);\n    return String(liveOverride ?? this.env?.LEVERUP_LIVE_TRADING).toLowerCase() === \"true\" &&\n      String(this.env?.LEVERUP_KILL_SWITCH).toLowerCase() === \"false\";\n  }",
@@ -197,7 +239,7 @@ once(
             .filter((market) => market && market.symbol && Number.isFinite(Number(market.price)) && Number(market.price) > 0)
             .map((market) => [String(market.symbol).toUpperCase(), Number(market.price)]));
           const lastTickAt = Number(marketSnapshot.lastTickAt || 0);
-          if (!(prices.MON > 0) || !lastTickAt || now - lastTickAt > 180000) {
+          if (!lastTickAt || now - lastTickAt > 180000) {
             console.log("CIEL shared advisor waiting for fresh Hyperliquid prices; no setup emitted.");
           } else {
             await runAdvisorCycle(env, prices, now, lastTickAt, null, null, null);
