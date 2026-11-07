@@ -1,4 +1,4 @@
-assert.equal(plan.actionValues[3].toLowerCase(), LV.toLowerCase(), "WMON collateral must use the protocol LV token field");\nimport assert from "node:assert/strict";
+import assert from "node:assert/strict";
 import {
   MIN_EXECUTION_LEVERAGE,
   assertMinimumLeverage,
