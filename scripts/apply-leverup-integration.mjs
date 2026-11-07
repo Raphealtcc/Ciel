@@ -89,6 +89,76 @@ patchFunctionMonUsd("async function handleAdvisorCallback(", "__name(handleAdvis
 const oldLiveMon = 'async function liveMon(env) {\n  const x = await env.DB.prepare("SELECT mid_price,ts_ms FROM market_samples WHERE symbol=\'MON\' ORDER BY ts_ms DESC LIMIT 1").first();\n  return x && Date.now() - x.ts_ms <= MAX_AGE ? Number(x.mid_price) || 0 : 0;\n}';
 const newLiveMon = 'async function liveMon(env) {\n  const x = await env.DB.prepare("SELECT mid_price,ts_ms FROM market_samples WHERE symbol=\'MON\' ORDER BY ts_ms DESC LIMIT 1").first();\n  const sampled = x && Date.now() - Number(x.ts_ms) <= MAX_AGE ? Number(x.mid_price) || 0 : 0;\n  return sampled > 0 ? sampled : await getCachedLeverUpMonUsd(env, Date.now());\n}';
 once(oldLiveMon, newLiveMon, "use the LeverUp MON/USD quote for /signals, /positions and /entered when no Hyperliquid MON sample exists");
+const oldCandle = "  for (const [symbol, one, five] of coreCandleResults) coreScalpData.set(symbol, { one, five });";
+const newCandle = [
+  "  for (const [symbol, one, five] of coreCandleResults) coreScalpData.set(symbol, { one, five });",
+  "  const missingTrendSymbols = coreScalpSymbols.filter((symbol) => {",
+  "    const rows = coreScalpData.get(symbol)?.five || [];",
+  "    const latest = Number(rows[rows.length - 1]?.close_ts_ms || 0);",
+  "    return rows.length < 40 || now - latest > 7 * 60 * 1000;",
+  "  });",
+  "  if (missingTrendSymbols.length) {",
+  "    try {",
+  "      const placeholders = missingTrendSymbols.map(() => \\"?\\").join(\\",\\");",
+  "      const candleRows = await env.DB.prepare(",
+  "        \\"WITH ranked AS (SELECT symbol,open_ts_ms,close_ts_ms,open_price,high_price,low_price,close_price,volume,ROW_NUMBER() OVER (PARTITION BY symbol ORDER BY close_ts_ms DESC) AS rn FROM market_candles WHERE symbol IN (\\" + placeholders + \\") AND interval=? AND close_ts_ms<=?) SELECT symbol,open_ts_ms,close_ts_ms,open_price,high_price,low_price,close_price,volume FROM ranked WHERE rn<=60 ORDER BY symbol,close_ts_ms ASC\\"",
+  "      ).bind(...missingTrendSymbols, \\"5m\\", now).all();",
+  "      const bySymbol = new Map();",
+  "      for (const row of candleRows.results || []) {",
+  "        const rows = bySymbol.get(row.symbol) || [];",
+  "        rows.push(row);",
+  "        bySymbol.set(row.symbol, rows);",
+  "      }",
+  "      for (const symbol of missingTrendSymbols) {",
+  "        const existing = coreScalpData.get(symbol) || { one: [], five: [] };",
+  "        const fallback = bySymbol.get(symbol) || [];",
+  "        if (fallback.length >= 40) existing.five = fallback;",
+  "        coreScalpData.set(symbol, existing);",
+  "      }",
+  "    } catch (candleError) {",
+  "      console.error(\\"Core 5m candle D1 fallback failed: \\" + String(candleError?.message || candleError).slice(0, 200));",
+  "    }",
+  "  }"
+].join("\\n");
+once(oldCandle, newCandle, "load fresh closed 5m candles from D1 when Durable Object buffers are empty or stale");
+
+const oldCoreLoop = [
+  "    if (isCore) {",
+  "      const candles = coreScalpData.get(sym);",
+  "      if (!candles || candles.one.length < 25 || candles.five.length < 40) {",
+  "        scanDiagnostics.push({ symbol: sym, strategy: \\"CORE_PULLBACK_SCALP\\", reason: \\"INSUFFICIENT_CLOSED_CANDLE_HISTORY\\" });",
+  "        scanDiagnostics.push({ symbol: sym, strategy: \\"CORE_TREND_CONTINUATION\\", reason: \\"INSUFFICIENT_CLOSED_5M_HISTORY\\" });",
+  "      } else {",
+  "        const scalp = analyzeCorePullbackScalp(sym, candles.one, candles.five, now);",
+  "        if (scalp && scalp.confidence >= minimumConfidence) candidates.push(scalp);",
+  "        else scanDiagnostics.push({ symbol: sym, strategy: \\"CORE_PULLBACK_SCALP\\", reason: \\"PULLBACK_RECLAIM_VOLUME_OR_FRESHNESS_GATE\\" });",
+  "        const continuation = analyzeCoreTrendContinuation(sym, candles.five, now);",
+  "        if (continuation && continuation.confidence >= minimumConfidence) candidates.push(continuation);",
+  "        else scanDiagnostics.push({ symbol: sym, strategy: \\"CORE_TREND_CONTINUATION\\", reason: \\"EMA_BREAKOUT_RETEST_VOLUME_OR_FRESHNESS_GATE\\" });",
+  "      }",
+  "    }"
+].join("\\n");
+const newCoreLoop = [
+  "    if (isCore) {",
+  "      const candles = coreScalpData.get(sym);",
+  "      if (!candles || candles.one.length < 25) {",
+  "        scanDiagnostics.push({ symbol: sym, strategy: \\"CORE_PULLBACK_SCALP\\", reason: \\"INSUFFICIENT_CLOSED_CANDLE_HISTORY\\" });",
+  "      } else {",
+  "        const scalp = analyzeCorePullbackScalp(sym, candles.one, candles.five, now);",
+  "        if (scalp && scalp.confidence >= minimumConfidence) candidates.push(scalp);",
+  "        else scanDiagnostics.push({ symbol: sym, strategy: \\"CORE_PULLBACK_SCALP\\", reason: \\"PULLBACK_RECLAIM_VOLUME_OR_FRESHNESS_GATE\\" });",
+  "      }",
+  "      if (!candles || candles.five.length < 40) {",
+  "        scanDiagnostics.push({ symbol: sym, strategy: \\"CORE_TREND_CONTINUATION\\", reason: \\"INSUFFICIENT_CLOSED_5M_HISTORY\\" });",
+  "      } else {",
+  "        const continuation = analyzeCoreTrendContinuation(sym, candles.five, now);",
+  "        if (continuation && continuation.confidence >= minimumConfidence) candidates.push(continuation);",
+  "        else scanDiagnostics.push({ symbol: sym, strategy: \\"CORE_TREND_CONTINUATION\\", reason: \\"EMA_BREAKOUT_RETEST_VOLUME_OR_FRESHNESS_GATE\\" });",
+  "      }",
+  "    }"
+].join("\\n");
+once(oldCoreLoop, newCoreLoop, "evaluate 5m trend continuation independently from the 1m pullback strategy");
+
 
 
 once(

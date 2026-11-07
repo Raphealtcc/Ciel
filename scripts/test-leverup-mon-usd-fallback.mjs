@@ -22,6 +22,8 @@ assert.ok(callback.includes("await getCachedLeverUpMonUsd(env, now)"), "Telegram
 
 assert.ok(worker.includes("return sampled > 0 ? sampled : await getCachedLeverUpMonUsd(env, Date.now())"), "Telegram commands must use the cached MON/USD quote");
 assert.ok(worker.includes("if (!lastTickAt || now - lastTickAt > 18e4)"), "scheduled advisor must run without requiring prices.MON");
+assert.ok(worker.includes("ROW_NUMBER() OVER (PARTITION BY symbol ORDER BY close_ts_ms DESC)"), "advisor must recover fresh 5m candles from D1 when the Durable Object buffer is empty");
+assert.ok(worker.includes("if (!candles || candles.five.length < 40)"), "5m trend continuation must not be blocked by missing 1m candles");
 assert.ok(!worker.includes("await runAdvisorCycle(env, prices, now, lastTickAt, null, null, null)"), "scheduled cron must not claim the advisor slot without candle buffers");
 assert.ok(worker.includes("runAdvisorCycle(this.env, this.latest, now, this.lastTickAt, this.history, this.liveMarketInputs(now), this.state.storage, this.coreScalpCandles, this.coreTrendCandles)"), "Durable Object advisor must run with fresh closed-candle buffers");
 console.log("PASS: CIEL advisor, position alerts, Telegram callbacks and commands use a fresh cached LeverUp MON/USD quote when Hyperliquid has no MON market.");
