@@ -7,6 +7,10 @@ assert.ok(source.includes('new Set(["BTC", "ETH", "MON", "SOL"])'), "SOL candle 
 assert.ok(source.includes('interval: "1m"'));
 assert.ok(source.includes("this.coreScalpCandles[symbol]"), "1m scalp candles must be retained in Durable Object state");
 assert.ok(source.includes('this.state.storage.put("coreScalpCandles", this.coreScalpCandles)'), "1m scalp candle history must survive Durable Object restarts");
+assert.ok(source.includes('this.xyzQntMid = values[24] || null;'), "QNT mid must restore from its own storage slot after adding core candle state");
+assert.ok(source.includes('this.lastXyzQntRefreshAt = Number(values[25]) || 0;'), "QNT refresh timestamp must restore from its own slot to avoid excess REST polling");
+assert.ok(source.includes('this.historyBootstrapDone = values[26] === true;'), "history bootstrap completion flag must restore from its own slot");
+assert.ok(source.includes('this.lastHistoryBootstrapAt = Number(values[27]) || 0;'), "history bootstrap timestamp must restore from its own slot");
 assert.ok(!source.includes("processedCandidateSymbols"), "trend candidates must not reserve a symbol before scalp evaluation");
 assert.ok(source.includes("model='CIEL deterministic core scalp guard'"), "core scalp cooldown must be mode-specific");
 assert.ok(source.includes("model NOT IN ('CIEL Statistical Ensemble v1','CIEL Statistical Ensemble v1 + technical gate','CIEL deterministic range guard','CIEL deterministic core scalp guard'"), "trend cooldown must ignore scalp and pre-review gate rows");

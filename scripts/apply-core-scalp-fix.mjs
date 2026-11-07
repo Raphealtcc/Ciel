@@ -309,5 +309,11 @@ if (legacyModeCount !== 2) throw new Error("Expected two paper summary mode labe
 source = source.replaceAll(legacyModeLabel, 'trade.mode === "CORE_PULLBACK_SCALP" ? "CORE PULLBACK SCALP" : trade.mode === "RANGE_SCALP" ? "RANGE SCALP" : trade.mode === "TREND_HOLD" ? "TREND HOLD" : "LEGACY"');
 console.log("Applied core scalp patch: show core pullback trades distinctly in paper summaries");
 
+once(
+  '    this.xyzQntMid = values[22] || null;\n    this.lastXyzQntRefreshAt = Number(values[23]) || 0;\n    this.historyBootstrapDone = values[24] === true;\n    this.lastHistoryBootstrapAt = Number(values[25]) || 0;',
+  '    this.xyzQntMid = values[24] || null;\n    this.lastXyzQntRefreshAt = Number(values[25]) || 0;\n    this.historyBootstrapDone = values[26] === true;\n    this.lastHistoryBootstrapAt = Number(values[27]) || 0;',
+  "align restored QNT and history bootstrap state with the expanded Durable Object restore list",
+);
+
 await writeFile(file, source);
 console.log("Wrote core BTC/ETH/SOL pullback scalp candidate to reconstructed/patched-worker.js");
