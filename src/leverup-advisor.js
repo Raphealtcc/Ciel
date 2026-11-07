@@ -207,14 +207,18 @@ export async function prepareLeverUpAdvisorPlan({
     const takeProfitPriceRaw = isLong ? oracleRaw * (10_000n + targetBps) / 10_000n : oracleRaw * (10_000n - targetBps) / 10_000n;
 
     const buildPlan = dependencies.buildPlan || buildMarketOpenPlan;
+    const lvmonState = snapshot.accountTokenStates?.[LEVERUP_TOKENS.LVMON.toLowerCase()];
+    const lvmBalanceMon = lvmonState?.balance == null ? 0 : Number(BigInt(lvmonState.balance)) / 1e18;
+    const collateralToken = lvmBalanceMon >= reserveMon + minimumMarginMon
+      ? LEVERUP_TOKENS.LVMON : LEVERUP_TOKENS.WMON;
     const budgeted = buildBudgetedLeverUpPlan({
       buildPlan,
       planArgs: { snapshot, desiredMarginMon, maxTradeMarginMon, inferredLeverage,
         side: candidate.side, expectedHoldSeconds, reserveMon, stopLossPriceRaw, takeProfitPriceRaw,
-        tokenIn: LEVERUP_TOKENS.WMON,
+        tokenIn: collateralToken,
         requireExistingAllowance: false, now,
         entryPriceToleranceBps: Number(env?.LEVERUP_ENTRY_PRICE_TOLERANCE_BPS ?? 30) },
-      maxEntryBudgetMon: maxTradeMarginMon, minimumMarginMon,
+      maxEntryBudgetMon: maxTradeMarginMon, minimumMarginMon, feeTokenAddress: collateralToken,
     });
     const plan = { ...budgeted.plan, entryBudgetMon: budgeted.entryBudgetMon,
       entryBudgetCeilingMon: budgeted.budgetMon, totalAllocationMon, reserveMon, usdLimits };
@@ -223,8 +227,8 @@ export async function prepareLeverUpAdvisorPlan({
     let status = authorized ? (liveMode ? "PREFLIGHT_PASS_LIVE_ENABLED" : "PREFLIGHT_PASS_LIVE_DISABLED") : "BLOCKED_TRADER_SIGNER";
     let reason = authorized
       ? (liveMode
-        ? "Live market, WMON collateral, tier, margin and slippage checks passed; entry is submitted through the LeverUp 1CT hosted agent."
-        : "Live market, tier, margin, balance and fee checks passed. WMON and fee-token allowances are checked for live mode; the hosted-agent intent is locally signed only in dry-run, with no approval transaction or intent submission.")
+        ? "Live market, collateral, tier, margin and slippage checks passed; entry is submitted through the LeverUp 1CT hosted agent."
+        : "Live market, tier, margin, balance and fee checks passed. Collateral and fee-token allowances are checked for live mode; the hosted-agent intent is locally signed only in dry-run, with no approval transaction or intent submission.")
        : "The configured trader private key does not match the trader wallet. No transaction was signed or submitted.";
     let ledgerId = null, ledgerPersisted = false;
     try {
@@ -256,18 +260,19 @@ export async function prepareLeverUpAdvisorPlan({
         reason = "The hosted-agent key or its on-chain market-open authorization failed local 1CT signing validation.";
       }
       try {
-        const wmonState = snapshot.accountTokenStates?.[LEVERUP_TOKENS.WMON.toLowerCase()];
-        if (!wmonState?.balance) throw new Error("WMON_BALANCE_NOT_AVAILABLE_FOR_DRY_RUN_RISK_CHECK");
-        const wmonBalanceMon = Number(BigInt(wmonState.balance)) / 1e18;
+        const collateralToken = String(plan.actionValues?.[2] || "").toLowerCase();
+        const collateralState = snapshot.accountTokenStates?.[collateralToken];
+        if (!collateralState?.balance) throw new Error("COLLATERAL_BALANCE_NOT_AVAILABLE_FOR_DRY_RUN_RISK_CHECK");
+        const collateralBalanceMon = Number(BigInt(collateralState.balance)) / 1e18;
         const entrySpendRaw = BigInt(plan.amountInRaw) + BigInt(plan.actionValues?.[10] || 0) +
-          (String(plan.feeToken || "").toLowerCase() === LEVERUP_TOKENS.WMON.toLowerCase() ? BigInt(plan.antiDdosFee || 0) : 0n);
+          (String(plan.feeToken || "").toLowerCase() === collateralToken ? BigInt(plan.antiDdosFee || 0) : 0n);
         const entryBudgetMon = Number(plan.entryBudgetMon ?? (Number(entrySpendRaw) / 1e18));
         const stopRiskMon = Number(plan.marginMonUsed) * Number(plan.selectedLeverage) * stopPct / 100;
         coordination = await prepareLeverUpExecution({
           signal: { id: signalId },
           preflight: { status: "PREFLIGHT_PASS_LIVE_DISABLED", selectedLeverage: plan.selectedLeverage,
             inferredLeverage, marginMonUsed: plan.marginMonUsed, entryBudgetMon, stopRiskMon },
-          account: { wmonBalanceMon, openPositions: snapshot.indexedPositions || [], staleFeed: false },
+          account: { wmonBalanceMon: collateralBalanceMon, openPositions: snapshot.indexedPositions || [], staleFeed: false },
           portfolio: {}, env: { ...env, LEVERUP_TOTAL_ALLOCATION_MON: String(totalAllocationMon),
             LEVERUP_RESERVE_MON: String(reserveMon) }, store: env.CIEL_STATE, now,
         });
@@ -362,18 +367,19 @@ export async function runLeverUpMarketPreflights({ env, traderAddress, agentAddr
         takeProfitPriceRaw: oracle * 10_080n / 10_000n,
         requireExistingAllowance: false, now,
       });
-      const wmon = snapshot.accountTokenStates?.[WMON] || {};
-      const wmonAllowance = BigInt(wmon.allowance || "0");
-      const wmonRequired = BigInt(plan.amountInRaw || "0");
+      const collateralToken = String(plan.actionValues?.[2] || WMON).toLowerCase();
+      const collateral = snapshot.accountTokenStates?.[collateralToken] || {};
+      const collateralAllowance = BigInt(collateral.allowance || "0");
+      const collateralRequired = BigInt(plan.amountInRaw || "0");
       const feeToken = String(plan.feeToken || "0x0000000000000000000000000000000000000000").toLowerCase();
       const feeRequired = BigInt(plan.antiDdosFee || "0");
       const feeState = snapshot.accountTokenStates?.[feeToken] || {};
       const feeAllowance = BigInt(feeState.allowance || "0");
       const feeApprovalRequired = feeToken !== "0x0000000000000000000000000000000000000000" && feeRequired > 0n;
       const autoApprovalConfigured = String(env?.LEVERUP_AUTO_APPROVE).toLowerCase() === "true";
-      const wmonAllowanceShortfall = wmonAllowance >= wmonRequired ? 0n : wmonRequired - wmonAllowance;
+      const collateralAllowanceShortfall = collateralAllowance >= collateralRequired ? 0n : collateralRequired - collateralAllowance;
       const feeAllowanceShortfall = feeAllowance >= feeRequired ? 0n : feeRequired - feeAllowance;
-      if (!autoApprovalConfigured && (wmonAllowanceShortfall > 0n || (feeApprovalRequired && feeAllowanceShortfall > 0n))) {
+      if (!autoApprovalConfigured && (collateralAllowanceShortfall > 0n || (feeApprovalRequired && feeAllowanceShortfall > 0n))) {
         throw new Error("TOKEN_ALLOWANCE_INSUFFICIENT_AND_AUTO_APPROVAL_DISABLED");
       }
       results[symbol] = {
@@ -384,9 +390,9 @@ export async function runLeverUpMarketPreflights({ env, traderAddress, agentAddr
         minimumNotionalUsd, minimumCollateralUsd, minimumMarginMon, venueMinimumMarginMon,
         totalAllocationMon, reserveMon, maxTradeMarginMon, usdLimits,
         plannedMarginMon: Number(plan.marginMonUsed), plannedNotionalUsd: Number(plan.notionalUsd),
-        wmonBalanceMon: Number(BigInt(wmon.balance || "0")) / 1e18,
-        wmonAllowanceRaw: wmonAllowance.toString(), wmonRequiredAllowanceRaw: wmonRequired.toString(),
-        wmonAllowanceShortfallRaw: wmonAllowanceShortfall.toString(),
+        collateralToken, collateralBalanceMon: Number(BigInt(collateral.balance || "0")) / 1e18,
+        collateralAllowanceRaw: collateralAllowance.toString(), collateralRequiredAllowanceRaw: collateralRequired.toString(),
+        collateralAllowanceShortfallRaw: collateralAllowanceShortfall.toString(),
         feeToken, feeAllowanceRaw: feeAllowance.toString(), feeRequiredAllowanceRaw: feeRequired.toString(),
         feeAllowanceShortfallRaw: feeApprovalRequired ? feeAllowanceShortfall.toString() : "0",
         autoApprovalConfigured, approvalWillRunOnlyOnLiveEntry: true,

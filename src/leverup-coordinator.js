@@ -38,6 +38,7 @@ const OPEN_MARKET_ABI = [{
 }];
 
 const WMON = LEVERUP_TOKENS.WMON.toLowerCase();
+const LVMON = LEVERUP_TOKENS.LVMON.toLowerCase();
 const ZERO = LEVERUP_1CT.zeroAddress;
 const serializable = (value) => JSON.parse(JSON.stringify(value, (_k, v) => typeof v === "bigint" ? v.toString() : v));
 const liveEnabled = (env) => String(env?.LEVERUP_LIVE_TRADING).toLowerCase() === "true" &&
@@ -576,29 +577,33 @@ export async function executeLeverUpEntry({ env, db, candidate, signalId, snapsh
     return { status: "REJECTED", submitted: false, reason: "FRESH_ORACLE_REFRESH_FAILED: " + String(error?.message || error).slice(0, 180) };
   }
 
-  // Production entries must use LeverUp 1CT hosted-agent mode. Native MON is
-  // deliberately rejected here; 1CT requires ERC-20 WMON collateral.
+  // Hosted 1CT accepts WMON -> LVMON and direct LVMON collateral.
+  // The lvToken field differs by route and is validated before signing.
   const actionValues = executionPlan.actionValues || [];
-  if (String(actionValues[2] || "").toLowerCase() !== WMON ||
-      String(actionValues[3] || "").toLowerCase() !== LEVERUP_TOKENS.LVMON.toLowerCase()) {
-    return { status: "REJECTED", submitted: false, reason: "HOSTED_AGENT_REQUIRES_WMON_LVMON_TOKEN_PAIR" };
+  const collateralToken = String(actionValues[2] || "").toLowerCase();
+  const pairedToken = String(actionValues[3] || "").toLowerCase();
+  const validHostedPair =
+    (collateralToken === WMON && pairedToken === LVMON) ||
+    (collateralToken === LVMON && pairedToken === LEVERUP_TOKENS.LV.toLowerCase());
+  if (!validHostedPair) {
+    return { status: "REJECTED", submitted: false, reason: "HOSTED_AGENT_COLLATERAL_TOKEN_PAIR_UNSUPPORTED" };
   }
   if (!executionPlan.preflight?.preflightPassed || executionPlan.preflight.status !== "AVAILABLE") {
     return { status: "REJECTED", submitted: false, reason: "HOSTED_AGENT_PREFLIGHT_NOT_PASSED" };
   }
 
-  const wmonState = snapshot.accountTokenStates?.[WMON];
-  if (!wmonState || wmonState.balance == null) {
-    return { status: "REJECTED", submitted: false, reason: "WMON_BALANCE_NOT_AVAILABLE_FOR_RISK_CHECK" };
+  const collateralState = snapshot.accountTokenStates?.[collateralToken];
+  if (!collateralState || collateralState.balance == null) {
+    return { status: "REJECTED", submitted: false, reason: "COLLATERAL_BALANCE_NOT_AVAILABLE_FOR_RISK_CHECK" };
   }
-  const wmonBalanceMon = Number(BigInt(wmonState.balance)) / 1e18;
+  const collateralBalanceMon = Number(BigInt(collateralState.balance)) / 1e18;
   const margin = Number(executionPlan.marginMonUsed);
   const feeToken = String(executionPlan.feeToken || ZERO).toLowerCase();
   const antiDdosFee = BigInt(executionPlan.antiDdosFee || 0);
   const amountIn = BigInt(actionValues[4] || 0);
   const extraFee = BigInt(actionValues[10] || 0);
-  const wmonEntrySpend = amountIn + extraFee + (feeToken === WMON ? antiDdosFee : 0n);
-  const entryBudgetMon = Number(wmonEntrySpend) / 1e18;
+  const collateralEntrySpend = amountIn + extraFee + (feeToken === collateralToken ? antiDdosFee : 0n);
+  const entryBudgetMon = Number(collateralEntrySpend) / 1e18;
   const stopPct = Number(candidate.stopPct);
   const stopRiskMon = margin * Number(executionPlan.selectedLeverage) * stopPct / 100;
   let portfolioRisk;
@@ -613,7 +618,7 @@ export async function executeLeverUpEntry({ env, db, candidate, signalId, snapsh
     requestedLeverage: executionPlan.selectedLeverage,
     totalAllocationMon: executionPlan.totalAllocationMon ?? effectiveEnv.LEVERUP_TOTAL_ALLOCATION_MON ?? 50,
     reserveMon: executionPlan.reserveMon ?? effectiveEnv.LEVERUP_RESERVE_MON ?? 25,
-    availableWmonMon: wmonBalanceMon, requestedMarginMon: margin, entryBudgetMon,
+    availableWmonMon: collateralBalanceMon, requestedMarginMon: margin, entryBudgetMon,
     currentOpenPositions: snapshot.indexedPositions || [],
     maxConcurrentPositions: effectiveEnv.LEVERUP_MAX_CONCURRENT_POSITIONS ?? 1,
     proposedStopRiskMon: stopRiskMon, aggregateStopRiskMon: portfolioRisk.aggregateStopRiskMon,
@@ -638,7 +643,7 @@ export async function executeLeverUpEntry({ env, db, candidate, signalId, snapsh
     return { status: "REJECTED", submitted: false, reason: "HOSTED_AGENT_NONCE_READ_FAILED: " + String(error?.message || error).slice(0, 160) };
   }
 
-  const allowanceRequirements = [{ tokenAddress: WMON, amount: amountIn + extraFee }];
+  const allowanceRequirements = [{ tokenAddress: collateralToken, amount: amountIn + extraFee }];
   if (feeToken !== ZERO.toLowerCase() && antiDdosFee > 0n) {
     allowanceRequirements.push({ tokenAddress: feeToken, amount: antiDdosFee });
   }

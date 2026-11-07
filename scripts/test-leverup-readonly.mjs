@@ -171,6 +171,7 @@ const planSnapshot = {
   minimumNotionalRaw: (20n * 10n ** 18n).toString(),
   accountTokenStates: {
     [WMON.toLowerCase()]: { balance: wmonRaw.toString(), allowance: wmonRaw.toString() },
+    [LVMON.toLowerCase()]: { balance: (80n * 10n ** 18n).toString(), allowance: (80n * 10n ** 18n).toString() },
     [USDC.toLowerCase()]: { balance: (100n * 10n ** 6n).toString(), allowance: (100n * 10n ** 6n).toString() },
   },
   antiDdosConfig: {
@@ -180,6 +181,17 @@ const planSnapshot = {
   agentAuthorization: { authorized: true, agentAddress: testAgent, canMarketOpen: true, canMarketClose: true, canPartialClose: true },
   lastAgentNonce: "77",
 };
+const directLvmonPlan = buildMarketOpenPlan({
+  snapshot: { ...planSnapshot, collateralRatio: 1 },
+  desiredMarginMon: 20, maxTradeMarginMon: 50, inferredLeverage: 100,
+  side: "LONG", expectedHoldSeconds: 3600, tokenIn: LVMON, requireExistingAllowance: true,
+});
+assert.equal(directLvmonPlan.actionValues[2].toLowerCase(), LVMON.toLowerCase());
+assert.equal(directLvmonPlan.actionValues[3].toLowerCase(), LV.toLowerCase(),
+  "direct LVMON collateral route must carry the LV protocol token parameter");
+assert.equal(directLvmonPlan.mode, "HOSTED_AGENT_1CT");
+assert.ok(BigInt(directLvmonPlan.amountInRaw) <= 80n * 10n ** 18n);
+
 const discountedCollateralPlan = buildMarketOpenPlan({
   snapshot: { ...planSnapshot, collateralRatio: 0.8 },
   desiredMarginMon: 20, maxTradeMarginMon: 50,
