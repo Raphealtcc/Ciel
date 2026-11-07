@@ -100,9 +100,10 @@ export async function ensureLeverUpTokenAllowance({
   }
 
   const spender = LEVERUP_1CT.diamond;
-  const readAllowance = () => reader.readContract({
+  const readAllowance = (blockNumber) => reader.readContract({
     address: tokenAddress, abi: ERC20_APPROVAL_ABI, functionName: "allowance",
     args: [traderAddress, spender],
+    ...(blockNumber == null ? {} : { blockNumber }),
   });
   const currentAllowance = await readAllowance();
   if (currentAllowance >= amount) {
@@ -125,12 +126,40 @@ export async function ensureLeverUpTokenAllowance({
     args: [spender, amount], account,
   });
   const receipt = await reader.waitForTransactionReceipt({ hash: approvalTxHash });
-  if (receipt.status !== "success") throw new Error("LEVERUP_TOKEN_APPROVAL_REVERTED");
-  const confirmedAllowance = await readAllowance();
-  if (confirmedAllowance < amount) throw new Error("LEVERUP_ALLOWANCE_STILL_INSUFFICIENT_AFTER_APPROVAL");
+  if (receipt.status !== "success") {
+    throw new Error("LEVERUP_TOKEN_APPROVAL_REVERTED: token=" + tokenAddress +
+      " spender=" + spender + " tx=" + approvalTxHash);
+  }
+
+  // RPC nodes can acknowledge a mined receipt before their default "latest" state
+  // view has caught up. Verify at the receipt block first, then re-read latest a
+  // bounded number of times. Never broadcast a second approval just because a
+  // post-receipt read is stale.
+  let confirmedAllowance = 0n;
+  let lastReadError = null;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    try {
+      confirmedAllowance = attempt === 0 && receipt.blockNumber != null
+        ? await readAllowance(receipt.blockNumber)
+        : await readAllowance();
+      if (confirmedAllowance >= amount) break;
+    } catch (error) {
+      lastReadError = String(error?.shortMessage || error?.message || error).slice(0, 160);
+    }
+    if (attempt < 3) await new Promise((resolve) => setTimeout(resolve, 350));
+  }
+  if (confirmedAllowance < amount) {
+    throw new Error("LEVERUP_ALLOWANCE_STILL_INSUFFICIENT_AFTER_APPROVAL" +
+      ": token=" + tokenAddress + " spender=" + spender +
+      " required=" + amount.toString() + " observed=" + confirmedAllowance.toString() +
+      " tx=" + approvalTxHash +
+      " block=" + String(receipt.blockNumber ?? "unknown") +
+      (lastReadError ? " readError=" + lastReadError : ""));
+  }
 
   return { status: "APPROVED", traderAddress, tokenAddress, spender,
-    allowance: confirmedAllowance.toString(), requiredAmount: amount.toString(), approvalTxHash };
+    allowance: confirmedAllowance.toString(), requiredAmount: amount.toString(),
+    approvalTxHash, approvalBlockNumber: receipt.blockNumber == null ? null : String(receipt.blockNumber) };
 }
 
 /**

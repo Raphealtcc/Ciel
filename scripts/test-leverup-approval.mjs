@@ -39,6 +39,23 @@ assert.equal(approved.allowance, "123");
 assert.equal(writes.length, 1);
 assert.equal(writes[0].args[1], 123n);
 
+// LVMON must use the same exact-amount auto-approval path as WMON.
+writes = [];
+allowance = 0n;
+const lvmonApproved = await ensureLeverUpTokenAllowance({
+  env: baseEnv, tokenAddress: LEVERUP_TOKENS.LVMON, requiredAmount: 456n,
+  publicClient, walletClient,
+});
+assert.equal(lvmonApproved.status, "APPROVED");
+assert.equal(lvmonApproved.tokenAddress, LEVERUP_TOKENS.LVMON);
+assert.equal(lvmonApproved.spender, LEVERUP_1CT.diamond);
+assert.equal(lvmonApproved.allowance, "456");
+assert.equal(writes.length, 1);
+assert.equal(writes[0].address, LEVERUP_TOKENS.LVMON);
+assert.equal(writes[0].args[0], LEVERUP_1CT.diamond);
+assert.equal(writes[0].args[1], 456n);
+
+
 writes = [];
 const sufficient = await ensureLeverUpTokenAllowance({
   env: baseEnv, tokenAddress: LEVERUP_TOKENS.WMON, requiredAmount: 100n,
