@@ -1,5 +1,25 @@
 import assert from "node:assert/strict";
-import { submitLeverUpIntent, evaluateLeverUpPositionAction, verifyLeverUpCoordinatorDryRun, reconcilePendingLeverUpIntents } from "../src/leverup-coordinator.js";
+import { submitLeverUpIntent, evaluateLeverUpPositionAction, verifyLeverUpCoordinatorDryRun, reconcilePendingLeverUpIntents, refreshLeverUpMarketOpenPlan } from "../src/leverup-coordinator.js";
+
+// Worst-case slippage must not push the executed notional above the leverage tier cap.
+for (const isLong of [true, false]) {
+  const notionalRaw = 20n * 10n ** 18n;
+  const oracleRaw = 100n * 10n ** 18n;
+  const refreshed = refreshLeverUpMarketOpenPlan({
+    plan: {
+      actionValues: ["0x" + "11".repeat(20), isLong, "0x" + "22".repeat(20), "0x" + "33".repeat(20), 1n, 1n, oracleRaw, 0n, 0n, 0, 0n],
+      preflight: { notionalUsdRaw: notionalRaw.toString() },
+    },
+    pairView: { slippageConfig: { enabled: true, slippageType: 0, slippageLongP: 5, slippageShortP: 5 } },
+    freshOraclePriceRaw: oracleRaw,
+    entryPriceToleranceBps: 30,
+    now: 1_800_000_000_000,
+  });
+  const worstNotionalRaw = BigInt(refreshed.qtyRaw) * BigInt(refreshed.worstPriceRaw) / (10n ** 10n);
+  assert.ok(worstNotionalRaw <= notionalRaw, "slippage-adjusted notional must remain within the preflight tier ceiling");
+  assert.ok(BigInt(refreshed.qtyRaw) < notionalRaw * (10n ** 10n) / oracleRaw,
+    "quantity must be sized from worst-case execution price, not oracle mid");
+}
 
 class FakeD1 {
   rows = new Map();
