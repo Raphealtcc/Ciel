@@ -1,4 +1,4 @@
-import assert from "node:assert/strict";
+assert.equal(plan.actionValues[3].toLowerCase(), LV.toLowerCase(), "WMON collateral must use the protocol LV token field");\nimport assert from "node:assert/strict";
 import {
   MIN_EXECUTION_LEVERAGE,
   assertMinimumLeverage,
@@ -145,6 +145,7 @@ assert.ok(estimate.fundingFeeUsd < 0);
 
 const WMON = "0x3bd359C1119dA7Da1D913D1C4D2B7c461115433A";
 const LVMON = "0x91b81bfbe3A747230F0529Aa28d8b2Bc898E6D56";
+const LV = "0x1001ff13bf368aa4fa85f21043648079f00e1001";
 const USDC = "0x754704Bc059F8C67012fEd69BC8A327a5aafb603";
 const wmonRaw = 100n * 10n ** 18n;
 const planSnapshot = {

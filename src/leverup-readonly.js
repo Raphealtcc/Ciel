@@ -19,6 +19,7 @@ export const MIN_EXECUTION_LEVERAGE = 50;
 export const LEVERUP_TOKENS = Object.freeze({
   WMON: "0x3bd359C1119dA7Da1D913D1C4D2B7c461115433A",
   LVMON: "0x91b81bfbe3A747230F0529Aa28d8b2Bc898E6D56",
+  LV: "0x1001ff13bf368aa4fa85f21043648079f00e1001",
   USDC: "0x754704Bc059F8C67012fEd69BC8A327a5aafb603",
   LVUSD: "0xFD44B35139Ae53FFF7d8F2A9869c503D987f00d1",
 });
@@ -725,7 +726,9 @@ export function buildMarketOpenPlan({
   const isLong = side === "LONG";
   const tokenIn = String(tokenInAddress).toLowerCase();
   const isNativeMon = tokenIn === "0x0000000000000000000000000000000000000000";
-  const lvToken = LEVERUP_TOKENS.LVMON;
+  // WMON collateral routes pass LV as the reward token; native MON retains the LVMON settlement route.
+  const lvToken = isNativeMon ? LEVERUP_TOKENS.LVMON :
+    tokenIn === LEVERUP_TOKENS.LVMON.toLowerCase() ? "0x0000000000000000000000000000000000000000" : LEVERUP_TOKENS.LV;
   const marginRaw = parseUnits(String(desiredMarginMon), 18);
   const maxTradeRaw = parseUnits(String(maxTradeMarginMon), 18);
   const reserveRaw = parseUnits(String(reserveMon), 18);

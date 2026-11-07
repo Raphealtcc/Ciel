@@ -45,7 +45,7 @@ const dependencies = {
       amountInRaw: BigInt(Math.ceil(Number(args.desiredMarginMon) * 1.014 * 1e18)).toString(),
       feeToken: "0x0000000000000000000000000000000000000000", antiDdosFee: "0",
       nonce: String(args.now), deadline: Math.floor(args.now / 1000) + 300,
-      actionValues: [args.snapshot.market.base, true, LEVERUP_TOKENS.WMON, LEVERUP_TOKENS.LVMON,
+      actionValues: [args.snapshot.market.base, true, LEVERUP_TOKENS.WMON, LEVERUP_TOKENS.LV,
         BigInt(Math.ceil(Number(args.desiredMarginMon) * 1.014 * 1e18)), 10000000000n,
         BigInt(args.snapshot.oraclePriceRaw), args.stopLossPriceRaw, args.takeProfitPriceRaw, 0, 0n],
       notionalUsd: 20, preflight: {

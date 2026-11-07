@@ -8,8 +8,9 @@ import { prepareLeverUpExecution, reconcileLeverUpIntent, collectLeverUpPairBase
 import { privateKeyToAccount } from "viem/accounts";
 const WMON = "0x3bd359C1119dA7Da1D913D1C4D2B7c461115433A";
 const LVMON = "0x91b81bfbe3A747230F0529Aa28d8b2Bc898E6D56";
+const LV = "0x1001ff13bf368aa4fa85f21043648079f00e1001";
 const refreshed = refreshLeverUpMarketOpenPlan({
-  plan: { actionValues: ["0x" + "11".repeat(20), true, WMON, LVMON, "10000000000000000000", "10000000000", "1010000000000000000", "990000000000000000", "1020000000000000000", 0, "0"],
+  plan: { actionValues: ["0x" + "11".repeat(20), true, WMON, LV, "10000000000000000000", "10000000000", "1010000000000000000", "990000000000000000", "1020000000000000000", 0, "0"],
     preflight: { notionalUsdRaw: "10000000000000000000", checkedAt: 1, oraclePriceRaw: "1000000000000000000", oraclePriceUsd: 1 } },
   pairView: { slippageConfig: { enabled: true, slippageLongP: 10, slippageShortP: 10, slippageType: 0 } },
   freshOraclePriceRaw: "1010000000000000000", now: 200,
@@ -25,11 +26,11 @@ const refreshedShort = refreshLeverUpMarketOpenPlan({
 });
 assert.equal(refreshedShort.actionValues[6], 1006970000000000000n);
 assert.equal(refreshedShort.slippageBps, "30");
-assert.throws(() => refreshLeverUpMarketOpenPlan({ plan: { actionValues: ["0x" + "11".repeat(20), true, WMON, LVMON, "10000000000000000000", "10000000000", "1010000000000000000", "990000000000000000", "1020000000000000000", 0, "0"], preflight: { notionalUsdRaw: "10000000000000000000" } }, pairView: { slippageConfig: { enabled: true, slippageLongP: 10, slippageShortP: 10, slippageType: 1 } }, freshOraclePriceRaw: "1010000000000000000" }), /LIVE_SLIPPAGE_TYPE_UNSUPPORTED/);
-assert.throws(() => refreshLeverUpMarketOpenPlan({ plan: { actionValues: ["0x" + "11".repeat(20), true, WMON, LVMON, "10000000000000000000", "10000000000", "1010000000000000000", "990000000000000000", "1020000000000000000", 0, "0"], preflight: { notionalUsdRaw: "10000000000000000000" } }, pairView: { slippageConfig: { enabled: true, slippageLongP: 10, slippageShortP: 10, slippageType: 0 } }, freshOraclePriceRaw: "1010000000000000000", entryPriceToleranceBps: 101 }), /LIVE_ENTRY_PRICE_TOLERANCE_INVALID/);
+assert.throws(() => refreshLeverUpMarketOpenPlan({ plan: { actionValues: ["0x" + "11".repeat(20), true, WMON, LV, "10000000000000000000", "10000000000", "1010000000000000000", "990000000000000000", "1020000000000000000", 0, "0"], preflight: { notionalUsdRaw: "10000000000000000000" } }, pairView: { slippageConfig: { enabled: true, slippageLongP: 10, slippageShortP: 10, slippageType: 1 } }, freshOraclePriceRaw: "1010000000000000000" }), /LIVE_SLIPPAGE_TYPE_UNSUPPORTED/);
+assert.throws(() => refreshLeverUpMarketOpenPlan({ plan: { actionValues: ["0x" + "11".repeat(20), true, WMON, LV, "10000000000000000000", "10000000000", "1010000000000000000", "990000000000000000", "1020000000000000000", 0, "0"], preflight: { notionalUsdRaw: "10000000000000000000" } }, pairView: { slippageConfig: { enabled: true, slippageLongP: 10, slippageShortP: 10, slippageType: 0 } }, freshOraclePriceRaw: "1010000000000000000", entryPriceToleranceBps: 101 }), /LIVE_ENTRY_PRICE_TOLERANCE_INVALID/);
 const wmonFeeCheck = validateLeverUpTransferBalances({
   action: 0,
-  actionValues: ["0x" + "11".repeat(20), true, WMON, LVMON, "1000", "1", "1", "0", "0", 0, "50"],
+  actionValues: ["0x" + "11".repeat(20), true, WMON, LV, "1000", "1", "1", "0", "0", 0, "50"],
   feeToken: WMON, antiDdosFee: 25n,
   tokenStates: {
     [WMON.toLowerCase()]: { balance: 1075n, allowance: 1074n },
@@ -40,7 +41,7 @@ assert.equal(wmonFeeCheck.ok, false, "WMON requirement must include amountIn, ex
 assert.equal(wmonFeeCheck.required[WMON.toLowerCase()].required, "1075");
 const wmonFeePass = validateLeverUpTransferBalances({
   action: 0,
-  actionValues: ["0x" + "11".repeat(20), true, WMON, LVMON, "1000", "1", "1", "0", "0", 0, "50"],
+  actionValues: ["0x" + "11".repeat(20), true, WMON, LV, "1000", "1", "1", "0", "0", 0, "50"],
   feeToken: WMON, antiDdosFee: 25n,
   tokenStates: {
     [WMON.toLowerCase()]: { balance: 1075n, allowance: 1075n },
@@ -202,7 +203,7 @@ const hostedAgentKey = "0x" + "0".repeat(63) + "2";
 const hostedAgent = privateKeyToAccount(hostedAgentKey).address;
 const hostedPair = "0x" + "44".repeat(20);
 const hostedWmon = WMON.toLowerCase();
-const hostedLvm = LVMON.toLowerCase();
+const hostedLv = LV.toLowerCase();
 let hostedSubmitArgs = null, hostedApprovalCount = 0;
 const hostedNow = Date.now();
 const hostedEntry = await (await import("../src/leverup-coordinator.js")).executeLeverUpEntry({
@@ -225,7 +226,7 @@ const hostedEntry = await (await import("../src/leverup-coordinator.js")).execut
     accountTokenStates: { [hostedWmon]: { balance: (100n * 10n ** 18n).toString(), allowance: "0" } },
   },
   plan: {
-    actionValues: [hostedPair, true, hostedWmon, hostedLvm, (101n * 10n ** 16n).toString(),
+    actionValues: [hostedPair, true, hostedWmon, hostedLv, (101n * 10n ** 16n).toString(),
       "2000000000", (100n * 10n ** 18n).toString(), (99n * 10n ** 18n).toString(),
       (102n * 10n ** 18n).toString(), 0, "0"],
     feeToken: "0x0000000000000000000000000000000000000000", antiDdosFee: "0",
@@ -253,7 +254,7 @@ assert.equal(hostedEntry.status, "SUBMITTED");
 assert.equal(hostedEntry.executionPath, "1CT_HOSTED_AGENT");
 assert.equal(hostedSubmitArgs.action, 0);
 assert.equal(hostedSubmitArgs.actionValues[2].toLowerCase(), hostedWmon);
-assert.equal(hostedSubmitArgs.actionValues[3].toLowerCase(), hostedLvm);
+assert.equal(hostedSubmitArgs.actionValues[3].toLowerCase(), hostedLv);
 assert.ok(BigInt(hostedSubmitArgs.nonce) > 77n, "hosted-agent entry must use a nonce above the latest on-chain nonce");
 assert.equal(hostedApprovalCount, 1);
 assert.equal(hostedDb.rows.get("HOSTED-AGENT-ENTRY").status, "SUBMITTED");
