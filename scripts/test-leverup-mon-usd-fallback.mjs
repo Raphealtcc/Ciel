@@ -21,5 +21,5 @@ const callback = worker.slice(callbackStart, callbackEnd);
 assert.ok(callback.includes("await getCachedLeverUpMonUsd(env, now)"), "Telegram tracking callbacks must use the cached MON/USD quote");
 
 assert.ok(worker.includes("return sampled > 0 ? sampled : await getCachedLeverUpMonUsd(env, Date.now())"), "Telegram commands must use the cached MON/USD quote");
-assert.ok(worker.includes("if (!lastTickAt || now - lastTickAt > 180000)"), "scheduled advisor must run without requiring prices.MON");
+assert.ok(/if \\(!lastTickAt \\|\\| now - lastTickAt > (?:180000|18e4)\\)/.test(worker), "scheduled advisor must run without requiring prices.MON");
 console.log("PASS: CIEL advisor, position alerts, Telegram callbacks and commands use a fresh cached LeverUp MON/USD quote when Hyperliquid has no MON market.");
