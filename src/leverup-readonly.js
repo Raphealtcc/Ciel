@@ -808,9 +808,10 @@ export function buildMarketOpenPlan({
   const extraFee = BigInt(extraFeeRaw);
   const totalCollateralSpend = amountInRaw + extraFee;
   if (amountInRaw > (2n ** 96n - 1n) || extraFee > (2n ** 96n - 1n)) throw new Error("ONECLICK_UINT96_OVERFLOW");
-  if (totalCollateralSpend > availableRaw) throw new Error(isNativeMon ? "NATIVE_MON_BALANCE_INSUFFICIENT_AFTER_RESERVE_FOR_MARGIN_AND_OPEN_FEE" : "COLLATERAL_BALANCE_INSUFFICIENT_AFTER_RESERVE_FOR_MARGIN_AND_OPEN_FEE");
-  if (collateralBalanceRaw < totalCollateralSpend) throw new Error(isNativeMon ? "NATIVE_MON_BALANCE_INSUFFICIENT_FOR_MARGIN_AND_OPEN_FEE" : "COLLATERAL_BALANCE_INSUFFICIENT_FOR_MARGIN_AND_OPEN_FEE");
-  if (!isNativeMon && collateralAllowanceRaw < totalCollateralSpend && requireExistingAllowance) throw new Error("COLLATERAL_DIAMOND_ALLOWANCE_INSUFFICIENT");
+  const collateralLabel = tokenIn === LEVERUP_TOKENS.WMON.toLowerCase() ? "WMON" : "LVMON";
+  if (totalCollateralSpend > availableRaw) throw new Error(isNativeMon ? "NATIVE_MON_BALANCE_INSUFFICIENT_AFTER_RESERVE_FOR_MARGIN_AND_OPEN_FEE" : collateralLabel + "_BALANCE_INSUFFICIENT_AFTER_RESERVE_FOR_MARGIN_AND_OPEN_FEE");
+  if (collateralBalanceRaw < totalCollateralSpend) throw new Error(isNativeMon ? "NATIVE_MON_BALANCE_INSUFFICIENT_FOR_MARGIN_AND_OPEN_FEE" : collateralLabel + "_BALANCE_INSUFFICIENT_FOR_MARGIN_AND_OPEN_FEE");
+  if (!isNativeMon && collateralAllowanceRaw < totalCollateralSpend && requireExistingAllowance) throw new Error(collateralLabel + "_DIAMOND_ALLOWANCE_INSUFFICIENT");
   const antiDdos = snapshot.antiDdosConfig;
   if (!antiDdos.validUntil || now >= Number(antiDdos.validUntil)) throw new Error("ANTIDDOS_CONFIG_STALE");
   const feeSelection = isNativeMon
