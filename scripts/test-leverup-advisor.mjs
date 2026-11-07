@@ -127,8 +127,8 @@ assert.equal(ready.minimumCollateralUsd, 0.23,
   "100x live advisor sizing must use the configured $0.23 LVMON collateral target");
 assert.ok(Math.abs(ready.venueMinimumMarginMon - (0.23 / 0.019038)) < 1e-6,
   "100x minimum collateral must convert the $0.23 target using the fresh MON/USD oracle");
-assert.ok(Math.abs(ready.minimumMarginMon - (0.23737571 / 0.019038)) < 1e-6,
-  "the independent configured minimum trade-margin floor must still apply when it exceeds the 100x target");
+assert.ok(Math.abs(ready.minimumMarginMon - (0.23 / 0.019038)) < 1e-6,
+  "the 100x minimum collateral must be exactly the configured $0.23 target; the legacy generic margin floor must not override it");
 const expectedLiveMarginMon = Math.max(12, ready.minimumMarginMon);
 assert.equal(seenPlanArgs.desiredMarginMon, Math.ceil(ready.minimumMarginMon * 1e8) / 1e8,
   "minimum margin passed to the plan must round upward to avoid floating-point underfunding");
