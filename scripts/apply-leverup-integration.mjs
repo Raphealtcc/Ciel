@@ -211,6 +211,28 @@ once(
   "route /profits to the live LeverUp settlement ledger whenever live execution is enabled",
 );
 
+const blockVisionContractSourceRoute = `    if (url.pathname === "/internal/blockvision/leverup-diamond-source" && request.method === "GET") {
+      const expected = String(env?.TELEGRAM_WEBHOOK_SECRET || "").trim();
+      if (!expected || request.headers.get("authorization") !== "Bearer " + expected) return json2({ ok: false, error: "Unauthorized" }, 401);
+      const apiKey = String(env?.BLOCKVISION_API_KEY || "").trim();
+      if (!apiKey) return json2({ ok: false, error: "BLOCKVISION_API_KEY secret is not bound" }, 503);
+      const address = "0xea1b8E4aB7f14F7dCA68c5B214303B13078FC5ec";
+      const headers = { accept: "application/json", "x-api-key": apiKey };
+      try {
+        const [sourceResponse, detailResponse] = await Promise.all([
+          fetch("https://api.blockvision.org/v2/monad/contract/source/code?address=" + address, { headers, signal: AbortSignal.timeout(15000) }),
+          fetch("https://api.blockvision.org/v2/monad/contract/detail?address=" + address, { headers, signal: AbortSignal.timeout(15000) })
+        ]);
+        const [source, detail] = await Promise.all([sourceResponse.json().catch(() => ({})), detailResponse.json().catch(() => ({}))]);
+        return json2({ ok: sourceResponse.ok && Number(source?.code) === 0, http: { source: sourceResponse.status, detail: detailResponse.status }, source: { code: source?.code, reason: source?.reason, message: source?.message, contractAddress: source?.result?.contractAddress, contractName: source?.result?.contractName, verificationStatus: source?.result?.status, sourceCode: Array.isArray(source?.result?.sourceCode) ? source.result.sourceCode : [] }, detail: { code: detail?.code, reason: detail?.reason, creator: detail?.result?.creator, creationTx: detail?.result?.creationTx, verifyStatus: detail?.result?.verifyStatus, contractMeta: detail?.result?.contractMeta, bytecodeHash: detail?.result?.bytecodeHash } });
+      } catch (error) { return json2({ ok: false, error: String(error?.message || error).slice(0, 220) }, 502); }
+    }
+`;
+once(
+  '    if (url.pathname === "/health") {',
+  blockVisionContractSourceRoute + '    if (url.pathname === "/health") {',
+  "add authenticated BlockVision contract source and proxy metadata retrieval without exposing the API key",
+);
 once(
   '    if (url.pathname === "/health") {',
   oneTimeMarketDiagnosticRoute + '    if (url.pathname === "/health") {',
