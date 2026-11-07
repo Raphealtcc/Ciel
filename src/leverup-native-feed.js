@@ -106,8 +106,15 @@ export async function runLeverUpNativeSampler({ env, now = Date.now(), dependenc
   if (!env?.HYPERLIQUID_FEED?.get || !env?.CIEL_STATE?.put) throw new Error("LEVERUP_NATIVE_FEED_BINDINGS_MISSING");
   const sampleAt = Math.floor(now / SAMPLE_INTERVAL_MS) * SAMPLE_INTERVAL_MS;
   const fetchImpl = dependencies.fetchImpl || fetch;
-  const watch = [...new Set(String(env.WATCH_SYMBOLS || "BTC,ETH,MON,BNB,XRP,HYPE,ONDO,KPEPE,QNT,ZEC,TRX,AAVE,ADA,CASHCAT,DOGE,LINK,LIT,PONS,PUMP,SEI,SOL,SUI,UNI,VIRTUAL,XMR")
-    .split(",").map(upper).filter(Boolean))];
+  const configuredWatch = String(env.WATCH_SYMBOLS || "BTC,ETH,MON,BNB,XRP,HYPE,ONDO,KPEPE,QNT,ZEC,TRX,AAVE,ADA,CASHCAT,DOGE,LINK,LIT,PONS,PUMP,SEI,SOL,SUI,UNI,VIRTUAL,XMR").trim();
+  let watchValues;
+  try {
+    const parsed = JSON.parse(configuredWatch);
+    watchValues = Array.isArray(parsed) ? parsed : configuredWatch.split(",");
+  } catch {
+    watchValues = configuredWatch.split(",");
+  }
+  const watch = [...new Set(watchValues.map(upper).filter(Boolean))];
   const pairs = await (dependencies.fetchPairs || fetchLeverUpPairs)({ fetchImpl });
   const pairBySymbol = new Map();
   for (const pair of pairs || []) {
