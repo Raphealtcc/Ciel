@@ -8,7 +8,9 @@ assert.ok(start >= 0 && end > start, "scheduled handler must exist");
 const scheduled = source.slice(start, end);
 
 assert.ok(scheduled.includes("feedStub2(env).fetch(\"https://feed/ensure\""), "scheduled signal feed must remain Hyperliquid");
-assert.ok(scheduled.includes("runAdvisorCycle(env, prices"), "Hyperliquid advisor must remain scheduled");
+assert.ok(!scheduled.includes("runAdvisorCycle(env, prices"), "scheduled handler must not run a second D1-only advisor pass; HyperliquidFeed Durable Object owns the in-memory scan");
+assert.ok(scheduled.includes("CIEL ADVISOR SCAN FRESH"), "scheduler must report freshness of the Durable Object scan");
+assert.ok(scheduled.includes("CIEL ADVISOR SCAN STALE"), "scheduler must surface a stale/missing Durable Object scan");
 assert.ok(!scheduled.includes("runLeverUpNativeSampler("), "LeverUp native sampler must not run on a schedule");
 assert.ok(!scheduled.includes("runLeverUpDiagnostics("), "periodic LeverUp diagnostics/preflight must be removed");
 assert.ok(!scheduled.includes("fetchLeverUpPairs("), "scheduled path must not fetch LeverUp pair catalogue");

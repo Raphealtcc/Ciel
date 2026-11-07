@@ -21,13 +21,13 @@ const replacement = `  async scheduled(_event, env, ctx) {
         const lastTickAt = Number(marketSnapshot.lastTickAt || 0);
         if (!lastTickAt || now - lastTickAt > 18e4) console.log("CIEL shared advisor waiting for fresh Hyperliquid prices; no setup emitted.");
         else {
-          const scanBefore = await env.CIEL_STATE.get("ciel:advisor:last-scan", "json").catch(() => null);
-          await runAdvisorCycle(env, prices, now, lastTickAt, null, null, null);
           const scan = await env.CIEL_STATE.get("ciel:advisor:last-scan", "json").catch(() => null);
-          if (Number(scan?.at || 0) === now) {
-            console.log("CIEL ADVISOR SCAN COMPLETED: " + Number(scan?.historySymbols || 0) + " markets, " + (Array.isArray(scan?.candidates) ? scan.candidates.length : 0) + " technical candidates.");
+          const scanAt = Number(scan?.at || 0);
+          const scanAgeMs = scanAt > 0 ? Math.max(0, now - scanAt) : Infinity;
+          if (scanAt > 0 && scanAgeMs <= 18e4 + 3e5) {
+            console.log("CIEL ADVISOR SCAN FRESH: " + Number(scan?.historySymbols || 0) + " markets, " + (Array.isArray(scan?.candidates) ? scan.candidates.length : 0) + " technical candidates; age=" + Math.round(scanAgeMs / 1e3) + "s. HyperliquidFeed Durable Object owns the scan.");
           } else {
-            console.log("CIEL ADVISOR SCAN SKIPPED: no fresh scan committed; last successful scan=" + (scan?.at ? new Date(Number(scan.at)).toISOString() : "none") + "; previous scan=" + (scanBefore?.at ? new Date(Number(scanBefore.at)).toISOString() : "none") + ". Cached candidates are not reported as new.");
+            console.warn("CIEL ADVISOR SCAN STALE: no completed HyperliquidFeed scan within the freshness window; last successful scan=" + (scanAt > 0 ? new Date(scanAt).toISOString() : "none") + ". No cached candidates are reported as new.");
           }
         }
       } catch (advisorError) { console.error("CIEL Hyperliquid advisor cycle failed: " + String(advisorError?.message || advisorError).slice(0, 220)); }
