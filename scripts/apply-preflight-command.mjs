@@ -61,10 +61,10 @@ const anchor = "async function handleCommand(env, text) {";
 once(anchor, helper + anchor, "add one-market read-only command handler");
 
 const dispatch = '  const command = (text.trim().split(/\\s+/, 1)[0] || "").split("@")[0].toLowerCase();';
-once(dispatch, dispatch + '\\n  if (await handleLeverUpPreflightCommand(env, text)) return;', "dispatch /preflight before other Telegram command handlers");
+once(dispatch, dispatch + '\n  if (await handleLeverUpPreflightCommand(env, text)) return;', "dispatch /preflight before other Telegram command handlers");
 
 const helpAnchor = '      "/modes — show effective trading modes",';
-once(helpAnchor, helpAnchor + '\\n      "/preflight TOKEN — read-only LeverUp preflight for one market only",', "document single-market usage");
+once(helpAnchor, helpAnchor + '\n      "/preflight TOKEN — read-only LeverUp preflight for one market only",', "document single-market usage");
 
 await writeFile(file, source);
 console.log("Wrote single-market read-only preflight command.");
