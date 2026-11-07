@@ -31,9 +31,9 @@ assert.equal(config.vars.LEVERUP_LIVE_TRADING, undefined, "production live mode 
 assert.equal(config.vars.LEVERUP_KILL_SWITCH, undefined, "production kill switch must remain remotely managed");
 assert.equal(config.vars.LEVERUP_PURGE_LIVE_ENABLED, "true", "Only the explicit manual purge command may close live positions while the kill switch is on");
 assert.equal(config.vars.LEVERUP_MIN_LEVERAGE, "50");
-assert.equal(config.vars.LEVERUP_TOTAL_ALLOCATION_MON, "50");
-assert.equal(config.vars.LEVERUP_RESERVE_MON, "25");
-assert.equal(config.vars.LEVERUP_MAX_TRADE_MARGIN_MON, "25");
+assert.equal(config.vars.LEVERUP_TOTAL_ALLOCATION_MON, "70", "production allocation must retain the approved 70 MON cap");
+assert.equal(config.vars.LEVERUP_RESERVE_MON, "30", "production reserve must retain the approved 30 MON reserve");
+assert.equal(config.vars.LEVERUP_MAX_TRADE_MARGIN_MON, "30", "production trade margin must retain the approved 30 MON cap");
 assert.equal(config.vars.LEVERUP_MAX_CONCURRENT_POSITIONS, "1");
 assert.equal(config.vars.LEVERUP_MAX_DAILY_LOSS_MON, "12");
 assert.equal(config.vars.LEVERUP_MAX_DRAWDOWN_MON, "12");
@@ -65,6 +65,9 @@ const expectedPreviewVars = {
   LEVERUP_KILL_SWITCH: "true"
 };
 assert.deepEqual(config.previews.vars, expectedPreviewVars, "Previews must retain the full variable set but must not claim the shared Telegram bot/webhook");
+assert.equal(config.previews.vars.LEVERUP_TOTAL_ALLOCATION_MON, "50", "Worker Previews must retain the isolated 50 MON staging allocation");
+assert.equal(config.previews.vars.LEVERUP_RESERVE_MON, "25", "Worker Previews must retain the isolated 25 MON staging reserve");
+assert.equal(config.previews.vars.LEVERUP_MAX_TRADE_MARGIN_MON, "25", "Worker Previews must retain the isolated 25 MON staging trade cap");
 const previewD1 = config.previews.d1_databases?.find((item) => item.binding === "DB");
 const previewKv = config.previews.kv_namespaces?.find((item) => item.binding === "CIEL_STATE");
 assert.equal(previewD1?.database_id, expectedD1, "Preview must use the isolated staging D1");
