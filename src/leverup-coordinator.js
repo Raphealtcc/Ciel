@@ -143,8 +143,6 @@ export function refreshLeverUpMarketOpenPlan({ plan, pairView, freshOraclePriceR
   const values = [...plan.actionValues];
   const isLong = Boolean(values[1]);
   const notionalRaw = BigInt(plan.preflight.notionalUsdRaw);
-  const qtyRaw = notionalRaw * (10n ** 10n) / price;
-  if (qtyRaw <= 0n || qtyRaw > (2n ** 128n - 1n)) throw new Error("FRESH_ORACLE_QTY_OUT_OF_RANGE");
   const slippage = pairView.slippageConfig;
   if (!slippage.enabled) throw new Error("LIVE_SLIPPAGE_CONFIG_DISABLED_OR_MISSING");
   if (Number(slippage.slippageType) !== 0) throw new Error("LIVE_SLIPPAGE_TYPE_UNSUPPORTED");
@@ -157,6 +155,11 @@ export function refreshLeverUpMarketOpenPlan({ plan, pairView, freshOraclePriceR
   const worstPriceRaw = isLong
     ? price * (10_000n + slippageP) / 10_000n
     : price * (10_000n - slippageP) / 10_000n;
+  // Size quantity against the worst permitted execution price, not the oracle
+  // mid. Otherwise a long can exceed the market's leverage cap by the slippage
+  // allowance even though the preflight notional was exactly at the cap.
+  const qtyRaw = notionalRaw * (10n ** 10n) / worstPriceRaw;
+  if (qtyRaw <= 0n || qtyRaw > (2n ** 128n - 1n)) throw new Error("FRESH_ORACLE_QTY_OUT_OF_RANGE");
   const stop = BigInt(values[7] || 0);
   const target = BigInt(values[8] || 0);
   if (isLong && ((stop > 0n && stop >= price) || (target > 0n && target <= price))) {
