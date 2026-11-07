@@ -21,7 +21,7 @@ assert.equal(refreshed.protocolSlippageBps, "10");
 assert.equal(refreshed.slippageBps, "30");
 assert.equal(refreshed.preflight.checkedAt, 200);
 const refreshedShort = refreshLeverUpMarketOpenPlan({
-  plan: { actionValues: ["0x" + "11".repeat(20), false, WMON, LVMON, "10000000000000000000", "10000000000", "1010000000000000000", "0", "0", 0, "0"], preflight: { notionalUsdRaw: "10000000000000000000", checkedAt: 1, oraclePriceRaw: "1000000000000000000", oraclePriceUsd: 1 } },
+  plan: { actionValues: ["0x" + "11".repeat(20), false, WMON, LV, "10000000000000000000", "10000000000", "1010000000000000000", "0", "0", 0, "0"], preflight: { notionalUsdRaw: "10000000000000000000", checkedAt: 1, oraclePriceRaw: "1000000000000000000", oraclePriceUsd: 1 } },
   pairView: { slippageConfig: { enabled: true, slippageLongP: 10, slippageShortP: 10, slippageType: 0 } }, freshOraclePriceRaw: "1010000000000000000", now: 201,
 });
 assert.equal(refreshedShort.actionValues[6], 1006970000000000000n);
@@ -34,7 +34,7 @@ const wmonFeeCheck = validateLeverUpTransferBalances({
   feeToken: WMON, antiDdosFee: 25n,
   tokenStates: {
     [WMON.toLowerCase()]: { balance: 1075n, allowance: 1074n },
-    [LVMON.toLowerCase()]: { balance: 0n, allowance: 0n },
+    [LV.toLowerCase()]: { balance: 0n, allowance: 0n },
   },
 });
 assert.equal(wmonFeeCheck.ok, false, "WMON requirement must include amountIn, extraFee, and same-token anti-DDOS fee");
