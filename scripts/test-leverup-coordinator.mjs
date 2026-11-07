@@ -17,7 +17,7 @@ const refreshed = refreshLeverUpMarketOpenPlan({
   pairView: { slippageConfig: { enabled: true, slippageLongP: 10, slippageShortP: 10, slippageType: 0 } },
   freshOraclePriceRaw: "1010000000000000000", now: 200,
 });
-assert.equal(refreshed.actionValues[5], refreshed.qtyRaw);
+assert.equal(BigInt(refreshed.actionValues[5]), BigInt(refreshed.qtyRaw));
 assert.equal(refreshed.actionValues[5], (9950000000000000000n * 10n ** 10n) / 1013030000000000000n);
 assert.equal(refreshed.sizingPriceRaw, "1013030000000000000");
 assert.equal(refreshed.actionValues[6], 1013030000000000000n);
