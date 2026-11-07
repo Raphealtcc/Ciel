@@ -22,7 +22,8 @@ assert.ok(candidateCall > 0, "candidate-time LeverUp preflight must remain");
 const advisorStart = source.indexOf("async function runAdvisorCycle");
 const advisorEnd = source.indexOf("async function manageOpenPositions", advisorStart);
 const advisor = source.slice(advisorStart, advisorEnd);
-assert.ok(advisor.includes("reviewed?.verdict !== \"APPROVE\" || technicalOnly"), "LeverUp preflight must require a fully approved non-technical-only candidate");
+const leverUpAdvisor = await readFile("src/leverup-advisor.js", "utf8");
+assert.ok(leverUpAdvisor.includes('reviewed?.verdict !== "APPROVE" || technicalOnly'), "LeverUp preflight helper must require a fully approved non-technical-only candidate");
 assert.ok(advisor.includes("prepareLeverUpAdvisorPlan({ env, candidate, reviewed"), "candidate preflight call must remain in advisor pipeline");
 
 console.log("PASS: Hyperliquid leads signal discovery; LeverUp is not polled on schedule and is queried only for approved candidates or active-position management.");
