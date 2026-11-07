@@ -60,7 +60,7 @@ const scheduled = source.slice(scheduledStart, scheduledEnd);
 if (scheduled.includes("runLeverUpNativeSampler(") || scheduled.includes("runLeverUpDiagnostics(")) {
   throw new Error("Periodic LeverUp sampling or diagnostics remain in scheduled handler.");
 }
-if (!scheduled.includes("runAdvisorCycle(env, prices")) throw new Error("Hyperliquid advisor scan was removed.");
+if (!scheduled.includes("HyperliquidFeed Durable Object owns the scan.") || !scheduled.includes("ciel:advisor:last-scan")) throw new Error("HyperliquidFeed-owned advisor scan freshness check is missing.");
 if (!scheduled.includes("status IN ('SUBMITTED','PENDING','UNCERTAIN','EXECUTED')")) throw new Error("Active-position-only LeverUp management gate is missing.");
 if (!source.includes("prepareLeverUpAdvisorPlan({ env, candidate, reviewed")) throw new Error("Candidate-time LeverUp preflight call is missing.");
 
