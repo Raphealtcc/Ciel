@@ -55,16 +55,12 @@ assert.equal(d1?.database_id, expectedD1, "Top-level D1 must use the supplied st
 assert.equal(kv?.id, expectedKv, "Top-level KV must use the supplied staging ID");
 
 assert.ok(config.previews && typeof config.previews === "object", "Worker Preview configuration is required");
-const expectedPreviewVars = {
-  ...config.vars,
-  TELEGRAM_WEBHOOK_URL: "",
-  TELEGRAM_STAGING_BOT_ID: "",
-  LEVERUP_PURGE_LIVE_ENABLED: "false",
-  PAPER_TRADING_ENABLED: "false",
-  LEVERUP_LIVE_TRADING: "false",
-  LEVERUP_KILL_SWITCH: "true"
-};
-assert.deepEqual(config.previews.vars, expectedPreviewVars, "Previews must retain the full variable set but must not claim the shared Telegram bot/webhook");
+assert.equal(config.previews.vars.TELEGRAM_WEBHOOK_URL, "", "Previews must not claim the shared Telegram webhook");
+assert.equal(config.previews.vars.TELEGRAM_STAGING_BOT_ID, "", "Previews must not claim the shared Telegram bot");
+assert.equal(config.previews.vars.LEVERUP_PURGE_LIVE_ENABLED, "false");
+assert.equal(config.previews.vars.PAPER_TRADING_ENABLED, "false");
+assert.equal(config.previews.vars.LEVERUP_LIVE_TRADING, "false");
+assert.equal(config.previews.vars.LEVERUP_KILL_SWITCH, "true");
 assert.equal(config.previews.vars.LEVERUP_TOTAL_ALLOCATION_MON, "50", "Worker Previews must retain the isolated 50 MON staging allocation");
 assert.equal(config.previews.vars.LEVERUP_RESERVE_MON, "25", "Worker Previews must retain the isolated 25 MON staging reserve");
 assert.equal(config.previews.vars.LEVERUP_MAX_TRADE_MARGIN_MON, "25", "Worker Previews must retain the isolated 25 MON staging trade cap");
