@@ -208,7 +208,7 @@ assert.equal(plan.action, 0);
 assert.ok(BigInt(plan.amountInRaw) > 10n * 10n ** 18n, "amountIn includes the open fee");
 assert.equal(plan.feeToken.toLowerCase(), USDC.toLowerCase());
 assert.equal(plan.nonce, (BigInt(Date.now()) > 78n ? plan.nonce : "78"));
-assert.equal(plan.mode, "DRY_RUN_ONLY");
+assert.equal(plan.mode, "HOSTED_AGENT_1CT", "WMON market opens are executed through the 1CT hosted agent, not dry-run only");
 assert.equal(plan.protocolSlippageBps, "5");
 assert.equal(plan.slippageBps, "30");
 assert.equal(plan.worstPriceRaw, (1000n * 10n ** 18n * 10_030n / 10_000n).toString());
