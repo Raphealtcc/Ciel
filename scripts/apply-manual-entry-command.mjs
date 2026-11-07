@@ -72,7 +72,7 @@ const helper = `async function handleLeverUpManualEntryCommand(env, text) {
       "Stop / target: 0.25% / 0.50%",
       "Intent: " + (execution.intentHash || "none"),
       "Order submitted: " + (submitted ? "YES — awaiting position confirmation" : "NO"),
-      "Approvals submitted: NO"
+      "Approval policy: exact allowance only if required; no unlimited approval"
     ];
     if (execution.reason) lines.push("Reason: " + String(execution.reason).slice(0, 220));
     if (Array.isArray(execution.reasons) && execution.reasons.length) lines.push("Risk/checks: " + execution.reasons.join(", ").slice(0, 220));
