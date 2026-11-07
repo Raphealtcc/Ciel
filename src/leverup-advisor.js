@@ -179,10 +179,14 @@ export async function prepareLeverUpAdvisorPlan({
 
     const minimumNotionalUsd = Number(minimumNotionalRaw) / 1e18;
     const monUsdPrice = Number(snapshot.monUsdPriceRaw) / 1e18;
-    // 1CT accepts ERC-20 collateral only. MON-denominated sizing is converted
-    // into WMON units and the hosted-agent relayer supplies oracle updates.
-    const minimumCollateralUsd = minimumNotionalUsd / leverageForMinimum;
-    collateralRatio = 1;
+    // Apply the configured LVMON collateral target for the selected leverage,
+    // scaling it to the live venue minimum notional and converting via fresh MON/USD.
+    const minimumCollateralUsd = leverUpCollateralUsdForLeverage({
+      leverage: leverageForMinimum, minimumNotionalUsd,
+      collateralAt50xUsd: env?.LEVERUP_COLLATERAL_50X_USD ?? 0.43,
+      collateralAt100xUsd: env?.LEVERUP_COLLATERAL_100X_USD ?? 0.23,
+    });
+    collateralRatio = minimumNotionalUsd / (leverageForMinimum * minimumCollateralUsd);
     if (!(collateralRatio > 0 && collateralRatio <= 1)) throw new Error("DERIVED_COLLATERAL_RATIO_OUT_OF_RANGE");
     snapshot.collateralRatio = collateralRatio;
     if (!(monUsdPrice > 0)) throw new Error("MON_USD_PRICE_UNAVAILABLE");
@@ -285,7 +289,7 @@ export async function prepareLeverUpAdvisorPlan({
       account, ledgerId, ledgerPersisted, inferredLeverage, selectedLeverage: plan.selectedLeverage,
       tierMaxLeverage: plan.tierMaxLeverage, marginMonUsed: plan.marginMonUsed, notionalUsd: plan.notionalUsd,
       minimumMarginMon, venueMinimumMarginMon, reserveMon, totalAllocationMon, maxTradeMarginMon,
-      usdLimits, dryRunSigning, coordination,
+      minimumCollateralUsd, collateralRatio, usdLimits, dryRunSigning, coordination,
       estimatedProtocolCosts: plan.preflight?.estimatedProtocolCosts || null,
       preflight: plan.preflight || null, plan: jsonSafe(plan),
     });

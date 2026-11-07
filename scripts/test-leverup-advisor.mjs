@@ -123,8 +123,12 @@ assert.equal(ready.dryRunSigning.signed, true,
   "dry-run must locally verify the hosted-agent EIP-712 signature without submitting an intent");
 assert.equal(ready.coordination.status, "DRY_RUN_APPROVED",
   "dry-run portfolio checks must use the WMON balance and remain non-submitting");
+assert.equal(ready.minimumCollateralUsd, 0.23,
+  "100x live advisor sizing must use the configured $0.23 LVMON collateral target");
+assert.ok(Math.abs(ready.venueMinimumMarginMon - (0.23 / 0.019038)) < 1e-6,
+  "100x minimum collateral must convert the $0.23 target using the fresh MON/USD oracle");
 assert.ok(Math.abs(ready.minimumMarginMon - (0.23737571 / 0.019038)) < 1e-6,
-  "minimum WMON must preserve the prior 13 MON USD-equivalent floor, subject to venue minimum collateral");
+  "the independent configured minimum trade-margin floor must still apply when it exceeds the 100x target");
 const expectedLiveMarginMon = Math.max(12, ready.minimumMarginMon);
 assert.equal(seenPlanArgs.desiredMarginMon, Math.ceil(ready.minimumMarginMon * 1e8) / 1e8,
   "minimum margin passed to the plan must round upward to avoid floating-point underfunding");
