@@ -280,7 +280,7 @@ const approvalReadyPlan = buildMarketOpenPlan({
   snapshot: noAllowanceSnapshot, desiredMarginMon: 20, maxTradeMarginMon: 50,
   inferredLeverage: 100, side: "LONG", expectedHoldSeconds: 3600, requireExistingAllowance: false,
 });
-assert.equal(approvalReadyPlan.mode, "DRY_RUN_ONLY");
+assert.equal(approvalReadyPlan.mode, "HOSTED_AGENT_1CT", "approval readiness does not change the WMON execution route");
 
 
 
