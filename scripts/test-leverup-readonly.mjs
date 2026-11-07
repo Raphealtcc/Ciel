@@ -187,8 +187,8 @@ const directLvmonPlan = buildMarketOpenPlan({
   side: "LONG", expectedHoldSeconds: 3600, tokenIn: LVMON, requireExistingAllowance: true,
 });
 assert.equal(directLvmonPlan.actionValues[2].toLowerCase(), LVMON.toLowerCase());
-assert.equal(directLvmonPlan.actionValues[3].toLowerCase(), LV.toLowerCase(),
-  "direct LVMON collateral route must carry the LV protocol token parameter");
+assert.equal(directLvmonPlan.actionValues[3].toLowerCase(), LVMON.toLowerCase(),
+  "direct LVMON collateral route must encode LVMON in both token fields");
 assert.equal(directLvmonPlan.mode, "HOSTED_AGENT_1CT");
 assert.ok(BigInt(directLvmonPlan.amountInRaw) <= 80n * 10n ** 18n);
 

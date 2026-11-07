@@ -584,7 +584,7 @@ export async function executeLeverUpEntry({ env, db, candidate, signalId, snapsh
   const pairedToken = String(actionValues[3] || "").toLowerCase();
   const validHostedPair =
     (collateralToken === WMON && pairedToken === LVMON) ||
-    (collateralToken === LVMON && pairedToken === LEVERUP_TOKENS.LV.toLowerCase());
+    (collateralToken === LVMON && pairedToken === LVMON);
   if (!validHostedPair) {
     return { status: "REJECTED", submitted: false, reason: "HOSTED_AGENT_COLLATERAL_TOKEN_PAIR_UNSUPPORTED" };
   }

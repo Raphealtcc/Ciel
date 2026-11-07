@@ -728,12 +728,9 @@ export function buildMarketOpenPlan({
   const isNativeMon = tokenIn === "0x0000000000000000000000000000000000000000";
   // WMON-backed 1CT market opens require LVMON in the lvToken field.
   // Keep native MON and LVMON-input routes distinct; do not substitute LV governance token.
-  // WMON collateral uses LVMON; direct LVMON collateral uses LV.
-  const lvToken = tokenIn === LEVERUP_TOKENS.WMON.toLowerCase()
-    ? LEVERUP_TOKENS.LVMON
-    : tokenIn === LEVERUP_TOKENS.LVMON.toLowerCase()
-      ? LEVERUP_TOKENS.LV
-      : LEVERUP_TOKENS.LVMON;
+  // Both supported ERC-20 routes use LVMON in the lvToken field:
+  // WMON -> LVMON conversion, or direct LVMON -> LVMON collateral.
+  const lvToken = LEVERUP_TOKENS.LVMON;
   const marginRaw = parseUnits(String(desiredMarginMon), 18);
   const maxTradeRaw = parseUnits(String(maxTradeMarginMon), 18);
   const reserveRaw = parseUnits(String(reserveMon), 18);
