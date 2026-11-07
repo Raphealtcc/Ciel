@@ -91,7 +91,7 @@ const anchor = "async function handleCommand(env, text) {";
 once(anchor, helper + anchor, "add /long and /short handler using the normal LeverUp advisor execution path");
 
 const dispatch = '  if (await handleLeverUpPreflightCommand(env, text)) return;';
-once(dispatch, dispatch + '\\n  if (await handleLeverUpManualEntryCommand(env, text)) return;', "dispatch manual commands before other Telegram handlers");
+once(dispatch, dispatch + '\n  if (await handleLeverUpManualEntryCommand(env, text)) return;', "dispatch manual commands before other Telegram handlers");
 
 await writeFile(file, source);
 console.log("Wrote manual LeverUp execution-test command.");

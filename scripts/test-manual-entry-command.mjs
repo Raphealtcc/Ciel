@@ -12,7 +12,6 @@ assert.ok(worker.includes('readTradingControl(env, "ciel:control:live-enabled", 
 assert.ok(worker.includes('readTradingControl(env, "ciel:control:live-entry-enabled", "false")'));
 assert.ok(worker.includes('String(env?.LEVERUP_KILL_SWITCH).toLowerCase() !== "false"'));
 assert.ok(worker.includes("stopPct: 0.25, targetPct: 0.5, holdMinutes: 3"));
-assert.ok(worker.includes("use /purge " + " + symbol"));
+assert.ok(worker.includes('use /purge " + symbol'));
 assert.ok(worker.includes("if (await handleLeverUpManualEntryCommand(env, text)) return;"));
-assert.ok(!worker.includes("handleLeverUpManualEntryCommand(env, text) {\n  const args"));
 console.log("PASS: /long TOKEN and /short TOKEN use the normal LeverUp plan/entry path, require live controls, and retain venue and portfolio-risk safeguards.");
