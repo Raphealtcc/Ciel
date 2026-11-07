@@ -207,6 +207,14 @@ export function refreshLeverUpMarketOpenPlan({
   };
 }
 
+export function calculateLeverUpQuoteDriftBps(referencePriceRaw, currentPriceRaw) {
+  const reference = BigInt(referencePriceRaw);
+  const current = BigInt(currentPriceRaw);
+  if (reference <= 0n || current <= 0n) throw new Error("LEVERUP_QUOTE_PRICE_INVALID");
+  const difference = current >= reference ? current - reference : reference - current;
+  return (difference * 10_000n + reference - 1n) / reference;
+}
+
 export function validateLeverUpTransferBalances({ action, actionValues, feeToken = ZERO, antiDdosFee = 0n, tokenStates = {} }) {
   if (Number(action) !== OneClickAction.MARKET_OPEN) return { ok: true, required: {}, observed: {} };
   if (!Array.isArray(actionValues) || actionValues.length < 11) throw new Error("MARKET_OPEN_TRANSFER_INPUT_INVALID");
@@ -635,14 +643,14 @@ export async function executeLeverUpEntry({ env, db, candidate, signalId, snapsh
       ...dependencies,
       beforeSubmit: async () => {
         const fetchPrices = dependencies.fetchLatestOraclePrices || fetchLatestOraclePrices;
-        const quoteObservedAt = Date.now();
         const latestPrices = await fetchPrices([snapshot.market.base], { fetchImpl: dependencies.fetchImpl || fetch });
+        const quoteObservedAt = Date.now();
         const latestPrice = latestPrices?.[String(snapshot.market.base).toLowerCase()];
         if (latestPrice == null) throw new Error("LEVERUP_FINAL_ORACLE_PRICE_MISSING");
         const referencePrice = BigInt(executionPlan.preflight.oraclePriceRaw);
         const finalPrice = BigInt(latestPrice);
         if (referencePrice <= 0n || finalPrice <= 0n) throw new Error("LEVERUP_FINAL_ORACLE_PRICE_INVALID");
-        const driftRaw = (finalPrice >= referencePrice ? finalPrice - referencePrice : referencePrice - finalPrice) * 10_000n / referencePrice;
+        const driftRaw = calculateLeverUpQuoteDriftBps(referencePrice, finalPrice);
         const maxDriftBps = Number(effectiveEnv?.LEVERUP_MAX_QUOTE_DRIFT_BPS ?? 10);
         if (!Number.isInteger(maxDriftBps) || maxDriftBps < 0 || maxDriftBps > 30) throw new Error("LEVERUP_MAX_QUOTE_DRIFT_CONFIG_INVALID");
         if (driftRaw > BigInt(maxDriftBps)) {

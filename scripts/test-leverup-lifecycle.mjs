@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
-import { submitLeverUpIntent, evaluateLeverUpPositionAction, verifyLeverUpCoordinatorDryRun, reconcilePendingLeverUpIntents, refreshLeverUpMarketOpenPlan } from "../src/leverup-coordinator.js";
+import { submitLeverUpIntent, evaluateLeverUpPositionAction, verifyLeverUpCoordinatorDryRun, reconcilePendingLeverUpIntents, refreshLeverUpMarketOpenPlan, calculateLeverUpQuoteDriftBps } from "../src/leverup-coordinator.js";
+
+assert.equal(calculateLeverUpQuoteDriftBps(100_000n, 100_100n), 10n);
+assert.equal(calculateLeverUpQuoteDriftBps(100_000n, 100_101n), 11n, "quote drift must round up, never understate a threshold breach");
+assert.throws(() => calculateLeverUpQuoteDriftBps(0n, 100n), /LEVERUP_QUOTE_PRICE_INVALID/);
 
 // Worst-case slippage must not push the executed notional above the leverage tier cap.
 for (const isLong of [true, false]) {
