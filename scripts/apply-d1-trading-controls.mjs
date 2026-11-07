@@ -74,9 +74,9 @@ if (worker.includes(feedLiveControlRead)) {
 }
 const liveModeKvRead = 'env?.CIEL_STATE?.get("ciel:control:live-enabled").catch(() => null)';
 const liveModeKvReadCount = worker.split(liveModeKvRead).length - 1;
-if (liveModeKvReadCount !== 4) throw new Error("Expected four remaining bundled env live-mode readers after the feed patch, found " + liveModeKvReadCount);
+if (liveModeKvReadCount !== 3) throw new Error("Expected three remaining bundled env live-mode readers after the Hyperliquid-led feed patch, found " + liveModeKvReadCount);
 worker = worker.split(liveModeKvRead).join('readTradingControl(env, "ciel:control:live-enabled", null).catch(() => null)');
-console.log("Moved " + (liveModeKvReadCount + 1) + " bundled live-mode readers from KV to D1.");
+console.log("Moved " + liveModeKvReadCount + " bundled env live-mode readers from KV to D1; the feed path is explicitly read-only.");
 for (const key of ["live-entry-enabled", "paper-enabled"]) {
   const fallback = key === "live-entry-enabled" ? '"false"' : "null";
   replaceWorker(
