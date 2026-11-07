@@ -235,20 +235,10 @@ once(
           if (!marketResponse.ok || !Array.isArray(marketSnapshot.markets)) {
             throw new Error("SHARED_SIGNAL_MARKET_FEED_UNAVAILABLE: " + String(marketSnapshot.status || marketResponse.status));
           }
-          const prices = Object.fromEntries(marketSnapshot.markets
-            .filter((market) => market && market.symbol && Number.isFinite(Number(market.price)) && Number(market.price) > 0)
-            .map((market) => [String(market.symbol).toUpperCase(), Number(market.price)]));
-          const lastTickAt = Number(marketSnapshot.lastTickAt || 0);
-          if (!lastTickAt || now - lastTickAt > 180000) {
-            console.log("CIEL shared advisor waiting for fresh Hyperliquid prices; no setup emitted.");
-          } else {
-            await runAdvisorCycle(env, prices, now, lastTickAt, null, null, null);
-            const scan = await env.CIEL_STATE.get("ciel:advisor:last-scan", "json").catch(() => null);
-            console.log("CIEL shared paper/live advisor cycle evaluated: " + Number(scan?.historySymbols || 0) + " history markets, " + (Array.isArray(scan?.candidates) ? scan.candidates.length : 0) + " technical candidates.");
-          }
-        } catch (advisorError) {
-          console.error("CIEL shared paper/live advisor cycle failed: " + String(advisorError?.message || advisorError).slice(0, 220));
-          await env.CIEL_STATE.put("ciel:leverup:native-feed:advisor-error", String(advisorError?.message || advisorError).slice(0, 220), { expirationTtl: 3600 }).catch(() => void 0);
+          console.log("CIEL Hyperliquid read-only feed ensured; advisor runs in HyperliquidFeed with its closed-candle buffers.");
+        } catch (feedError) {
+          console.error("CIEL shared market feed ensure failed: " + String(feedError?.message || feedError).slice(0, 220));
+          await env.CIEL_STATE.put("ciel:leverup:native-feed:feed-error", String(feedError?.message || feedError).slice(0, 220), { expirationTtl: 3600 }).catch(() => void 0);
         }
         try {
           const diagnosticKey = "ciel:leverup:diagnostics:v1";
