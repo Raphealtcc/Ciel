@@ -92,8 +92,7 @@ const oldCandidateBuild = `    const signal = analyse(sym, hist.get(sym) || [], 
 const newCandidateBuild = `    const beforeCount = candidates.length;
     const signal = analyse(sym, hist.get(sym) || [], now);
     const isCore = coreMarketSet.has(sym);
-    const minimumConfidence = setting(env.ADVISORY_MIN_CONFIDENCE, 0.72, 0.5, 0.95);
-    if (signal && signal.confidence >= minimumConfidence && (!isCore || signal.mode === "TREND_HOLD")) candidates.push(signal);
+    if (signal && (!isCore || signal.mode === "TREND_HOLD")) candidates.push(signal);
     else if (isCore) scanDiagnostics.push({symbol:sym,strategy:"TREND_HOLD",reason:signal ? "BELOW_CONFIDENCE_THRESHOLD" : "NO_VALID_TREND_SIGNAL"});
     if (isCore) {
       const candles = coreScalpData.get(sym);
@@ -102,15 +101,27 @@ const newCandidateBuild = `    const beforeCount = candidates.length;
         scanDiagnostics.push({symbol:sym,strategy:"CORE_TREND_CONTINUATION",reason:"INSUFFICIENT_CLOSED_5M_HISTORY"});
       } else {
         const scalp = analyzeCorePullbackScalp(sym,candles.one,candles.five,now);
-        if (scalp && scalp.confidence >= minimumConfidence) candidates.push(scalp);
+        if (scalp) candidates.push(scalp);
         else scanDiagnostics.push({symbol:sym,strategy:"CORE_PULLBACK_SCALP",reason:"PULLBACK_RECLAIM_VOLUME_OR_FRESHNESS_GATE"});
         const continuation = analyzeCoreTrendContinuation(sym,candles.five,now);
-        if (continuation && continuation.confidence >= minimumConfidence) candidates.push(continuation);
+        if (continuation) candidates.push(continuation);
         else scanDiagnostics.push({symbol:sym,strategy:"CORE_TREND_CONTINUATION",reason:"EMA_BREAKOUT_RETEST_VOLUME_OR_FRESHNESS_GATE"});
       }
     }
     if (candidates.length === beforeCount) scanDiagnostics.push({symbol:sym,reason:"NO_QUALIFIED_CANDIDATE"});`;
 once(oldCandidateBuild,newCandidateBuild,"expose independent trend and scalp rejection reasons");
+
+once(
+  'const minimumForecastMovePct = Math.max(0.08, candidate.stopPct * 0.30);',
+  'const minimumForecastMovePct = Math.max(0.04, candidate.stopPct * 0.15);',
+  "reduce the forecast magnitude hurdle while still requiring directional alignment"
+);
+once(
+  'const extremeExhaustion = (candidate.side === "SHORT" && Number.isFinite(candidate.rsi) && candidate.rsi < 20 && candidate.bounce?.side !== "SHORT") || (candidate.side === "LONG" && Number.isFinite(candidate.rsi) && candidate.rsi > 80 && candidate.bounce?.side !== "LONG");',
+  'const extremeExhaustion = (candidate.side === "SHORT" && Number.isFinite(candidate.rsi) && candidate.rsi < 10 && candidate.bounce?.side !== "SHORT") || (candidate.side === "LONG" && Number.isFinite(candidate.rsi) && candidate.rsi > 90 && candidate.bounce?.side !== "LONG");',
+  "reserve the momentum-exhaustion veto for genuinely extreme RSI readings"
+);
+
 
 once(
   '  candidates.sort((x, y) => eventIntel?.marketImpact === "BROAD_RISK_OFF" ? Number(y.side === "SHORT") - Number(x.side === "SHORT") || y.confidence - x.confidence : y.confidence - x.confidence);',
