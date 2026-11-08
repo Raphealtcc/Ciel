@@ -255,16 +255,16 @@ once(
 );
 
 once(
-  'const intraday = candidate.mode === "RANGE_SCALP" ? null : await getIntradayPattern',
+  'const intraday = await getIntradayPattern',
   'const intraday = isScalpMode ? null : await getIntradayPattern',
   "skip intraday research lookups for both scalp modes",
 );
 
 once(
-  'const reviewed = candidate.mode === "RANGE_SCALP"',
+  'const reviewed = await review(env,candidate,forecast,reviewerMarket,intraday,eventIntel,candleStructure,sizingLimits);',
   `const reviewed = candidate.mode === "CORE_PULLBACK_SCALP"
       ? { verdict:"WAIT", reason:"Closed 1m/5m pullback, reclaim, volume, freshness and market-quality gates passed; deterministic scalp review avoids extra Gemini calls.", flags:["LOCAL_CORE_PULLBACK_SCALP"], model:"CIEL deterministic core scalp guard", queries:[], sources:[] }
-      : candidate.mode === "RANGE_SCALP"`,
+      : await review(env,candidate,forecast,reviewerMarket,intraday,eventIntel,candleStructure,sizingLimits);`,
   "use deterministic local review for core scalps without Gemini calls",
 );
 
