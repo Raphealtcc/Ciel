@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { notifyLeverUpClosedTrade } from "../src/leverup-coordinator.js";
 
 let sent = null;
-await notifyLeverUpClosedTrade({
+const delivery = await notifyLeverUpClosedTrade({
   TELEGRAM_BOT_TOKEN: "test-token",
   TELEGRAM_CHAT_ID: "test-chat",
   FETCH: async (_url, init) => {
@@ -28,6 +28,7 @@ await notifyLeverUpClosedTrade({
     "0x91b81bfbe3a747230f0529aa28d8b2bc898e6d56", "30000000000000000000"] },
 });
 assert.ok(sent, "Telegram sendMessage must be called");
+assert.equal(delivery.messageId, 7, "successful Telegram send must return the message ID for delivery verification");
 assert.ok(sent.text.includes("SHORT AAVE/USD | PROFIT_PROTECTION"));
 assert.ok(sent.text.includes("Executed exit $129.661358 | P&L +0.943 LVMON"));
 assert.ok(sent.text.includes("Return on margin: +3.14% | signal AAVE-CLOSE-TEST"));
