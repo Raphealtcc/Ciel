@@ -63,7 +63,7 @@ assert.ok(b50.requiredMon > 22.5); assert.ok(b100.requiredMon > 11.5);
 assert.throws(()=>calculateLeverUpEntryBudget({minimumNotionalUsd:20,leverage:25,monUsdPrice:.02,collateralRatio:1}),/50X/);
 const safe=evaluateLeverUpPortfolioRisk({requestedLeverage:100,availableWmonMon:25,requestedMarginMon:1,entryBudgetMon:1,currentOpenPositions:[],proposedStopRiskMon:.2,killSwitchActive:false});
 const productionSized=evaluateLeverUpPortfolioRisk({requestedLeverage:100,totalAllocationMon:50,reserveMon:25,availableWmonMon:25,requestedMarginMon:13.2,entryBudgetMon:13.2,currentOpenPositions:[],proposedStopRiskMon:5.28,aggregateStopRiskMon:0,maxAggregateStopRiskMon:15,dailyRealizedLossMon:0,maxDailyRealizedLossMon:15,rollingDrawdownMon:0,maxRollingDrawdownMon:15,killSwitchActive:false});
-assert.equal(productionSized.allowed,true,"100x minimum-size entry from the latest BTC preflight (13.198 MON margin, 0.4% stop) must pass the 6 MON risk envelope");
+assert.equal(productionSized.allowed,true,"100x minimum-size entry from the latest BTC preflight (13.198 MON margin, 0.4% stop) must pass the 15 MON risk envelope");
 const feeBudgetOverrun=evaluateLeverUpPortfolioRisk({requestedLeverage:50,totalAllocationMon:50,reserveMon:25,availableWmonMon:125,requestedMarginMon:24.9,entryBudgetMon:25.1,currentOpenPositions:[],proposedStopRiskMon:0.5,aggregateStopRiskMon:0,maxAggregateStopRiskMon:15,dailyRealizedLossMon:0,maxDailyRealizedLossMon:15,rollingDrawdownMon:0,maxRollingDrawdownMon:15,killSwitchActive:false});
 assert.equal(feeBudgetOverrun.allowed,false,"margin plus entry fees must not consume the 25 MON reserve");
 assert.ok(feeBudgetOverrun.reasons.includes("TRADE_EXCEEDS_USABLE_ALLOCATION"));
