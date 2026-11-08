@@ -18,7 +18,7 @@ const result = await reviewLeverUpPositionWithGemini({
   dependencies: {
     fetchImpl: async (_url, options) => {
       calls++;
-      if (options.headers["x-goog-api-key"] === "bad-key") return { ok: false, status: 401 };
+      if (options.headers["x-goog-api-key"] === "bad-key") return { ok: false, status: 400 };
       return {
         ok: true,
         json: async () => ({ candidates: [{ content: { parts: [{ text: JSON.stringify({
@@ -34,4 +34,22 @@ assert.equal(result.action, "REVERSE");
 assert.equal(result.confidence, 91);
 assert.equal(result.keyIndexUsed, 2);
 assert.equal(writes.get("ciel:gemini:key-cursor"), "0");
-console.log("PASS: comma-separated Gemini keys are parsed, invalid keys rotate, and successful key cursor advances.");
+
+let failedCalls = 0;
+const exhausted = await reviewLeverUpPositionWithGemini({
+  env: { GEMINI_API_KEYS: "key-1,key-2,key-3,key-4,key-5", GEMINI_MODEL: "test-model" },
+  position: { positionHash: "0x" + "cd".repeat(32), isLong: true },
+  currentPriceRaw: "110",
+  now: 20_000,
+  dependencies: {
+    fetchImpl: async () => {
+      failedCalls++;
+      return { ok: false, status: 400 };
+    }
+  }
+});
+assert.equal(failedCalls, 5, "all five configured keys must be attempted even when every response is HTTP 400");
+assert.equal(exhausted.status, "FAILED");
+assert.equal(exhausted.configuredKeyCount, 5);
+
+console.log("PASS: comma-separated Gemini keys rotate on HTTP 400 and all five keys are attempted before giving up.");
