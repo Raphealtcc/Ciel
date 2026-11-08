@@ -70,6 +70,50 @@ eData.microEma &&
   };
 }
 __name(analyse, "analyse");
+async function getCandleStructureMap(env,symbols,now){
+  const unique=[...new Set(symbols)].filter(Boolean);
+  if(!unique.length)return new Map();
+  try{
+    const marks=unique.map(()=>"?").join(",");
+    const hour=Math.floor(now/36e5)*36e5,dayStart=now-24*36e5;
+    const result=await env.DB.prepare(
+      "SELECT symbol,MIN(low_price) AS dayLow,MAX(high_price) AS dayHigh,"+
+      "MIN(CASE WHEN bucket_ms>=? THEN low_price END) AS currentHourLow,"+
+      "MAX(CASE WHEN bucket_ms>=? THEN high_price END) AS currentHourHigh,"+
+      "MIN(CASE WHEN bucket_ms>=? AND bucket_ms<? THEN low_price END) AS priorHourLow,"+
+      "MAX(CASE WHEN bucket_ms>=? AND bucket_ms<? THEN high_price END) AS priorHourHigh,"+
+      "MAX(bucket_ms) AS latestBucket,COUNT(*) AS buckets FROM market_candle_hourly_stats "+
+      "WHERE symbol IN ("+marks+") AND bucket_ms>=? AND bucket_ms<=? GROUP BY symbol"
+    ).bind(hour,hour,hour-36e5,hour,hour-36e5,hour,...unique,dayStart,hour).all();
+    return new Map((result.results||[]).map(row=>[String(row.symbol).toUpperCase(),row]));
+  }catch(error){console.error("Candle structure batch read failed: "+String(error).slice(0,180));return new Map();}
+}
+__name(getCandleStructureMap,"getCandleStructureMap");
+function analyzeCandleLevelReversal(symbol,rows,levels,now){
+  if(!levels)return null;
+  const points=(Array.isArray(rows)?rows:[]).map(x=>({t:Number(x.ts_ms),p:Number(x.mid_price)})).filter(x=>x.t>0&&x.p>0).sort((a,b)=>a.t-b.t);
+  if(points.length<8)return null;
+  const last=points[points.length-1];if(now-last.t>120000||last.t>now+30000)return null;
+  const base=(minutes)=>{for(let i=points.length-2;i>=0;i--)if(points[i].t<=last.t-minutes*60000)return points[i];return null;};
+  const p3=base(3),p5=base(5);if(!p3||!p5)return null;
+  const r3=(last.p/p3.p-1)*100,r5=(last.p/p5.p-1)*100,recent=points.filter(x=>x.t>=last.t-12*60000);
+  const dayLow=Number(levels.dayLow),dayHigh=Number(levels.dayHigh),priorLow=Number(levels.priorHourLow),priorHigh=Number(levels.priorHourHigh);
+  const lows=[["24H_LOW",dayLow],["PREVIOUS_HOUR_LOW",priorLow]].filter(x=>x[1]>0);
+  const highs=[["24H_HIGH",dayHigh],["PREVIOUS_HOUR_HIGH",priorHigh]].filter(x=>x[1]>0);
+  const lowHit=lows.filter(([_,v])=>Math.min(...recent.map(x=>x.p))<=v*1.0015&&last.p>=v*1.0005&&last.p<=v*1.004);
+  const highHit=highs.filter(([_,v])=>Math.max(...recent.map(x=>x.p))>=v*0.9985&&last.p<=v*0.9995&&last.p>=v*0.996);
+  let side=null,hit=null;
+  if(lowHit.length&&r3>=0.035&&r5>=0.025){side="LONG";hit=lowHit.sort((a,b)=>Math.abs(last.p/a[1]-1)-Math.abs(last.p/b[1]-1))[0];}
+  else if(highHit.length&&r3<=-0.035&&r5<=-0.025){side="SHORT";hit=highHit.sort((a,b)=>Math.abs(last.p/a[1]-1)-Math.abs(last.p/b[1]-1))[0];}
+  if(!side)return null;
+  const level=hit[1],stopPct=Math.abs(last.p-level)/last.p*100+0.10;
+  if(!(stopPct>=0.12&&stopPct<=0.45))return null;
+  const targetPct=Math.min(0.72,Math.max(0.25,stopPct*1.6));
+  const confirm=side==="LONG"?lowHit.length:highHit.length;
+  const confidence=Math.min(0.88,0.78+(confirm>1?0.04:0)+(Math.abs(r3)>=0.10?0.03:0));
+  return {symbol,side,entry:last.p,stopPct,targetPct,confidence,scoreComponents:[hit[0]+"_SWEEP","LEVEL_RECLAIM","3M_REVERSAL","5M_CONFIRMATION"],scoreModel:"multi-market-hourly-level-reversal-v1",strategy:"MULTI_MARKET_LEVEL_SWEEP_RECLAIM",regime:"LEVEL_REVERSAL",mode:"RANGE_SCALP",holdMinutes:15,rsi:null,bounce:null,cci:null,stochRsi:null,rangePositionPct:null,reason:side+" reclaimed "+hit[0].replaceAll("_"," ")+" at "+level+" after a sweep; 3m return "+r3.toFixed(3)+"%, 5m return "+r5.toFixed(3)+"%. Uses stored Hyperliquid hourly aggregates across the configured watchlist."};
+}
+__name(analyzeCandleLevelReversal,"analyzeCandleLevelReversal");
 
 async function review(env, s, forecast, market, intraday, eventIntel = null, candleStructure = null) {
   const keys = [...new Set(String(env.GEMINI_API_KEYS || "").split(/[,;\n]+/).map((x) => x.trim()).filter(Boolean))];
