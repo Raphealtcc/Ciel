@@ -61,16 +61,16 @@ const report = await buildLeverUpProfitReport({
 });
 assert.match(report, /CIEL LIVE TRADING/);
 assert.match(report, /Starter balance: 12.0000 LVMON \(on-chain wallet balance\)/);
-assert.match(report, /Available LVMON wallet balance: 12.0000 LVMON/);
+assert.match(report, /Available balance: 12.0000 LVMON/);
 assert.match(report, /Margin reserved in open trades: 2.0000 LVMON/);
 assert.match(report, /WMON \(MON\): \+1\.0000 token units/);
 assert.match(report, /1 currently open/);
 assert.match(report, /RECENT LIVE ENTRY ATTEMPTS/);
 assert.match(report, /XRP: FAILED — no position opened — insufficient transfers/);
 assert.match(report, /BTC: AWAITING FINAL RECONCILIATION/);
-assert.match(report, /Total gross unrealized: \+10\.0000 USD/);
-assert.match(report, /LONG BTC\/USD: \+10\.0000 USD/);
-assert.match(report, /gross before close fees \/ funding/i);
+assert.match(report, /Unrealised P&L: \\+5\\.0000 LVMON/);
+assert.match(report, /LONG BTC\\/USD \\| entry \\$190\\.000000 \\| mark \\$200\\.000000 \\| unrealised \\+5\\.0000 LVMON/);
+assert.match(report, /gross before close fees and accrued carry/i);
 assert.doesNotMatch(report, /PAPER TRADING/);
 console.log("PASS: live realized P&L and on-chain/oracle mark-to-market unrealized P&L are reported separately.");
 
