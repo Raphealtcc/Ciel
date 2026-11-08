@@ -39,21 +39,36 @@ once(
   "tag paper score model and expose component/coverage details"
 );
 
-once(
+function ensureNoScoreFloor(variants, replacement, label) {
+  const present = variants.filter((pattern) => source.includes(pattern));
+  if (!present.length) {
+    if (source.includes(replacement)) {
+      console.log("Shared scoring: " + label + " already has no numerical floor");
+      return;
+    }
+    throw new Error(label + ": no known source pattern found");
+  }
+  if (present.length > 1) throw new Error(label + ": multiple score-gate variants found");
+  source = source.replace(present[0], replacement);
+  console.log("Shared scoring: removed numerical floor from " + label);
+}
+
+const trendNoFloor = 'if (signal && isRecommendationScoreEligible(signal.confidence * 100) && (!isCore || signal.mode === "TREND_HOLD")) candidates.push(signal);';
+const scalpNoFloor = 'if (scalp && isRecommendationScoreEligible(scalp.confidence * 100)) candidates.push(scalp);';
+const continuationNoFloor = 'if (continuation && isRecommendationScoreEligible(continuation.confidence * 100)) candidates.push(continuation);';
+
+ensureNoScoreFloor([
   'if (signal && isRecommendationScoreEligible(signal.confidence * 100) && signal.confidence >= Math.max(0.78, minimumConfidence) && (!isCore || signal.mode === "TREND_HOLD")) candidates.push(signal);',
-  'if (signal && isRecommendationScoreEligible(signal.confidence * 100) && (!isCore || signal.mode === "TREND_HOLD")) candidates.push(signal);',
-  "remove trend-hold technical score floor"
-);
-once(
+  'if (signal && signal.confidence >= minimumConfidence && (!isCore || signal.mode === "TREND_HOLD")) candidates.push(signal);'
+], trendNoFloor, "trend-hold recommendations");
+ensureNoScoreFloor([
   'if (scalp && isRecommendationScoreEligible(scalp.confidence * 100) && scalp.confidence >= Math.max(0.78, minimumConfidence)) candidates.push(scalp);',
-  'if (scalp && isRecommendationScoreEligible(scalp.confidence * 100)) candidates.push(scalp);',
-  "remove pullback-scalp technical score floor"
-);
-once(
+  'if (scalp && scalp.confidence >= minimumConfidence) candidates.push(scalp);'
+], scalpNoFloor, "pullback-scalp recommendations");
+ensureNoScoreFloor([
   'if (continuation && isRecommendationScoreEligible(continuation.confidence * 100) && continuation.confidence >= Math.max(0.78, minimumConfidence)) candidates.push(continuation);',
-  'if (continuation && isRecommendationScoreEligible(continuation.confidence * 100)) candidates.push(continuation);',
-  "remove trend-continuation technical score floor"
-);
+  'if (continuation && continuation.confidence >= minimumConfidence) candidates.push(continuation);'
+], continuationNoFloor, "trend-continuation recommendations");
 
 // The trend-hold candidate is already guarded by the earlier strategy-specific patch.
 
