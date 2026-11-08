@@ -1,9 +1,9 @@
 // Independent portfolio risk gate for LeverUp. Fail closed on incomplete account/market data.
-export const MIN_LEVERUP_RISK_LIMIT_MON = 15;
+export const MIN_LEVERUP_RISK_LIMIT_MON = 20;
 export const LEVERUP_RISK_DEFAULTS = Object.freeze({
   totalAllocationMon: 50, reserveMon: 25, minLeverage: 50,
-  maxConcurrentPositions: 2, maxDailyRealizedLossMon: 15,
-  maxRollingDrawdownMon: 15, maxAggregateStopRiskMon: 15,
+  maxConcurrentPositions: 2, maxDailyRealizedLossMon: 20,
+  maxRollingDrawdownMon: 20, maxAggregateStopRiskMon: 20,
   feeBufferPct: 25, slippageBufferPct: 25,
 });
 const finitePositive = (v) => Number.isFinite(Number(v)) && Number(v) > 0;
@@ -22,7 +22,7 @@ export function calculateLeverUpEntryBudget({ minimumCollateralUsd, minimumNotio
 }
 export function evaluateLeverUpPortfolioRisk({ requestedLeverage, totalAllocationMon = 50, reserveMon = 25, availableWmonMon, requestedMarginMon, entryBudgetMon, currentOpenPositions = [], maxConcurrentPositions = 2, proposedStopRiskMon, aggregateStopRiskMon = 0, maxAggregateStopRiskMon = 15, dailyRealizedLossMon = 0, maxDailyRealizedLossMon = 15, rollingDrawdownMon = 0, maxRollingDrawdownMon = 15, staleFeed = false, executionUncertain = false, killSwitchActive = true }) {
   const reasons = [];
-  // Operator overrides may raise these limits, but cannot reduce any below 15 MON.
+  // Operator overrides may raise these limits, but cannot reduce any below 20 MON.
   const riskLimit = (value) => Number.isFinite(Number(value))
     ? Math.max(MIN_LEVERUP_RISK_LIMIT_MON, Number(value))
     : MIN_LEVERUP_RISK_LIMIT_MON;
