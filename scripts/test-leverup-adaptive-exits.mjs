@@ -24,7 +24,7 @@ const reversal = evaluateAdaptiveLeverUpExit({
 });
 assert.equal(reversal.action,"MARKET_CLOSE","three aligned deterioration factors plus liquidity imbalance should trigger a balanced reversal exit");
 
-const short = {...long,isLong:false,stopLossRaw:String(101n*10n**18n)};
+const short = {...long,isLong:false,stopLossRaw:String(106n*10n**18n)};
 const shortState=Array.from({length:10},(_,i)=>({at:3000+i*60000,price:String(BigInt(110-i)*10n**18n)}));
 const shortTrail=evaluateAdaptiveLeverUpExit({
   position:short,currentPriceRaw:String(99n*10n**18n),

@@ -69,7 +69,7 @@ assert.equal(feeBudgetOverrun.allowed,false,"margin plus entry fees must not con
 assert.ok(feeBudgetOverrun.reasons.includes("TRADE_EXCEEDS_USABLE_ALLOCATION"));
 const withinFeeBudget=evaluateLeverUpPortfolioRisk({requestedLeverage:50,totalAllocationMon:50,reserveMon:25,availableWmonMon:125,requestedMarginMon:23.5,entryBudgetMon:24.2,currentOpenPositions:[],proposedStopRiskMon:0.5,aggregateStopRiskMon:0,maxAggregateStopRiskMon:15,dailyRealizedLossMon:0,maxDailyRealizedLossMon:15,rollingDrawdownMon:0,maxRollingDrawdownMon:15,killSwitchActive:false});
 assert.equal(withinFeeBudget.allowed,true,"minimum-size trade plus costs should pass when the full entry budget stays inside the 25 MON allocation");
-assert.equal(evaluateLeverUpPortfolioRisk({requestedLeverage:1000,totalAllocationMon:50,reserveMon:25,availableWmonMon:25,requestedMarginMon:11,entryBudgetMon:11,currentOpenPositions:[],proposedStopRiskMon:44,aggregateStopRiskMon:0,maxAggregateStopRiskMon:15,dailyRealizedLossMon:0,maxDailyRealizedLossMon:15,rollingDrawdownMon:0,maxRollingDrawdownMon:15,killSwitchActive:false}).allowed,false,"1000x at 11 MON margin with a 0.4% stop risks 44 MON and must not be allowed against the 12 MON hard risk floor");
+assert.equal(evaluateLeverUpPortfolioRisk({requestedLeverage:1000,totalAllocationMon:50,reserveMon:25,availableWmonMon:25,requestedMarginMon:11,entryBudgetMon:11,currentOpenPositions:[],proposedStopRiskMon:44,aggregateStopRiskMon:0,maxAggregateStopRiskMon:15,dailyRealizedLossMon:0,maxDailyRealizedLossMon:15,rollingDrawdownMon:0,maxRollingDrawdownMon:15,killSwitchActive:false}).allowed,false,"1000x at 11 MON margin with a 0.4% stop risks 44 MON and must not be allowed against the 15 MON hard risk floor");
 assert.equal(safe.allowed,true);
 const floored = evaluateLeverUpPortfolioRisk({
   requestedLeverage:100, availableWmonMon:25, requestedMarginMon:1, entryBudgetMon:1,
@@ -77,7 +77,7 @@ const floored = evaluateLeverUpPortfolioRisk({
   maxDailyRealizedLossMon:1, rollingDrawdownMon:11.9, maxRollingDrawdownMon:2,
   aggregateStopRiskMon:11.9, maxAggregateStopRiskMon:1, killSwitchActive:false,
 });
-assert.equal(floored.allowed,false, "configured risk caps below 12 MON remain floored at 12 MON, never used as tiny limits");
+assert.equal(floored.allowed,false, "configured risk caps below 15 MON remain floored at 15 MON, never used as tiny limits");
 assert.deepEqual(floored.riskLimitsMon, {dailyLoss:15, drawdown:15, aggregateStopRisk:15});
 assert.equal(evaluateLeverUpPortfolioRisk({
   requestedLeverage: 100, availableWmonMon: 25, requestedMarginMon: 1, entryBudgetMon: 1,
@@ -89,7 +89,7 @@ assert.equal(evaluateLeverUpPortfolioRisk({
   currentOpenPositions: [], proposedStopRiskMon: 0.2, rollingDrawdownMon: 11.9,
   maxRollingDrawdownMon: 2, killSwitchActive: false,
 }).allowed, false, "projected stop loss must fit inside the remaining drawdown budget");
-for (const patch of [{requestedLeverage:25},{availableWmonMon:0},{requestedMarginMon:26},{currentOpenPositions:[{}]},{staleFeed:true},{executionUncertain:true},{dailyRealizedLossMon:12},{rollingDrawdownMon:12},{proposedStopRiskMon:12.01}]) {
+for (const patch of [{requestedLeverage:25},{availableWmonMon:0},{requestedMarginMon:26},{currentOpenPositions:[{},{}]},{staleFeed:true},{executionUncertain:true},{dailyRealizedLossMon:15},{rollingDrawdownMon:15},{proposedStopRiskMon:15.01}]) {
  const r=evaluateLeverUpPortfolioRisk({requestedLeverage:100,availableWmonMon:25,requestedMarginMon:1,entryBudgetMon:1,currentOpenPositions:[],proposedStopRiskMon:.1,killSwitchActive:false,...patch});
  assert.equal(r.allowed,false);
 }
