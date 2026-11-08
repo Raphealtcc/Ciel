@@ -921,7 +921,17 @@ async function reconcileClosedSettlements({ env, db, now, dependencies = {} }) {
       .bind(positionHash).first();
     const latest = await db.prepare("SELECT * FROM leverup_position_fee_snapshots WHERE position_hash = ? ORDER BY observed_at_ms DESC LIMIT 1")
       .bind(positionHash).first();
-    const entry = entries.find((x) => String(x.positionHash || "").toLowerCase() === positionHash);
+    let entry = entries.find((x) => String(x.positionHash || "").toLowerCase() === positionHash);
+    if (!entry) {
+      const closedEntry = await db.prepare(`SELECT signal_id,pair_base,payload_json,status
+        FROM leverup_execution_intents
+        WHERE action = 0 AND lower(json_extract(payload_json, '$.positionHash')) = ?
+        ORDER BY created_at_ms DESC LIMIT 1`).bind(positionHash).first();
+      if (closedEntry) {
+        entry = { signalId: closedEntry.signal_id, pairBase: closedEntry.pair_base || null,
+          intentStatus: closedEntry.status, ...serializable(JSON.parse(closedEntry.payload_json || "{}")) };
+      }
+    }
     const lastSnapshot = latest ? {
       fundingFeeRaw: latest.funding_fee_raw, holdingFeeRaw: latest.holding_fee_raw,
     } : null;
