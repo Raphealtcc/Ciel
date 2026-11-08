@@ -937,12 +937,6 @@ async function reconcileClosedSettlements({ env, db, now, dependencies = {} }) {
     const matchingEntries = entries.filter((x) => String(x.positionHash || "").toLowerCase() === positionHash)
       .filter((x) => !Number(x.executedAt || x.createdAt) || !closeTimeMs || Number(x.executedAt || x.createdAt) <= closeTimeMs)
       .sort((a,b) => Number(b.executedAt || b.createdAt || 0) - Number(a.executedAt || a.createdAt || 0));
-    const entry = matchingEntries[0] || null;
-    const tradeId = leverUpTradeInstanceId(entry) || ("legacy:" + positionHash + ":" + String(closed.closeInfo.closeTime || closed.closeInfo.timestamp || "unknown"));
-    const existing = await db.prepare("SELECT trade_id FROM leverup_trade_settlements WHERE trade_id = ?")
-      .bind(tradeId).first();
-    const latest = await db.prepare("SELECT * FROM leverup_position_fee_snapshots WHERE position_hash = ? ORDER BY observed_at_ms DESC LIMIT 1")
-      .bind(positionHash).first();
     let entry = matchingEntries[0] || null;
     if (!entry) {
       const closedEntry = await db.prepare(`SELECT signal_id,pair_base,payload_json,status,created_at_ms
@@ -955,6 +949,11 @@ async function reconcileClosedSettlements({ env, db, now, dependencies = {} }) {
           ...serializable(JSON.parse(closedEntry.payload_json || "{}")) };
       }
     }
+    const tradeId = leverUpTradeInstanceId(entry) || ("legacy:" + positionHash + ":" + String(closed.closeInfo.closeTime || closed.closeInfo.timestamp || "unknown"));
+    const existing = await db.prepare("SELECT trade_id FROM leverup_trade_settlements WHERE trade_id = ?")
+      .bind(tradeId).first();
+    const latest = await db.prepare("SELECT * FROM leverup_position_fee_snapshots WHERE position_hash = ? ORDER BY observed_at_ms DESC LIMIT 1")
+      .bind(positionHash).first();
     const lastSnapshot = latest ? {
       fundingFeeRaw: latest.funding_fee_raw, holdingFeeRaw: latest.holding_fee_raw,
     } : null;
