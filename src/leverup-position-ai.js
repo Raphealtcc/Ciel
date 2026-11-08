@@ -38,7 +38,7 @@ export async function reviewLeverUpPositionWithGemini({ env, position, currentPr
       takeProfitRaw: String(position.takeProfitRaw || ""),
       leverage: position.leverage || null,
       maxHoldReached: maxHoldReached === true,
-      positionAgeMinutes: Number.isFinite(Number(positionAgeMinutes)) ? Number(positionAgeMinutes.toFixed(1)) : null,
+      positionAgeMinutes: positionAgeMinutes != null && Number.isFinite(Number(positionAgeMinutes)) ? Number(Number(positionAgeMinutes).toFixed(1)) : null,
       adaptive: {
         trendPct: adaptive.trendPct ?? null,
         momentumPct: adaptive.momentumPct ?? null,
