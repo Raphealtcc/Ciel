@@ -14,7 +14,9 @@ assert.ok(source.includes('this.lastHistoryBootstrapAt = Number(values[27]) || 0
 assert.ok(!source.includes("processedCandidateSymbols"), "trend candidates must not reserve a symbol before scalp evaluation");
 assert.ok(source.includes("model='CIEL deterministic core scalp guard'"), "core scalp cooldown must be mode-specific");
 assert.ok(source.includes("model NOT IN ('CIEL Statistical Ensemble v1','CIEL Statistical Ensemble v1 + technical gate','CIEL deterministic range guard','CIEL deterministic core scalp guard'"), "trend cooldown must ignore scalp and pre-review gate rows");
-assert.ok(source.includes("if (!isScalpMode) { if(forecastChecks>=6) continue;"), "trend review budget must not starve deterministic scalp candidates");\nassert.ok(source.includes("const cooldownMs = isScalpMode ? 3 * 6e4 : trendCooldownMs;"), "scalp cooldown should permit frequent fresh setups");\nassert.ok(source.includes("1M_SWING_REVERSAL+RECLAIM"), "counter-trend reversal detector must be present");
+assert.ok(source.includes("if (!isScalpMode) { if(forecastChecks>=6) continue;"), "trend review budget must not starve deterministic scalp candidates");
+assert.ok(source.includes("const cooldownMs = isScalpMode ? 3 * 6e4 : trendCooldownMs;"), "scalp cooldown should permit frequent fresh setups");
+assert.ok(source.includes("1M_SWING_REVERSAL+RECLAIM"), "counter-trend reversal detector must be present");
 const blockedReview = source.match(/if \(reviewed\.verdict === "REJECT" \|\| reviewed\.verdict === "WAIT" && !waitFallback\) \{([\s\S]*?)\n    \}/);
 assert.ok(blockedReview && /continue;/.test(blockedReview[1]) && !/return;/.test(blockedReview[1]), "a blocked candidate must not abort the whole advisor cycle");
 assert.ok(source.includes('interval: "1m"'));
@@ -104,4 +106,5 @@ const reversalShort=analyze("SOL",mirror(reversalLong),flatFive,now);
 assert.ok(reversalShort,"mirrored counter-trend short reversal should trigger");
 assert.equal(reversalShort.side,"SHORT");
 assert.equal(reversalShort.strategy,"1M_SWING_REVERSAL+RECLAIM");
-\nconsole.log("PASS: core scalp rejects stale, incomplete, flat and no-pullback data, accepts long and short pullback/reclaims, and evaluates scalp/trend candidates independently.");
+
+console.log("PASS: core scalp rejects stale, incomplete, flat and no-pullback data, accepts long and short pullback/reclaims, and evaluates scalp/trend candidates independently.");
