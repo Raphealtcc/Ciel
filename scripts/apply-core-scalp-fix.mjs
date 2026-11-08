@@ -106,6 +106,7 @@ const analyzer = `function analyzeCorePullbackScalp(symbol, oneMinuteRows, fiveM
   const trendUp=fast5>slow5 && fast5>priorFast5 && last5.c>fast5;
   const trendDown=fast5<slow5 && fast5<priorFast5 && last5.c<fast5;
   // Counter-trend reversal scalp, independent of the 5m EMA direction.
+  const reversalLatest=m1[m1.length-1],reversalPrevious=m1[m1.length-2];
   const reversalWindow=m1.slice(-18,-3), reversalContext=m1.slice(-25,-3);
   if(reversalWindow.length>=12&&reversalContext.length>=15){
     const swingLow=Math.min(...reversalWindow.map(c=>c.l)),swingHigh=Math.max(...reversalWindow.map(c=>c.h));
@@ -119,16 +120,16 @@ const analyzer = `function analyzeCorePullbackScalp(symbol, oneMinuteRows, fiveM
       return losses===0?100:100-100/(1+gains/losses);
     };
     const currentRsi=reversalRsi(closes1.slice(-15)),priorRsi=reversalRsi(closes1.slice(-16,-1));
-    const volumeOk=reversalAvgVol<=0||latest.v>=reversalAvgVol*0.65,recentTouches=m1.slice(-3,-1);
+    const volumeOk=reversalAvgVol<=0||reversalLatest.v>=reversalAvgVol*0.65,recentTouches=m1.slice(-3,-1);
     const longTouch=recentTouches.some(c=>c.l<=swingLow+reversalAtr*0.45),shortTouch=recentTouches.some(c=>c.h>=swingHigh-reversalAtr*0.45);
     const declinePct=priorHigh>0?(priorHigh-swingLow)/priorHigh*100:0,rallyPct=priorLow>0?(swingHigh-priorLow)/priorLow*100:0;
     let side=null,pivot=0;
-    if(reversalAtr>0&&declinePct>=0.18&&longTouch&&latest.c>latest.o&&latest.c>previous.h&&latest.c>swingLow+reversalAtr*0.5&&currentRsi>priorRsi&&currentRsi<=58&&volumeOk){side="LONG";pivot=Math.min(swingLow,...m1.slice(-3).map(c=>c.l));}
-    else if(reversalAtr>0&&rallyPct>=0.18&&shortTouch&&latest.c<latest.o&&latest.c<previous.l&&latest.c<swingHigh-reversalAtr*0.5&&currentRsi<priorRsi&&currentRsi>=42&&volumeOk){side="SHORT";pivot=Math.max(swingHigh,...m1.slice(-3).map(c=>c.h));}
+    if(reversalAtr>0&&declinePct>=0.18&&longTouch&&reversalLatest.c>reversalLatest.o&&reversalLatest.c>reversalPrevious.h&&reversalLatest.c>swingLow+reversalAtr*0.5&&currentRsi>priorRsi&&currentRsi<=58&&volumeOk){side="LONG";pivot=Math.min(swingLow,...m1.slice(-3).map(c=>c.l));}
+    else if(reversalAtr>0&&rallyPct>=0.18&&shortTouch&&reversalLatest.c<reversalLatest.o&&reversalLatest.c<reversalPrevious.l&&reversalLatest.c<swingHigh-reversalAtr*0.5&&currentRsi<priorRsi&&currentRsi>=42&&volumeOk){side="SHORT";pivot=Math.max(swingHigh,...m1.slice(-3).map(c=>c.h));}
     if(side){
-      const entry=latest.c,rawStop=side==="LONG"?(entry-pivot)/entry*100:(pivot-entry)/entry*100,stopPct=Math.max(0.12,rawStop+0.04);
+      const entry=reversalLatest.c,rawStop=side==="LONG"?(entry-pivot)/entry*100:(pivot-entry)/entry*100,stopPct=Math.max(0.12,rawStop+0.04);
       if(stopPct>0&&stopPct<=0.45){
-        return {symbol,side,entry,stopPct,targetPct:Math.max(0.25,stopPct*1.5),confidence:Math.min(0.88,0.79+(reversalAvgVol>0&&latest.v>=reversalAvgVol?0.03:0)),
+        return {symbol,side,entry,stopPct,targetPct:Math.max(0.25,stopPct*1.5),confidence:Math.min(0.88,0.79+(reversalAvgVol>0&&reversalLatest.v>=reversalAvgVol?0.03:0)),
           scoreComponents:["1M_SWING_EXHAUSTION","1M_PIVOT_RECLAIM","1M_RSI_TURN","1M_VOLUME_CONFIRMATION"],scoreModel:"core-1m-swing-reversal-v1",
           strategy:"1M_SWING_REVERSAL+RECLAIM",regime:"COUNTER_TREND_REVERSAL",mode:"CORE_PULLBACK_SCALP",holdMinutes:12,
           rsi:currentRsi,bounce:null,cci:null,stochRsi:null,rangePositionPct:null,
