@@ -97,7 +97,7 @@ export async function ensureLeverUpTokenAllowance({
   // It never signs or broadcasts. Invalid/missing URLs are ignored rather than guessed.
   const secondaryRpcUrl = String(env?.ALCHEMY_RPC || "").trim();
   let configuredSecondaryReader = secondaryPublicClient || null;
-  if (!configuredSecondaryReader && /^https?:\\/\\//i.test(secondaryRpcUrl)) {
+  if (!configuredSecondaryReader && /^https?:\/\//i.test(secondaryRpcUrl)) {
     configuredSecondaryReader = createPublicClient({ chain: MONAD, transport: http(secondaryRpcUrl) });
   }
   const signer = walletClient || createWalletClient({
