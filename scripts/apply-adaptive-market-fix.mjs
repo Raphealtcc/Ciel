@@ -169,7 +169,7 @@ once(
 );
 once(
   "  let forecastChecks = 0;\n  for (const candidate of candidates) {",
-  '  let forecastChecks=0,coreForecastChecks=0,otherForecastChecks=0;\n  const coreTrendCandidateCount=candidates.filter((candidate)=>coreMarketSet.has(candidate.symbol)&&candidate.mode!=="RANGE_SCALP"&&candidate.mode!=="CORE_PULLBACK_SCALP").length;\n  for (const candidate of candidates) {',
+  '  let forecastChecks=0,coreForecastChecks=0,otherForecastChecks=0;\n  let liveEntrySubmittedThisCycle=false,proposalCountThisCycle=0;\n  const maxProposalsPerCycle=3;\n  const coreTrendCandidateCount=candidates.filter((candidate)=>coreMarketSet.has(candidate.symbol)&&candidate.mode!=="RANGE_SCALP"&&candidate.mode!=="CORE_PULLBACK_SCALP").length;\n  for (const candidate of candidates) {',
   "reserve forecast-review capacity for other watchlist markets"
 );
 once(
