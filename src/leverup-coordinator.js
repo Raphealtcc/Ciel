@@ -937,8 +937,12 @@ async function reconcileClosedSettlements({ env, db, now, dependencies = {} }) {
     const matchingEntries = entries.filter((x) => String(x.positionHash || "").toLowerCase() === positionHash)
       .filter((x) => !Number(x.executedAt || x.createdAt) || !closeTimeMs || Number(x.executedAt || x.createdAt) <= closeTimeMs)
       .sort((a,b) => Number(b.executedAt || b.createdAt || 0) - Number(a.executedAt || a.createdAt || 0));
-    let entry = matchingEntries[0] || null;
-    if (!entry) {
+    let entry = closeTimeMs
+      ? (matchingEntries[0] || null)
+      : (matchingEntries.length === 1 ? matchingEntries[0] : null);
+    // If the exchange omits close time and this hash has multiple entry instances,
+    // leave the settlement unlinked rather than attributing it to the wrong trade.
+    if (!entry && matchingEntries.length === 0) {
       const closedEntry = await db.prepare(`SELECT signal_id,pair_base,payload_json,status,created_at_ms
         FROM leverup_execution_intents
         WHERE action = 0 AND lower(json_extract(payload_json, '$.positionHash')) = ?
