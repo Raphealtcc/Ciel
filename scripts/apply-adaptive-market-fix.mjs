@@ -129,7 +129,7 @@ once(
   "prioritize core markets and apply learned outcome weights to ranking only"
 );
 once(
-  '  await env.CIEL_STATE.put("ciel:advisor:last-scan", JSON.stringify({ at:now, watchCount:symbols.length, historySymbols:hist.size, candidates:candidates.map((x)=>({symbol:x.symbol,side:x.side,strategy:x.strategy,mode:x.mode,regime:x.regime,score:x.confidence,rsi:x.rsi,cci:x.cci})) }), { expirationTtl:86400 }).catch(()=>void 0);',
+  '  await env.CIEL_STATE.put("ciel:advisor:last-scan", JSON.stringify({ at:now, watchCount:symbols.length, historySymbols:hist.size, candleLevelSymbols:candleStructureRows.size, candidates:candidates.map((x)=>({symbol:x.symbol,side:x.side,strategy:x.strategy,mode:x.mode,regime:x.regime,score:x.confidence,rsi:x.rsi,cci:x.cci})) }), { expirationTtl:86400 }).catch(()=>void 0);',
   '  await env.CIEL_STATE.put("ciel:advisor:last-scan", JSON.stringify({at:now,watchCount:symbols.length,historySymbols:hist.size,coreMarkets:["BTC","ETH","SOL"],preferredGroup,adaptiveLearning:{closedTradeCount:adaptiveLearning.closedTradeCount,byStrategy:adaptiveLearning.byStrategy},scanDiagnostics:scanDiagnostics.slice(-120),candidates:candidates.map((x)=>({symbol:x.symbol,side:x.side,strategy:x.strategy,mode:x.mode,regime:x.regime,score:x.confidence,adaptiveScore:x.adaptiveScore,adaptiveMultiplier:x.adaptiveMultiplier,rsi:x.rsi,cci:x.cci}))}), {expirationTtl:86400}).catch(()=>void 0);',
   "persist bounded scan diagnostics and learning summary in existing KV state"
 );
