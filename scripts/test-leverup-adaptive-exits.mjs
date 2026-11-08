@@ -33,4 +33,16 @@ const shortTrail=evaluateAdaptiveLeverUpExit({
 });
 assert.equal(shortTrail.action,"UPDATE_TP_SL");
 assert.ok(BigInt(shortTrail.stopLossRaw)<BigInt(short.stopLossRaw),"short stop may only tighten downward");
+const profitGivebackHistory = [110,109,108,107,106,105,104,103].map((price,i)=>({at:4000+i*60000,price:String(BigInt(price)*10n**18n)}));
+const profitLock = evaluateAdaptiveLeverUpExit({
+  position: long,
+  currentPriceRaw: String(104n*10n**18n),
+  state: { history: profitGivebackHistory, highWaterRaw: String(110n*10n**18n), lowWaterRaw: String(100n*10n**18n) },
+  pairView: { slippageConfig: { onePercentDepthAboveUsdRaw: "100000", onePercentDepthBelowUsdRaw: "100000" } },
+  now: 4000+8*60000,
+});
+assert.equal(profitLock.action, "MARKET_CLOSE", "armed peak-profit giveback with confirmed local deterioration must close live position");
+assert.equal(profitLock.reason, "PROFIT_PROTECTION_PEAK_GIVEBACK");
+assert.ok(profitLock.peakFavourablePct >= 4);
+assert.ok(profitLock.givebackPct >= profitLock.peakFavourablePct * 0.45);
 console.log("PASS: adaptive warm-up, multi-factor reversal, long/short trailing direction, and TP preservation.");
