@@ -129,9 +129,9 @@ export async function prepareLeverUpAdvisorPlan({
   });
   if (!candidate?.symbol) return result("BLOCKED", "CIEL candidate symbol is missing.");
   if (candidate?.confidence != null && !isRecommendationScoreEligible(Number(candidate.confidence) * 100)) {
-    return result("BLOCKED_SCORE_BELOW_MINIMUM",
-      "CIEL technical score is below the required 78/100 minimum; no LeverUp entry will be prepared.",
-      { technicalScore: Number(candidate.confidence) * 100, minimumTechnicalScore: 78 });
+    return result("BLOCKED_INVALID_SCORE",
+      "CIEL technical score must be a finite value from 0 to 100; no minimum score is imposed.",
+      { technicalScore: Number(candidate.confidence) * 100, minimumTechnicalScore: 0 });
   }
   if (reviewed?.verdict !== "APPROVE" || technicalOnly) return result("NOT_APPROVED",
     "CIEL did not produce a fully confirmed APPROVE; LeverUp entry preflight was not attempted.");

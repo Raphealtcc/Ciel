@@ -6,8 +6,24 @@ assert.equal(MIN_LEVERUP_RISK_LIMIT_MON, 20);
 assert.equal(LEVERUP_RISK_DEFAULTS.maxDailyRealizedLossMon, 20);
 assert.equal(LEVERUP_RISK_DEFAULTS.maxRollingDrawdownMon, 20);
 assert.equal(LEVERUP_RISK_DEFAULTS.maxAggregateStopRiskMon, 20);
-import { prepareLeverUpExecution, reconcileLeverUpIntent, collectLeverUpPairBases, refreshLeverUpMarketOpenPlan, validateLeverUpTransferBalances, submitLeverUpNativeOnchainEntry, notifyLeverUpClosedTrade } from "../src/leverup-coordinator.js";
+import { prepareLeverUpExecution, reconcileLeverUpIntent, collectLeverUpPairBases, refreshLeverUpMarketOpenPlan, validateLeverUpTransferBalances, submitLeverUpNativeOnchainEntry, notifyLeverUpClosedTrade, evaluateLeverUpPositionAction } from "../src/leverup-coordinator.js";
 import { privateKeyToAccount } from "viem/accounts";
+const holdTestPosition = {
+  positionHash: "0x" + "ab".repeat(32), qtyRaw: "1000", entryPriceRaw: "100",
+  stopLossRaw: "90", takeProfitRaw: "110", timestamp: 1000, earliestCloseTime: "0", isLong: true,
+};
+const afterThreeHours = 1000*1000 + 181*60*1000;
+const maxHoldReview = evaluateLeverUpPositionAction({
+  position: holdTestPosition, currentPriceRaw: "101", now: afterThreeHours, maxHoldMinutes: 180,
+});
+assert.equal(maxHoldReview.action, "HOLD", "elapsed hold time must request a Gemini review, not force liquidation");
+assert.equal(maxHoldReview.maxHoldReached, true);
+assert.equal(maxHoldReview.reason, "MAX_HOLD_TIME_REACHED_REVIEW_REQUIRED");
+const hardStopStillCloses = evaluateLeverUpPositionAction({
+  position: holdTestPosition, currentPriceRaw: "89", now: afterThreeHours, maxHoldMinutes: 180,
+});
+assert.equal(hardStopStillCloses.action, "MARKET_CLOSE");
+assert.equal(hardStopStillCloses.reason, "STOP_LOSS_TRIGGERED");
 const WMON = "0x3bd359C1119dA7Da1D913D1C4D2B7c461115433A";
 const LVMON = "0x91b81bfbe3A747230F0529Aa28d8b2Bc898E6D56";
 const LV = "0x1001ff13bf368aa4fa85f21043648079f00e1001";

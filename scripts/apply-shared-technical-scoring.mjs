@@ -40,19 +40,19 @@ once(
 );
 
 once(
-  'if (signal && signal.confidence >= minimumConfidence && (!isCore || signal.mode === "TREND_HOLD")) candidates.push(signal);',
+  'if (signal && isRecommendationScoreEligible(signal.confidence * 100) && (!isCore || signal.mode === "TREND_HOLD")) candidates.push(signal);',
   'if (signal && isRecommendationScoreEligible(signal.confidence * 100) && signal.confidence >= Math.max(0.78, minimumConfidence) && (!isCore || signal.mode === "TREND_HOLD")) candidates.push(signal);',
-  "suppress trend-hold recommendations below the fixed 78/100 score floor"
+  "allow trend-hold recommendations at every valid technical score"
 );
 once(
-  'if (scalp && scalp.confidence >= minimumConfidence) candidates.push(scalp);',
+  'if (scalp && isRecommendationScoreEligible(scalp.confidence * 100)) candidates.push(scalp);',
   'if (scalp && isRecommendationScoreEligible(scalp.confidence * 100) && scalp.confidence >= Math.max(0.78, minimumConfidence)) candidates.push(scalp);',
-  "suppress pullback-scalp recommendations below the fixed 78/100 score floor"
+  "allow pullback-scalp recommendations at every valid technical score"
 );
 once(
-  'if (continuation && continuation.confidence >= minimumConfidence) candidates.push(continuation);',
+  'if (continuation && isRecommendationScoreEligible(continuation.confidence * 100)) candidates.push(continuation);',
   'if (continuation && isRecommendationScoreEligible(continuation.confidence * 100) && continuation.confidence >= Math.max(0.78, minimumConfidence)) candidates.push(continuation);',
-  "suppress trend-continuation recommendations below the fixed 78/100 score floor"
+  "allow trend-continuation recommendations at every valid technical score"
 );
 
 // The trend-hold candidate is already guarded by the earlier strategy-specific patch.

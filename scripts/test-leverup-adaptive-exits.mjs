@@ -45,4 +45,17 @@ assert.equal(profitLock.action, "MARKET_CLOSE", "armed peak-profit giveback with
 assert.equal(profitLock.reason, "PROFIT_PROTECTION_PEAK_GIVEBACK");
 assert.ok(profitLock.peakFavourablePct >= 4);
 assert.ok(profitLock.givebackPct >= profitLock.peakFavourablePct * 0.45);
+const belowEntryGiveback = evaluateAdaptiveLeverUpExit({
+  position: long,
+  currentPriceRaw: String(98n * 10n**18n),
+  state: {
+    history: [105,104,103,102,101,100,99,98].map((price,i)=>({at:5000+i*60000,price:String(BigInt(price)*10n**18n)})),
+    highWaterRaw: String(110n*10n**18n), lowWaterRaw: String(98n*10n**18n),
+  },
+  pairView: { slippageConfig: { onePercentDepthAboveUsdRaw: "100000", onePercentDepthBelowUsdRaw: "100000" } },
+  now: 5000+8*60000,
+});
+assert.equal(belowEntryGiveback.action, "MARKET_CLOSE",
+  "armed peak-profit giveback with confirmed reversal must protect the gain even if mark has slipped slightly below entry");
+assert.equal(belowEntryGiveback.reason, "PROFIT_PROTECTION_PEAK_GIVEBACK");
 console.log("PASS: adaptive warm-up, multi-factor reversal, long/short trailing direction, and TP preservation.");

@@ -65,7 +65,6 @@ export function evaluateAdaptiveLeverUpExit({ position, currentPriceRaw, state =
   const profitProtectionArmed = peakFavourablePct >= profitProtectionArmPct;
   const profitGivebackTriggered = profitProtectionArmed &&
     givebackPct >= peakFavourablePct * 0.45 &&
-    favourablePct > 0 &&
     (adverseTrend || adverseMomentum) &&
     closeScore >= 2;
   nextState.profitProtection = {

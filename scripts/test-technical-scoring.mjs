@@ -1,10 +1,15 @@
 import assert from "node:assert/strict";
 import { scoreTechnicalEvidence, MIN_RECOMMENDATION_SCORE, isRecommendationScoreEligible } from "../src/technical-scoring.js";
 
-assert.equal(MIN_RECOMMENDATION_SCORE, 78);
-assert.equal(isRecommendationScoreEligible(77.99), false);
+assert.equal(MIN_RECOMMENDATION_SCORE, 0);
+assert.equal(isRecommendationScoreEligible(0), true);
+assert.equal(isRecommendationScoreEligible(0.01), true);
+assert.equal(isRecommendationScoreEligible(12), true);
+assert.equal(isRecommendationScoreEligible(77.99), true);
 assert.equal(isRecommendationScoreEligible(78), true);
-assert.equal(isRecommendationScoreEligible(82), true);
+assert.equal(isRecommendationScoreEligible(100), true);
+assert.equal(isRecommendationScoreEligible(-0.01), false);
+assert.equal(isRecommendationScoreEligible(100.01), false);
 assert.equal(isRecommendationScoreEligible(NaN), false);
 
 const native = scoreTechnicalEvidence({ side: "LONG", trendAligned: true, momentumReturns: [0.02, 0.10, 0.15], momentumVolatilityPerMinutePct: 0.001, structureConfirmed: null, rsi: 60 });

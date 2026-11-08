@@ -731,7 +731,6 @@ export function evaluateLeverUpPositionAction({ position, currentPriceRaw, now =
   // Protective stop always outranks the venue's ordinary minimum-hold timer.
   if (stopHit) return { action: "MARKET_CLOSE", reason: "STOP_LOSS_TRIGGERED" };
   if (earliest > nowSeconds) return { action: "WAIT", reason: "MINIMUM_HOLD_NOT_REACHED" };
-  if (expired) return { action: "MARKET_CLOSE", reason: "MAX_HOLD_TIME_REACHED" };
   if (entry > 0n) {
     for (let i = 0; i < partialTakeProfits.length; i++) {
       if (completedPartialLevels.includes(i)) continue;
@@ -747,6 +746,7 @@ export function evaluateLeverUpPositionAction({ position, currentPriceRaw, now =
     }
   }
   if (targetHit) return { action: "MARKET_CLOSE", reason: "TAKE_PROFIT_TRIGGERED" };
+  if (expired) return { action: "HOLD", reason: "MAX_HOLD_TIME_REACHED_REVIEW_REQUIRED", maxHoldReached: true };
   return { action: "HOLD", reason: "NO_EXIT_TRIGGER" };
 }
 
@@ -948,10 +948,18 @@ async function reconcileClosedSettlements({ env, db, now, dependencies = {} }) {
     const settlement = reconcileClosedPosition(closed, lastSnapshot, entry?.plan?.preflight || null, {
       marginTokenDecimals: 18, marginTokenPriceUsd: null,
     });
-    const closeReason = String(closed.closeInfo?.reason || closed.closeInfo?.closeReason || closed.closeInfo?.closeType || closed.closeInfo?.trigger || closed.closeInfo?.exitReason || "EXCHANGE_REPORTED_CLOSE");
+    const closeIntent = await db.prepare(`SELECT signal_id,payload_json,status FROM leverup_execution_intents
+      WHERE action IN (1,9) AND lower(json_extract(payload_json, '$.positionHash')) = ?
+      ORDER BY created_at_ms DESC LIMIT 1`).bind(positionHash).first().catch(() => null);
+    let closeIntentPayload = {};
+    try { closeIntentPayload = JSON.parse(closeIntent?.payload_json || "{}"); } catch {}
+    const exchangeCloseReason = closed.closeInfo?.reason || closed.closeInfo?.closeReason || closed.closeInfo?.closeType || closed.closeInfo?.trigger || closed.closeInfo?.exitReason;
+    const closeReason = String(exchangeCloseReason || closeIntentPayload.reason || "EXCHANGE_REPORTED_CLOSE");
+    const closeForNotification = { ...closed, closeInfo: { ...closed.closeInfo, reason: closeReason } };
     if (!existing) {
       await persistSettlementReconciliation(db, settlement, {
-        intentSignalId: entry?.signalId || null, source: "LeverUp closed-position history",
+        intentSignalId: entry?.signalId || null, closeIntentSignalId: closeIntent?.signal_id || null,
+        closeIntentStatus: closeIntent?.status || null, source: "LeverUp closed-position history",
         closeReason,
         estimatedProtocolCosts: entry?.plan?.preflight?.estimatedProtocolCosts || null,
       });
@@ -962,7 +970,7 @@ async function reconcileClosedSettlements({ env, db, now, dependencies = {} }) {
     } else {
       // Backfill the original settlement row with its signal and close reason.
       await db.prepare("UPDATE leverup_settlement_reconciliations SET source_json = json_patch(COALESCE(source_json, '{}'), ?) WHERE position_hash = ?")
-        .bind(JSON.stringify({ intentSignalId: entry?.signalId || null, closeReason }), positionHash).run();
+        .bind(JSON.stringify({ intentSignalId: entry?.signalId || null, closeIntentSignalId: closeIntent?.signal_id || null, closeIntentStatus: closeIntent?.status || null, closeReason }), positionHash).run();
     }
     // Settlement persistence and Telegram delivery are separate idempotent steps.
     // A prior DB write must not suppress a notification that failed or was skipped.
@@ -970,7 +978,7 @@ async function reconcileClosedSettlements({ env, db, now, dependencies = {} }) {
     const alreadyNotified = await env?.CIEL_STATE?.get(notificationKey).catch(() => null);
     if (!alreadyNotified) {
       try {
-        const delivery = await notifyLeverUpClosedTrade(env, closed, settlement, entry);
+        const delivery = await notifyLeverUpClosedTrade(env, closeForNotification, settlement, entry);
         await env?.CIEL_STATE?.put(notificationKey, JSON.stringify({ sentAt: now, messageId: delivery?.messageId || null }), { expirationTtl: 365 * 24 * 3600 });
       } catch (error) {
         console.error("LeverUp live close notification failed: " + String(error?.message || error).slice(0, 250));
@@ -1223,6 +1231,9 @@ export async function runLeverUpPositionManager({ env, db, now = Date.now(), dep
       aiReview = await reviewLeverUpPositionWithGemini({
         env, position: { ...position, symbol: pairView.symbol || pairView.pairName || null },
         currentPriceRaw: latestPrice, adaptive, state: adaptive?.state || adaptiveState || {}, now,
+        maxHoldReached: fixedAction.maxHoldReached === true,
+        positionAgeMinutes: Number.isFinite(Number(position.timestamp)) && Number(position.timestamp) > 0
+          ? Math.max(0, (now - Number(position.timestamp) * 1000) / 60_000) : null,
         dependencies
       }).catch((error) => ({ status: "FAILED", action: "HOLD", confidence: 0, reason: String(error?.message || error).slice(0, 180) }));
     }
@@ -1232,8 +1243,9 @@ export async function runLeverUpPositionManager({ env, db, now = Date.now(), dep
       aiReviewFailures.push(String(aiReview.reason || "GEMINI_REVIEW_FAILED").slice(0, 180));
     }
     // AI is advisory, never allowed to override fixed SL/TP or act without local
-    // reversal evidence. A confirmed reversal closes the old position; a new
-    // opposite entry must still pass the independent 78/100 entry gate.
+    // reversal evidence. The max-hold timer is a review checkpoint, not a forced exit.
+    // A confirmed reversal closes the old position; an opposite entry still passes
+    // market, collateral, authorization and portfolio-risk checks.
     if (aiReview.status === "REVIEWED") aiReviewed++;
     const aiCloseConfirmed = ["CLOSE", "REVERSE"].includes(aiReview.action) &&
       Number(aiReview.confidence) >= 85 && aiReview.reversalConfirmed === true &&
@@ -1276,7 +1288,9 @@ export async function runLeverUpPositionManager({ env, db, now = Date.now(), dep
       agentAuthorization: auth, nonce: (BigInt(nonce) + 1n).toString(), deadline: Math.floor(now / 1000) + 300,
       feeToken: fee.feeToken, antiDdosFee: fee.antiDdosFee,
       allowanceRequirements: fee.feeToken.toLowerCase() === ZERO.toLowerCase() ? [] : [{ tokenAddress: fee.feeToken, amount: fee.antiDdosFee }],
-      pairBase: position.pairBase, payload: { positionHash: position.positionHash, action: action.action, reason: action.reason, levelIndex: action.levelIndex ?? null, stopLossRaw: action.stopLossRaw ?? null, aiReview: aiReview.status === "REVIEWED" ? { action: aiReview.action, confidence: aiReview.confidence, reversalConfirmed: aiReview.reversalConfirmed, reason: aiReview.reason, model: aiReview.model } : null, adaptiveMetrics: action.atrProxyPct == null ? null : { atrProxyPct: action.atrProxyPct, trendPct: action.trendPct, momentumPct: action.momentumPct, closeScore: action.closeScore, favourablePct: action.favourablePct, peakFavourablePct: action.peakFavourablePct, givebackPct: action.givebackPct } },
+      pairBase: position.pairBase, payload: { positionHash: position.positionHash, action: action.action, reason: action.reason, levelIndex: action.levelIndex ?? null, stopLossRaw: action.stopLossRaw ?? null,
+        aiReview: { status: aiReview.status, action: aiReview.action, confidence: aiReview.confidence, reversalConfirmed: aiReview.reversalConfirmed === true, reason: aiReview.reason || null, model: aiReview.model || null, configuredKeyCount: aiReview.configuredKeyCount || 0 },
+        adaptiveMetrics: { action: adaptive.action, reason: adaptive.reason, samples: adaptive.samples ?? adaptive.state?.history?.length ?? null, atrProxyPct: adaptive.atrProxyPct ?? null, trendPct: adaptive.trendPct ?? null, momentumPct: adaptive.momentumPct ?? null, closeScore: adaptive.closeScore ?? null, favourablePct: adaptive.favourablePct ?? null, peakFavourablePct: adaptive.peakFavourablePct ?? null, givebackPct: adaptive.givebackPct ?? null, profitProtection: adaptive.state?.profitProtection || null } },
       now, dependencies,
     });
     if (result.submitted) submitted++;

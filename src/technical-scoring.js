@@ -1,7 +1,8 @@
-export const MIN_RECOMMENDATION_SCORE = 78;
+export const MIN_RECOMMENDATION_SCORE = 0;
 export function isRecommendationScoreEligible(score) {
   const value = Number(score);
-  return Number.isFinite(value) && value >= MIN_RECOMMENDATION_SCORE;
+  // No recommendation/execution score floor: accept every valid technical score from 0 to 100.
+  return Number.isFinite(value) && value >= 0 && value <= 100;
 }
 
 const WEIGHTS = Object.freeze({ trend: 25, momentumPerHorizon: 10, structure: 25, timing: 20 });

@@ -114,6 +114,12 @@ const ready = await prepareLeverUpAdvisorPlan({
   signalId: "SIG-READY", now: 1_800_000_000_000, dependencies,
 });
 assert.equal(ready.status, "PREFLIGHT_PASS_LIVE_DISABLED");
+const lowScoreReady = await prepareLeverUpAdvisorPlan({
+  env: { ...env }, candidate: { ...candidate, confidence: 0.01 }, reviewed,
+  signalId: "SIG-LOW-SCORE", now: 1_800_000_000_001, dependencies,
+});
+assert.equal(lowScoreReady.status, "PREFLIGHT_PASS_LIVE_DISABLED",
+  "a valid low technical score must not be blocked from LeverUp preflight");
 assert.equal(ready.liveExecutionEnabled, false);
 assert.equal(ready.killSwitchEnabled, true);
 assert.equal(ready.selectedLeverage, 100);
