@@ -60,14 +60,16 @@ async function runAdvisorCycle(env, prices, now, lastTickAt, priceHistory, liveE
     console.log("Ciel has no free 22 MON paper margin; no new recommendation will be issued until a paper slot is free.");
     return;
   }
+  const candleStructureRows = await getCandleStructureMap(env,symbols,now);
   const candidates = [];
   for (const sym of symbols) {
     if (sym === "MON" || Number(LEVERUP_MARKET_MAX_LEVERAGE[sym]) !== 50 || openPaperSymbols.has(sym)) continue;
-    const signal = analyse(sym, hist.get(sym) || [], now);
+    const marketRows = hist.get(sym) || [];
+    const signal = analyzeCandleLevelReversal(sym,marketRows,candleStructureRows.get(sym),now) || analyse(sym,marketRows,now);
     if (signal && signal.confidence >= setting(env.ADVISORY_MIN_CONFIDENCE, 0.72, 0.5, 0.95)) candidates.push(signal);
   }
   candidates.sort((x, y) => eventIntel?.marketImpact === "BROAD_RISK_OFF" ? Number(y.side === "SHORT") - Number(x.side === "SHORT") || y.confidence - x.confidence : y.confidence - x.confidence);
-  await env.CIEL_STATE.put("ciel:advisor:last-scan", JSON.stringify({ at:now, watchCount:symbols.length, historySymbols:hist.size, candidates:candidates.map((x)=>({symbol:x.symbol,side:x.side,strategy:x.strategy,mode:x.mode,regime:x.regime,score:x.confidence,rsi:x.rsi,cci:x.cci})) }), { expirationTtl:86400 }).catch(()=>void 0);
+  await env.CIEL_STATE.put("ciel:advisor:last-scan", JSON.stringify({ at:now, watchCount:symbols.length, historySymbols:hist.size, candleLevelSymbols:candleStructureRows.size, candidates:candidates.map((x)=>({symbol:x.symbol,side:x.side,strategy:x.strategy,mode:x.mode,regime:x.regime,score:x.confidence,rsi:x.rsi,cci:x.cci})) }), { expirationTtl:86400 }).catch(()=>void 0);
   const trendCooldownMs = setting(env.ADVISORY_TREND_REVIEW_COOLDOWN_MINUTES, 30, 10, 240) * 6e4;
   let forecastChecks = 0;
   for (const candidate of candidates) {
