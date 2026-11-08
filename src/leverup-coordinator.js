@@ -1270,5 +1270,5 @@ export async function runLeverUpPositionManager({ env, db, now = Date.now(), dep
   }
   const settlements = await reconcileClosedSettlements({ env, db, now, dependencies })
     .catch((error) => ({ error: String(error?.message || error).slice(0, 200) }));
-  return { status: liveEnabled(env) ? "LIVE_MONITORING" : "READ_ONLY_MONITORING", checked: evaluated, submitted, snapshots, adaptiveUpdatesBlocked, closePermissionBlocked, aiReviews: [...positionMap.keys()].filter((hash) => false).length, canUpdateTpSl: Boolean(auth.canUpdateTpSl), openPositionCount: positionMap.size, pairBasesChecked: pairBases.length, reconciliation, settlements };
+  return { status: liveEnabled(env) ? "LIVE_MONITORING" : "READ_ONLY_MONITORING", checked: evaluated, submitted, snapshots, adaptiveUpdatesBlocked, closePermissionBlocked, canUpdateTpSl: Boolean(auth.canUpdateTpSl), openPositionCount: positionMap.size, pairBasesChecked: pairBases.length, reconciliation, settlements };
 }
