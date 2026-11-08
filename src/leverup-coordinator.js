@@ -1203,7 +1203,11 @@ export async function runLeverUpPositionManager({ env, db, now = Date.now(), dep
     const completed = Array.isArray(saved?.completedPartialLevels) ? saved.completedPartialLevels : [];
     const fixedAction = evaluateLeverUpPositionAction({
       position, currentPriceRaw: latestPrice, now,
-      maxHoldMinutes: Number(candidate.holdMinutes || 180), partialTakeProfits: partials, completedPartialLevels: completed,
+      // Preserve the existing CIEL hold cap for ledger-linked entries. For an
+      // unlinked/manual position, enforce SL/TP and adaptive protection without
+      // inventing a max-hold policy that was never attached to that position.
+      maxHoldMinutes: saved ? Number(candidate.holdMinutes || 180) : 0,
+      partialTakeProfits: partials, completedPartialLevels: completed,
     });
     const adaptiveKey = "ciel:leverup:adaptive-exit:v1:" + hash;
     let adaptiveState = null;
