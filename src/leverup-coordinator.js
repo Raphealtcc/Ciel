@@ -890,7 +890,7 @@ async function notifyLeverUpClosedTrade(env, closed, settlement, entry) {
     "Net realised P&L: " + sign(net) + " " + marginLabel,
     "Gross P&L: " + sign(gross) + " " + marginLabel,
     "Trading fees: " + sign(-BigInt(settlement.totalTradingFeesRaw || "0")) + " " + marginLabel,
-    "Funding: " + sign(BigInt(settlement.fundingFeeRaw || "0")) + " LVMON | holding fee: " + sign(BigInt(settlement.holdingFeeRaw || "0")) + " " + marginLabel,
+    "Funding: " + sign(BigInt(settlement.fundingFeeRaw || "0")) + " " + marginLabel + " | holding fee: " + sign(BigInt(settlement.holdingFeeRaw || "0")) + " " + marginLabel,
     "Signal: " + String(entry?.signalId || "not linked") + " | position: " + String(closed.positionHash || "unknown"),
     "Settlement source: LeverUp closed-position history; net includes recorded fees and carry."
   ];
