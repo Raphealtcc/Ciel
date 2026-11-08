@@ -79,7 +79,7 @@ once(
   "record eligibility, margin and open-position rejection reasons"
 );
 
-const oldCandidateBuild = `    const signal = analyse(sym, hist.get(sym) || [], now);
+const oldCandidateBuild = `    const signal = analyzeCandleLevelReversal(sym,marketRows,candleStructureRows.get(sym),now) || analyse(sym,marketRows,now);
     const isCore = ["BTC","ETH","SOL"].includes(sym);
     if (signal && signal.confidence >= setting(env.ADVISORY_MIN_CONFIDENCE, 0.72, 0.5, 0.95) && (!isCore || signal.mode === "TREND_HOLD")) candidates.push(signal);
     if (isCore) {
@@ -90,9 +90,9 @@ const oldCandidateBuild = `    const signal = analyse(sym, hist.get(sym) || [], 
       }
     }`;
 const newCandidateBuild = `    const beforeCount = candidates.length;
-    const signal = analyse(sym, hist.get(sym) || [], now);
+    const signal = analyzeCandleLevelReversal(sym,marketRows,candleStructureRows.get(sym),now) || analyse(sym,marketRows,now);
     const isCore = coreMarketSet.has(sym);
-    if (signal && (!isCore || signal.mode === "TREND_HOLD" || signal.mode === "RANGE_SCALP")) candidates.push(signal);
+    if (signal && signal.confidence >= setting(env.ADVISORY_MIN_CONFIDENCE,0.72,0.5,0.95) && (!isCore || signal.mode === "TREND_HOLD" || signal.mode === "RANGE_SCALP")) candidates.push(signal);
     else if (isCore) scanDiagnostics.push({symbol:sym,strategy:"TREND_HOLD",reason:signal ? "BELOW_CONFIDENCE_THRESHOLD" : "NO_VALID_TREND_SIGNAL"});
     if (isCore) {
       const candles = coreScalpData.get(sym);
