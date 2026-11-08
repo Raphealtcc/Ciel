@@ -63,14 +63,14 @@ assert.match(report, /CIEL LIVE TRADING/);
 assert.match(report, /Starter balance: 12.0000 LVMON \(on-chain wallet balance\)/);
 assert.match(report, /Available balance: 12.0000 LVMON/);
 assert.match(report, /Margin reserved in open trades: 2.0000 LVMON/);
-assert.match(report, /WMON \(MON\): \+1\.0000 token units/);
-assert.match(report, /1 currently open/);
+assert.ok(report.includes("Realised P&L: +1.0000 LVMON"));
+assert.ok(report.includes("Trades: 1 open | 2 closed | 1 wins | 1 losses"));
 assert.match(report, /RECENT LIVE ENTRY ATTEMPTS/);
 assert.match(report, /XRP: FAILED — no position opened — insufficient transfers/);
 assert.match(report, /BTC: AWAITING FINAL RECONCILIATION/);
-assert.match(report, /Unrealised P&L: \\+5\\.0000 LVMON/);
-assert.match(report, /LONG BTC\\/USD \\| entry \\$190\\.000000 \\| mark \\$200\\.000000 \\| unrealised \\+5\\.0000 LVMON/);
-assert.match(report, /gross before close fees and accrued carry/i);
+assert.ok(report.includes("Unrealised P&L: +5.0000 LVMON"));
+assert.ok(report.includes("LONG BTC/USD | entry $190.000000 | mark $200.000000 | unrealised +5.0000 LVMON"));
+assert.ok(report.includes("unrealised P&L is gross before close fees and accrued carry"));
 assert.doesNotMatch(report, /PAPER TRADING/);
 console.log("PASS: live realized P&L and on-chain/oracle mark-to-market unrealized P&L are reported separately.");
 
@@ -83,7 +83,7 @@ const degraded = await buildLeverUpProfitReport({
   fetchImpl: async () => { throw new Error("oracle temporarily unavailable"); },
   publicClient,
 });
-assert.match(degraded, /WMON \(MON\): \+1\.0000 token units/);
+assert.ok(degraded.includes("Realised P&L: +1.0000 LVMON"));
 assert.match(degraded, /UNAVAILABLE — oracle temporarily unavailable/);
 assert.match(degraded, /open count unavailable/);
 console.log("PASS: a mark/oracle outage does not erase realized P&L or report a false zero.");
