@@ -113,8 +113,8 @@ once(oldCandidateBuild,newCandidateBuild,"expose independent trend and scalp rej
 
 once(
   'const minimumForecastMovePct = Math.max(0.08, candidate.stopPct * 0.30);',
-  'const minimumForecastMovePct = Math.max(0.04, candidate.stopPct * 0.15);',
-  "reduce the forecast magnitude hurdle while still requiring directional alignment"
+  'const minimumForecastMovePct = Math.max(0.03, candidate.stopPct * 0.10);\n      const stronglyOpposed = candidate.side === "LONG" ? Number(forecast.medianReturnPct) <= -minimumForecastMovePct : Number(forecast.medianReturnPct) >= minimumForecastMovePct;\n      if (stronglyOpposed && candidate.mode !== "RANGE_SCALP" && candidate.mode !== "CORE_PULLBACK_SCALP" && !String(candidate.strategy || "").includes("1M_SWING_REVERSAL")) {',
+  "block materially opposing forecasts, not technically valid scalps with a neutral or small same-direction projection"
 );
 once(
   'const extremeExhaustion = (candidate.side === "SHORT" && Number.isFinite(candidate.rsi) && candidate.rsi < 20 && candidate.bounce?.side !== "SHORT") || (candidate.side === "LONG" && Number.isFinite(candidate.rsi) && candidate.rsi > 80 && candidate.bounce?.side !== "LONG");',
