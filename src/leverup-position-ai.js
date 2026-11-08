@@ -19,7 +19,8 @@ export async function reviewLeverUpPositionWithGemini({ env, position, currentPr
     await storage.put(cooldownKey, String(now), { expirationTtl: 3600 }).catch(() => void 0);
   }
   const cursorKey = "ciel:gemini:key-cursor";
-  const cursor = Math.max(0, Number(await storage?.get?.(cursorKey).catch(() => "0") || 0)) % keys.length;
+  const cursorRaw = storage?.get ? await storage.get(cursorKey).catch(() => "0") : "0";
+  const cursor = Math.max(0, Number(cursorRaw || 0)) % keys.length;
   const model = String(env?.GEMINI_MODEL || "gemini-2.5-flash").trim();
   const prompt = [
     "You are the position risk analyst for a leveraged crypto trading system.",
