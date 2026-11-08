@@ -964,12 +964,13 @@ async function reconcileClosedSettlements({ env, db, now, dependencies = {} }) {
     const settlement = reconcileClosedPosition(closed, lastSnapshot, entry?.plan?.preflight || null, {
       marginTokenDecimals: 18, marginTokenPriceUsd: null,
     });
+    const entryOpenedAt = Number(entry?.executedAt || entry?.createdAt || 0);
     const closeIntent = await db.prepare(`SELECT signal_id,payload_json,status FROM leverup_execution_intents
       WHERE action IN (1,9) AND (
         json_extract(payload_json, '$.tradeId') = ?
-        OR (lower(json_extract(payload_json, '$.positionHash')) = ? AND created_at_ms >= ?)
+        OR (? > 0 AND lower(json_extract(payload_json, '$.positionHash')) = ? AND created_at_ms >= ?)
       ) ORDER BY created_at_ms DESC LIMIT 1`)
-      .bind(tradeId, positionHash, Number(entry?.executedAt || entry?.createdAt || 0)).first().catch(() => null);
+      .bind(tradeId, entryOpenedAt, positionHash, entryOpenedAt).first().catch(() => null);
     let closeIntentPayload = {};
     try { closeIntentPayload = JSON.parse(closeIntent?.payload_json || "{}"); } catch {}
     const exchangeCloseReason = closed.closeInfo?.reason || closed.closeInfo?.closeReason || closed.closeInfo?.closeType || closed.closeInfo?.trigger || closed.closeInfo?.exitReason;
