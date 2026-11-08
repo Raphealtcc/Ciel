@@ -4,8 +4,8 @@ import { buildLeverUpProfitReport } from "../src/leverup-profits.js";
 const db = { prepare(sql) {
   if (sql.includes("leverup_settlement_reconciliations")) {
     return { async all() { return { results: [
-      { position_hash: "0x1", symbol: "BTC", close_time: 1, net_pnl_after_fees_raw: "1500000000000000000", margin_token: "0x3bd359c1119da7da1d913d1c4d2b7c461115433a" },
-      { position_hash: "0x2", symbol: "ETH", close_time: 2, net_pnl_after_fees_raw: "-500000000000000000", margin_token: "0x3bd359c1119da7da1d913d1c4d2b7c461115433a" },
+      { position_hash: "0x1", symbol: "BTC", close_time: 1, net_pnl_after_fees_raw: "1500000000000000000", margin_token: "0x91b81bfbe3a747230f0529aa28d8b2bc898e6d56" },
+      { position_hash: "0x2", symbol: "ETH", close_time: 2, net_pnl_after_fees_raw: "-500000000000000000", margin_token: "0x91b81bfbe3a747230f0529aa28d8b2bc898e6d56" },
     ] }; } };
   }
   assert.match(sql, /leverup_execution_intents/);
@@ -15,6 +15,7 @@ const db = { prepare(sql) {
   ] }; } };
 } };
 const pairBase = "0x2222222222222222222222222222222222222222";
+const lvmonPairBase = "0x3333333333333333333333333333333333333333";
 const positionHash = "0x" + "ab".repeat(32);
 const publicClient = {
   async readContract({ functionName, args }) {
@@ -25,19 +26,26 @@ const publicClient = {
       pair: "BTC/USD",
       pairBase,
       isLong: true,
-      marginToken: "0x3bd359c1119da7da1d913d1c4d2b7c461115433a",
+      marginToken: "0x91b81bfbe3a747230f0529aa28d8b2bc898e6d56",
+      margin: 2n * 10n ** 18n,
       qty: 10n ** 18n,
       entryPrice: 190n * 10n ** 10n,
     }];
   },
 };
 const fetchImpl = async (url, init = {}) => {
+  if (String(url).includes("/v1/pairs")) {
+    return new Response(JSON.stringify({ content: [{ symbol: "LVMON", base: lvmonPairBase }] }), { status: 200 });
+  }
   if (String(url).includes("/open-positions")) {
     return new Response(JSON.stringify({ content: [{ positionHash, pairBase, symbol: "BTC" }] }), { status: 200 });
   }
   if (String(url).includes("/oracle/price/pairs/latest")) {
     assert.equal(init.method, "POST");
-    return new Response(JSON.stringify({ prices: { [pairBase]: String(200n * 10n ** 10n) } }), { status: 200 });
+    const requested = JSON.parse(init.body).pairBases;
+    const prices = {};
+    for (const base of requested) prices[base] = String(base === lvmonPairBase ? 2n * 10n ** 10n : 200n * 10n ** 10n);
+    return new Response(JSON.stringify({ prices }), { status: 200 });
   }
   throw new Error("Unexpected LeverUp request: " + url);
 };
@@ -52,9 +60,9 @@ const report = await buildLeverUpProfitReport({
   readBalances: async () => ({ "0x91b81bfbe3a747230f0529aa28d8b2bc898e6d56": { balance: 12n * 10n ** 18n, allowance: 0n } }),
 });
 assert.match(report, /CIEL LIVE TRADING/);
-assert.match(report, /Configured starting live allocation: 70.0000 LVMON/);
+assert.match(report, /Starter balance: 12.0000 LVMON \(on-chain wallet balance\)/);
 assert.match(report, /Available LVMON wallet balance: 12.0000 LVMON/);
-assert.match(report, /Open LVMON margin reserved: 0.0000 LVMON/);
+assert.match(report, /Margin reserved in open trades: 2.0000 LVMON/);
 assert.match(report, /WMON \(MON\): \+1\.0000 token units/);
 assert.match(report, /1 currently open/);
 assert.match(report, /RECENT LIVE ENTRY ATTEMPTS/);
@@ -77,6 +85,6 @@ const degraded = await buildLeverUpProfitReport({
 });
 assert.match(degraded, /WMON \(MON\): \+1\.0000 token units/);
 assert.match(degraded, /UNAVAILABLE — oracle temporarily unavailable/);
-assert.match(degraded, /open-position count unavailable/);
+assert.match(degraded, /open count unavailable/);
 console.log("PASS: a mark/oracle outage does not erase realized P&L or report a false zero.");
 
