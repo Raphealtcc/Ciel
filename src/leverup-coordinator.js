@@ -8,7 +8,7 @@ import {
 import { ensureLeverUpTokenAllowance } from "./leverup-approval.js";
 import { evaluateAdaptiveLeverUpExit } from "./leverup-adaptive-exits.js";
 import {
-  LEVERUP_TOKENS, createLeverUpPublicClient, fetchOpenPositions, fetchAllPositionsPaginated, fetchLeverUpPairs,
+  LEVERUP_TOKENS, createLeverUpPublicClient, fetchOpenPositions, fetchAllPositions, fetchLeverUpPairs,
   fetchLatestOraclePrices, fetchAntiDdosConfig, readPositionsV4, normalizePositionAccrual,
   readPairByBaseV4, readTokenBalancesAndAllowances, readAgentAuthorization, readLastAgentNonce,
   persistPositionFeeSnapshot, reconcileClosedPosition, persistSettlementReconciliation,
@@ -914,8 +914,12 @@ async function reconcileClosedSettlements({ env, db, now, dependencies = {} }) {
   const lastCheck = Number(await env?.CIEL_STATE?.get(throttleKey).catch(() => "0") || 0);
   if (lastCheck && now - lastCheck < 60_000) return { checked: 0, reconciled: 0, throttled: true };
   await env?.CIEL_STATE?.put(throttleKey, String(now), { expirationTtl: 3600 }).catch(() => void 0);
-  const history = await (dependencies.fetchHistory || fetchAllPositionsPaginated)(
-    String(env?.LEVERUP_TRADER_ADDRESS || ""), { fetchImpl: dependencies.fetchImpl || fetch, size: 100, maxPages: 10 });
+  // Closed trades are newest-first. A single bounded history page is enough for close alerts
+  // and avoids holding the one-minute position-manager cycle open while scanning old history.
+  const historyResult = await (dependencies.fetchHistory || fetchAllPositions)(
+    String(env?.LEVERUP_TRADER_ADDRESS || ""), { fetchImpl: dependencies.fetchImpl || fetch, page: 0, size: 100 });
+  const history = Array.isArray(historyResult) ? historyResult : historyResult?.content;
+  if (!Array.isArray(history)) throw new Error("LEVERUP_CLOSED_POSITION_HISTORY_INVALID");
   const entries = await readEntryMetadata(db);
   let reconciled = 0;
   for (const closed of history.filter((p) => p?.status === "CLOSED" && p?.closeInfo && p?.positionHash)) {
