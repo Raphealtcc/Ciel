@@ -185,8 +185,8 @@ replaceExactlyOnce(
   "persist the verified selected leverage and AI-sized margin",
 );
 replaceExactlyOnce(
-  'async function review(env, s, forecast, market, intraday, eventIntel = null) {',
-  'async function review(env, s, forecast, market, intraday, eventIntel = null, sizing = null) {',
+  'async function review(env, s, forecast, market, intraday, eventIntel = null, candleStructure = null) {',
+  'async function review(env, s, forecast, market, intraday, eventIntel = null, candleStructure = null, sizing = null) {',
   "pass hard sizing constraints into the Gemini reviewer",
 );
 replaceExactlyOnce(
@@ -220,8 +220,8 @@ replaceExactlyOnce(
   "only scan paper candidates whose venue minimum fits the remaining budget",
 );
 replaceExactlyOnce(
-  '    const reviewed = candidate.mode === "RANGE_SCALP"\n      ? { verdict: "WAIT", reason: "Range scalp passed deterministic regime, CCI/rejection, statistical forecast and market-quality gates; Gemini review intentionally skipped to conserve daily API quota.", flags: ["LOCAL_RANGE_SCALP_REVIEW"], model: "CIEL deterministic range guard", queries: [], sources: [] }\n      : await review(env,candidate,forecast,reviewerMarket,intraday,eventIntel);',
-  '    const sizingMaxLeverage = Number(LEVERUP_MARKET_MAX_LEVERAGE[candidate.symbol]);\n    const sizingLeverage = sizingMaxLeverage >= 100 ? 100 : PAPER_LEVERAGE;\n    const sizingMinimumMargin = minimumMarginForMarketLeverage(sizingMaxLeverage);\n    const sizingLimits = paperMarginLimits(sizingMinimumMargin, paperCash, paperStartingBalance, sizingLeverage, candidate.stopPct, openPaperRiskMon);\n    if (!sizingLimits.feasible) { console.log("Ciel skipped " + candidate.symbol + ": minimum margin or stop-risk exceeds the remaining 100 MON paper budget."); continue; }\n    const reviewed = candidate.mode === "RANGE_SCALP"\n      ? { verdict: "WAIT", reason: "Range scalp passed deterministic regime, CCI/rejection, statistical forecast and market-quality gates; Gemini review intentionally skipped to conserve daily API quota.", flags: ["LOCAL_RANGE_SCALP_REVIEW"], model: "CIEL deterministic range guard", queries: [], sources: [], paperMarginMon: null }\n      : await review(env,candidate,forecast,reviewerMarket,intraday,eventIntel,sizingLimits);',
+  '    const intraday = await getIntradayPattern(env,candidate.symbol,now,candidate.entry);\\\\n    const candleStructure = await getCandleStructureEvidence(env,candidate.symbol,now,candidate.entry);\\n    const reviewed = await review(env,candidate,forecast,reviewerMarket,intraday,eventIntel,candleStructure);',
+  '    const intraday = await getIntradayPattern(env,candidate.symbol,now,candidate.entry);\\\\n    const candleStructure = await getCandleStructureEvidence(env,candidate.symbol,now,candidate.entry);\\n    const sizingMaxLeverage = Number(LEVERUP_MARKET_MAX_LEVERAGE[candidate.symbol]);\\n    const sizingLeverage = sizingMaxLeverage >= 100 ? 100 : PAPER_LEVERAGE;\\n    const sizingMinimumMargin = minimumMarginForMarketLeverage(sizingMaxLeverage);\\n    const sizingLimits = paperMarginLimits(sizingMinimumMargin, paperCash, paperStartingBalance, sizingLeverage, candidate.stopPct, openPaperRiskMon);\\n    if (!sizingLimits.feasible) { console.log("Ciel skipped " + candidate.symbol + ": minimum margin or stop-risk exceeds the remaining 100 MON paper budget."); continue; }\\n    const reviewed = await review(env,candidate,forecast,reviewerMarket,intraday,eventIntel,candleStructure,sizingLimits);',
   "calculate the candidate-specific size ceiling before asking Gemini",
 );
 replaceExactlyOnce(
