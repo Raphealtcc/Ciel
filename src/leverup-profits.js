@@ -119,6 +119,7 @@ export async function buildLeverUpProfitReport({
     FROM leverup_settlement_reconciliations s
     LEFT JOIN leverup_execution_intents i
       ON i.signal_id=json_extract(s.source_json, '$.intentSignalId')
+      OR lower(json_extract(i.payload_json, '$.positionHash'))=lower(s.position_hash)
     ORDER BY s.close_time DESC
   `).all();
   const settlements = rowsResult?.results || [];
