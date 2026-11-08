@@ -261,6 +261,12 @@ once(
 );
 
 once(
+  'const intraday = await getIntradayPattern(env,candidate.symbol,now,candidate.entry);\\n    const candleStructure = await getCandleStructureEvidence(env,candidate.symbol,now,candidate.entry);',
+  'const intraday = await getIntradayPattern(env,candidate.symbol,now,candidate.entry);\n    const candleStructure = await getCandleStructureEvidence(env,candidate.symbol,now,candidate.entry);',
+  "normalize recovered intraday/candle-structure separator",
+);
+
+once(
   'const intraday = await getIntradayPattern',
   'const intraday = isScalpMode ? null : await getIntradayPattern',
   "skip intraday research lookups for both scalp modes",
