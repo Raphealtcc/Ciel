@@ -117,7 +117,7 @@ __name(handleTradingModeCommand, "handleTradingModeCommand");
 `;
 const anchor = "async function handleCommand(env, text) {";
 if (source.split(anchor).length !== 2) throw new Error("Trading-mode handler anchor mismatch");
-if (!source.includes("async function handleTradingModeCommand(")) source = source.replace(anchor, helper + anchor);
+if (!source.includes("async function handleTradingModeCommand(")) source = source.replace(anchor, geminiStatusHelper + helper + anchor);
 
 const dispatch = '  if (await handleAdvisorCommand(env, text)) return;\n  const command = (text.trim().split(/\\s+/, 1)[0] || "").split("@")[0].toLowerCase();';
 const dispatchReplacement = '  const command = (text.trim().split(/\\s+/, 1)[0] || "").split("@")[0].toLowerCase();\n  if (await handleGeminiStatusCommand(env, command)) return;\n  if (await handleTradingModeCommand(env, command)) return;\n  if (await handleAdvisorCommand(env, text)) return;';
