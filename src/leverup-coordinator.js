@@ -431,7 +431,7 @@ async function readPortfolioRiskFromLedger(db, now) {
     db.prepare("SELECT net_pnl_after_fees_raw FROM leverup_settlement_reconciliations ORDER BY close_time DESC LIMIT 300").all(),
   ]);
   const [activeEntries] = await Promise.all([
-    db.prepare("SELECT payload_json FROM leverup_execution_intents WHERE action = 0 AND status IN ('EXECUTED','RECONCILED','SUBMITTED','PENDING','UNCERTAIN')").all(),
+    db.prepare("SELECT payload_json FROM leverup_execution_intents WHERE action = 0 AND status IN ('EXECUTED','RECONCILED','SUBMITTED','PENDING','UNCERTAIN') AND (status != 'RECONCILED' OR json_extract(payload_json,'$.closedAt') IS NULL)").all(),
   ]);
   const toMon = (raw) => Number(BigInt(raw || "0")) / 1e18;
   const dailyRealizedLossMon = (daily.results || []).reduce((sum, row) => sum + Math.max(0, -toMon(row.net_pnl_after_fees_raw)), 0);
