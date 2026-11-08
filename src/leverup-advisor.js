@@ -30,7 +30,6 @@ export function buildBudgetedLeverUpPlan({ buildPlan, planArgs, maxEntryBudgetMo
 
 import { inspectLeverUpTraderSigner } from "./leverup-approval.js";
 import { isRecommendationScoreEligible } from "./technical-scoring.js";
-import { isRecommendationScoreEligible } from "./technical-scoring.js";
 
 const WMON = LEVERUP_TOKENS.WMON.toLowerCase();
 // These USD limits preserve the prior MON caps at the reference MON/USD quote
