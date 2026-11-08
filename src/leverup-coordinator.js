@@ -875,18 +875,22 @@ async function notifyLeverUpClosedTrade(env, closed, settlement, entry) {
   const close = closed.closeInfo || {};
   const side = closed.isLong === true || closed.side === "LONG" ? "LONG" : closed.isLong === false || closed.side === "SHORT" ? "SHORT" : "SIDE UNKNOWN";
   const symbol = String(closed.pair || closed.symbol || entry?.candidate?.symbol || entry?.plan?.preflight?.symbol || "UNKNOWN");
-  const reason = String(close.reason || close.closeReason || close.closeType || close.trigger || "EXCHANGE_REPORTED_CLOSE");
+  const reason = String(close.reason || close.closeReason || close.closeType || close.trigger || close.exitReason || "EXCHANGE_REPORTED_CLOSE");
+  const marginToken = String(closed.marginToken || entry?.plan?.preflight?.marginToken || LEVERUP_TOKENS.LVMON).toLowerCase();
+  const marginLabel = marginToken === LEVERUP_TOKENS.LVMON.toLowerCase() ? "LVMON"
+    : marginToken === LEVERUP_TOKENS.WMON.toLowerCase() ? "WMON" : marginToken;
+  const marginDecimals = marginToken === LEVERUP_TOKENS.USDC.toLowerCase() ? 6 : 18;
   const net = BigInt(settlement.netPnlAfterFeesRaw || "0");
   const gross = BigInt(settlement.grossPnlRaw || "0");
-  const sign = (v) => (v > 0n ? "+" : "") + (Number(v) / 1e18).toFixed(6);
+  const sign = (v) => (v > 0n ? "+" : "") + (Number(v) / (10 ** marginDecimals)).toFixed(6);
   const lines = [
     "🔴 CIEL LIVE TRADE CLOSED",
     side + " " + symbol + " | " + reason,
     "Exit price: " + String(Number(settlement.closePriceRaw) / 1e18),
-    "Net realised P&L: " + sign(net) + " LVMON",
-    "Gross P&L: " + sign(gross) + " LVMON",
-    "Trading fees: " + sign(-BigInt(settlement.totalTradingFeesRaw || "0")) + " LVMON",
-    "Funding: " + sign(BigInt(settlement.fundingFeeRaw || "0")) + " LVMON | holding fee: " + sign(BigInt(settlement.holdingFeeRaw || "0")) + " LVMON",
+    "Net realised P&L: " + sign(net) + " " + marginLabel,
+    "Gross P&L: " + sign(gross) + " " + marginLabel,
+    "Trading fees: " + sign(-BigInt(settlement.totalTradingFeesRaw || "0")) + " " + marginLabel,
+    "Funding: " + sign(BigInt(settlement.fundingFeeRaw || "0")) + " LVMON | holding fee: " + sign(BigInt(settlement.holdingFeeRaw || "0")) + " " + marginLabel,
     "Signal: " + String(entry?.signalId || "not linked") + " | position: " + String(closed.positionHash || "unknown"),
     "Settlement source: LeverUp closed-position history; net includes recorded fees and carry."
   ];
