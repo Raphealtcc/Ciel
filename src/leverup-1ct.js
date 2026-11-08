@@ -183,7 +183,7 @@ export function assertLiveExecutionAllowed({
       String(agentAuthorization.agentAddress).toLowerCase() !== agentAddress.toLowerCase()) {
     throw new Error("LEVERUP_AGENT_NOT_VERIFIED_AUTHORIZED");
   }
-  const permissionByAction = { 0: "canMarketOpen", 1: "canMarketClose", 9: "canPartialClose" };
+  const permissionByAction = { 0: "canMarketOpen", 1: "canMarketClose", 7: "canUpdateTpSl", 9: "canPartialClose" };
   const requiredPermission = permissionByAction[Number(action)];
   if (!requiredPermission) throw new Error("LEVERUP_ACTION_NOT_ALLOWED_BY_CIEL");
   if (agentAuthorization[requiredPermission] !== true) throw new Error("LEVERUP_AGENT_ACTION_PERMISSION_MISSING");

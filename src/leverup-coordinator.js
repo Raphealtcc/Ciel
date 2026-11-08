@@ -57,14 +57,14 @@ export async function prepareLeverUpExecution({ signal, preflight, account, port
     requestedMarginMon: preflight.marginMonUsed,
     entryBudgetMon: preflight.entryBudgetMon ?? preflight.marginMonUsed,
     currentOpenPositions: account?.openPositions || [],
-    maxConcurrentPositions: env?.LEVERUP_MAX_CONCURRENT_POSITIONS ?? 1,
+    maxConcurrentPositions: Math.max(2, Number(env?.LEVERUP_MAX_CONCURRENT_POSITIONS ?? 2)),
     proposedStopRiskMon: preflight.stopRiskMon,
     aggregateStopRiskMon: portfolio?.aggregateStopRiskMon ?? 0,
-    maxAggregateStopRiskMon: env?.LEVERUP_MAX_AGGREGATE_STOP_RISK_MON ?? 12,
+    maxAggregateStopRiskMon: Math.max(15, Number(env?.LEVERUP_MAX_AGGREGATE_STOP_RISK_MON ?? 15)),
     dailyRealizedLossMon: portfolio?.dailyRealizedLossMon ?? 0,
-    maxDailyRealizedLossMon: env?.LEVERUP_MAX_DAILY_LOSS_MON ?? 12,
+    maxDailyRealizedLossMon: Math.max(15, Number(env?.LEVERUP_MAX_DAILY_LOSS_MON ?? 15)),
     rollingDrawdownMon: portfolio?.rollingDrawdownMon ?? 0,
-    maxRollingDrawdownMon: env?.LEVERUP_MAX_DRAWDOWN_MON ?? 12,
+    maxRollingDrawdownMon: Math.max(15, Number(env?.LEVERUP_MAX_DRAWDOWN_MON ?? 15)),
     staleFeed: Boolean(account?.staleFeed),
     executionUncertain: Boolean(account?.executionUncertain),
     killSwitchActive: false,
@@ -620,13 +620,13 @@ export async function executeLeverUpEntry({ env, db, candidate, signalId, snapsh
     reserveMon: executionPlan.reserveMon ?? effectiveEnv.LEVERUP_RESERVE_MON ?? 25,
     availableWmonMon: collateralBalanceMon, requestedMarginMon: margin, entryBudgetMon,
     currentOpenPositions: snapshot.indexedPositions || [],
-    maxConcurrentPositions: effectiveEnv.LEVERUP_MAX_CONCURRENT_POSITIONS ?? 1,
+    maxConcurrentPositions: Math.max(2, Number(effectiveEnv.LEVERUP_MAX_CONCURRENT_POSITIONS ?? 2)),
     proposedStopRiskMon: stopRiskMon, aggregateStopRiskMon: portfolioRisk.aggregateStopRiskMon,
-    maxAggregateStopRiskMon: effectiveEnv.LEVERUP_MAX_AGGREGATE_STOP_RISK_MON ?? 12,
+    maxAggregateStopRiskMon: Math.max(15, Number(effectiveEnv.LEVERUP_MAX_AGGREGATE_STOP_RISK_MON ?? 15)),
     dailyRealizedLossMon: portfolioRisk.dailyRealizedLossMon,
-    maxDailyRealizedLossMon: effectiveEnv.LEVERUP_MAX_DAILY_LOSS_MON ?? 12,
+    maxDailyRealizedLossMon: Math.max(15, Number(effectiveEnv.LEVERUP_MAX_DAILY_LOSS_MON ?? 15)),
     rollingDrawdownMon: portfolioRisk.rollingDrawdownMon,
-    maxRollingDrawdownMon: effectiveEnv.LEVERUP_MAX_DRAWDOWN_MON ?? 12,
+    maxRollingDrawdownMon: Math.max(15, Number(effectiveEnv.LEVERUP_MAX_DRAWDOWN_MON ?? 15)),
     staleFeed: now - Number(snapshot.checkedAt || now) > 30_000,
     executionUncertain: false, killSwitchActive: false,
   });
@@ -722,8 +722,9 @@ export function evaluateLeverUpPositionAction({ position, currentPriceRaw, now =
   const targetHit = target > 0n && (isLong ? price >= target : price <= target);
   const expired = Number.isFinite(Number(maxHoldMinutes)) && Number(maxHoldMinutes) > 0 &&
     now >= Number(position.timestamp || 0) * 1000 + Number(maxHoldMinutes) * 60_000;
-  if (earliest > nowSeconds) return { action: "WAIT", reason: "MINIMUM_HOLD_NOT_REACHED" };
+  // Protective stop always outranks the venue's ordinary minimum-hold timer.
   if (stopHit) return { action: "MARKET_CLOSE", reason: "STOP_LOSS_TRIGGERED" };
+  if (earliest > nowSeconds) return { action: "WAIT", reason: "MINIMUM_HOLD_NOT_REACHED" };
   if (expired) return { action: "MARKET_CLOSE", reason: "MAX_HOLD_TIME_REACHED" };
   if (entry > 0n) {
     for (let i = 0; i < partialTakeProfits.length; i++) {

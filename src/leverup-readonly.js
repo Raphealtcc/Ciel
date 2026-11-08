@@ -403,6 +403,7 @@ export async function readAgentAuthorization(traderAddress, agentAddress, { publ
     canMarketOpen: authorized && hasAgentPermission(permissions, 0),
     canMarketClose: authorized && hasAgentPermission(permissions, 1),
     canPartialClose: authorized && hasAgentPermission(permissions, 9),
+    canUpdateTpSl: authorized && hasAgentPermission(permissions, 7),
   };
 }
 
