@@ -916,28 +916,41 @@ async function reconcileClosedSettlements({ env, db, now, dependencies = {} }) {
   const entries = await readEntryMetadata(db);
   let reconciled = 0;
   for (const closed of history.filter((p) => p?.status === "CLOSED" && p?.closeInfo && p?.positionHash)) {
+    const positionHash = String(closed.positionHash).toLowerCase();
     const existing = await db.prepare("SELECT position_hash FROM leverup_settlement_reconciliations WHERE position_hash = ?")
-      .bind(closed.positionHash).first();
-    if (existing) continue;
+      .bind(positionHash).first();
     const latest = await db.prepare("SELECT * FROM leverup_position_fee_snapshots WHERE position_hash = ? ORDER BY observed_at_ms DESC LIMIT 1")
-      .bind(closed.positionHash).first();
-    const entry = entries.find((x) => String(x.positionHash || "").toLowerCase() === String(closed.positionHash).toLowerCase());
+      .bind(positionHash).first();
+    const entry = entries.find((x) => String(x.positionHash || "").toLowerCase() === positionHash);
     const lastSnapshot = latest ? {
       fundingFeeRaw: latest.funding_fee_raw, holdingFeeRaw: latest.holding_fee_raw,
     } : null;
     const settlement = reconcileClosedPosition(closed, lastSnapshot, entry?.plan?.preflight || null, {
       marginTokenDecimals: 18, marginTokenPriceUsd: null,
     });
-    await persistSettlementReconciliation(db, settlement, {
-      intentSignalId: entry?.signalId || null, source: "LeverUp closed-position history",
-      estimatedProtocolCosts: entry?.plan?.preflight?.estimatedProtocolCosts || null,
-    });
-    if (entry?.signalId) await updateIntent(db, entry.signalId, "RECONCILED", {
-      payload: { ...entry, settlement: serializable(settlement), reconciledAt: now },
-    });
-    try { await notifyLeverUpClosedTrade(env, closed, settlement, entry); }
-    catch (error) { console.error("LeverUp live close notification failed: " + String(error?.message || error).slice(0, 250)); }
-    reconciled++;
+    if (!existing) {
+      await persistSettlementReconciliation(db, settlement, {
+        intentSignalId: entry?.signalId || null, source: "LeverUp closed-position history",
+        closeReason: String(closed.closeInfo?.reason || closed.closeInfo?.closeReason || closed.closeInfo?.closeType || closed.closeInfo?.trigger || closed.closeInfo?.exitReason || "EXCHANGE_REPORTED_CLOSE"),
+        estimatedProtocolCosts: entry?.plan?.preflight?.estimatedProtocolCosts || null,
+      });
+      if (entry?.signalId) await updateIntent(db, entry.signalId, "RECONCILED", {
+        payload: { ...entry, settlement: serializable(settlement), reconciledAt: now },
+      });
+      reconciled++;
+    }
+    // Settlement persistence and Telegram delivery are separate idempotent steps.
+    // A prior DB write must not suppress a notification that failed or was skipped.
+    const notificationKey = "ciel:leverup:close-notified:v1:" + positionHash;
+    const alreadyNotified = await env?.CIEL_STATE?.get(notificationKey).catch(() => null);
+    if (!alreadyNotified) {
+      try {
+        await notifyLeverUpClosedTrade(env, closed, settlement, entry);
+        await env?.CIEL_STATE?.put(notificationKey, String(now), { expirationTtl: 365 * 24 * 3600 });
+      } catch (error) {
+        console.error("LeverUp live close notification failed: " + String(error?.message || error).slice(0, 250));
+      }
+    }
   }
   return { checked: history.length, reconciled };
 }
@@ -1214,8 +1227,7 @@ export async function runLeverUpPositionManager({ env, db, now = Date.now(), dep
     });
     if (result.submitted) submitted++;
   }
-  const settlements = positionMap.size === 0
-    ? await reconcileClosedSettlements({ env, db, now, dependencies }).catch((error) => ({ error: String(error?.message || error).slice(0, 200) }))
-    : { skippedWhilePositionOpen: true };
+  const settlements = await reconcileClosedSettlements({ env, db, now, dependencies })
+    .catch((error) => ({ error: String(error?.message || error).slice(0, 200) }));
   return { status: liveEnabled(env) ? "LIVE_MONITORING" : "READ_ONLY_MONITORING", checked: evaluated, submitted, snapshots, adaptiveUpdatesBlocked, closePermissionBlocked, canUpdateTpSl: Boolean(auth.canUpdateTpSl), openPositionCount: positionMap.size, pairBasesChecked: pairBases.length, reconciliation, settlements };
 }
