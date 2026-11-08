@@ -125,5 +125,8 @@ if (source.includes(dispatch)) source = source.replace(dispatch, dispatchReplace
 else if (!source.includes("if (await handleTradingModeCommand(env, command)) return;")) throw new Error("Telegram command dispatch anchor mismatch");
 
 const helpAnchor = '      "/test — verify Telegram delivery",';
-if (source.includes(helpAnchor)) source = source.replace(helpAnchor,\n  '      "/paperactive /paperdeactivate — toggle paper entries",\n      "/liveactive /livedeactivate — toggle live entries",\n      "/modes — show effective trading modes",\n      "/geministatus — Gemini keys, latest review and manager health",\n' + helpAnchor);\n\nawait writeFile(file, source);
+if (source.includes(helpAnchor)) source = source.replace(helpAnchor,
+  '      "/paperactive /paperdeactivate — toggle paper entries",\n      "/liveactive /livedeactivate — toggle live entries",\n      "/modes — show effective trading modes",\n      "/geministatus — Gemini keys, latest review and manager health",\n' + helpAnchor);
+
+await writeFile(file, source);
 console.log("Applied D1-backed Telegram trading-mode controls.");
