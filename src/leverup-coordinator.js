@@ -1112,7 +1112,7 @@ export async function purgeLeverUpPositions({ env, db, symbol = null, now = Date
   let nextNonce = BigInt(await (dependencies.readNonce || readLastAgentNonce)(traderAddress, agentAddress, { publicClient: client })) + 1n;
   let submitted = 0;
   const results = [];
-  const purgeEntries = await readEntryMetadata(db);
+  const purgeEntries = await readEntryMetadata(db).catch(() => []);
   for (const position of positions) {
     const pairView = pairViews.get(position.pairBase);
     if (!pairView?.slippageConfig?.enabled) {
