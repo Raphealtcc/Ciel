@@ -91,7 +91,7 @@ async function findExistingIntent(db, signalId, idempotencyKey) {
   return db.prepare("SELECT * FROM leverup_execution_intents WHERE idempotency_key = ?").bind(idempotencyKey).first();
 }
 
-async function claimIntent(db, { signalId, action, pairBase, leverage, marginMon, notionalUsd, payload, now, executionPath = "1ct" }) {
+async function claimIntent(db, { signalId, action, pairBase, leverage, marginMon, notionalUsd, payload, now, executionPath = "1ct", maxConcurrentPositions = 2 }) {
   if (!db?.prepare) throw new Error("LEVERUP_D1_LEDGER_UNAVAILABLE");
   const idempotencyKey = "ciel:leverup:" + executionPath + ":" + signalId;
   const existing = await findExistingIntent(db, signalId, idempotencyKey);
@@ -107,10 +107,12 @@ async function claimIntent(db, { signalId, action, pairBase, leverage, marginMon
     const duplicate = await findExistingIntent(db, signalId, idempotencyKey).catch(() => null);
     if (duplicate) return { created: false, row: duplicate };
     if (Number(action) === OneClickAction.MARKET_OPEN) {
-      const activeEntry = await db.prepare(`SELECT * FROM leverup_execution_intents
-        WHERE action = ? AND status IN ('PREPARED','UNCERTAIN','SUBMITTED','PENDING','EXECUTED')
-        ORDER BY created_at_ms DESC LIMIT 1`).bind(OneClickAction.MARKET_OPEN).first().catch(() => null);
-      if (activeEntry) return { created: false, row: activeEntry, blockedByActiveEntry: true };
+      const activeCount = await db.prepare(`SELECT COUNT(*) AS count FROM leverup_execution_intents
+        WHERE action = ? AND status IN ('PREPARED','UNCERTAIN','SUBMITTED','PENDING','EXECUTED')`)
+        .bind(OneClickAction.MARKET_OPEN).first().catch(() => null);
+      if (Number(activeCount?.count || 0) >= Number(maxConcurrentPositions)) {
+        return { created: false, row: { signal_id: null, status: "MAX_CONCURRENT_POSITIONS_REACHED" }, blockedByActiveEntry: true };
+      }
     }
     throw new Error("LEVERUP_IDEMPOTENCY_CLAIM_FAILED: " + String(error?.message || error).slice(0, 220));
   }
@@ -277,7 +279,8 @@ export async function submitLeverUpIntent({
   if (!liveEnabled(env) && !emergencyCloseEnabled) return { status: "LIVE_DISABLED", submitted: false };
   if (!signalId || !Number.isInteger(Number(action))) throw new Error("LEVERUP_INTENT_INPUT_INVALID");
   const claim = await claimIntent(db, { signalId, action, pairBase, leverage, marginMon, notionalUsd,
-    payload: { ...payload, action, actionValues: serializable(actionValues), feeToken, antiDdosFee: String(antiDdosFee) }, now });
+    payload: { ...payload, action, actionValues: serializable(actionValues), feeToken, antiDdosFee: String(antiDdosFee) }, now,
+    maxConcurrentPositions: 2 });
   if (!claim.created) {
     if (claim.blockedByActiveEntry) {
       return { status: "ENTRY_SLOT_RESERVED", submitted: false, blockedByActiveEntry: true, reservedSignalId: claim.row?.signal_id || null };

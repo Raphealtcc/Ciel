@@ -44,7 +44,7 @@ class FakeD1 {
         if (sql.startsWith("INSERT INTO leverup_execution_intents")) {
           const [signal_id,idempotency_key,pair_base,action,requested_leverage,margin_mon,notional_usd,payload_json,created_at_ms,updated_at_ms] = values;
           if (db.rows.has(signal_id) || [...db.rows.values()].some((r) => r.idempotency_key === idempotency_key)) throw new Error("UNIQUE constraint failed");
-          if (Number(action) === 0 && [...db.rows.values()].some((r) => Number(r.action) === 0 && ["PREPARED","UNCERTAIN","SUBMITTED","PENDING","EXECUTED"].includes(r.status))) throw new Error("UNIQUE constraint failed: idx_leverup_one_active_entry");
+          if (Number(action) === 0 && [...db.rows.values()].filter((r) => Number(r.action) === 0 && ["PREPARED","UNCERTAIN","SUBMITTED","PENDING","EXECUTED"].includes(r.status)).length >= 2) throw new Error("LEVERUP_MAX_TWO_ACTIVE_ENTRIES");
           db.rows.set(signal_id,{signal_id,idempotency_key,status:"PREPARED",pair_base,action,requested_leverage,margin_mon,notional_usd,payload_json,created_at_ms,updated_at_ms});
           return { meta: { changes: 1 } };
         }
@@ -62,6 +62,7 @@ class FakeD1 {
       async first() {
         if (sql.includes("WHERE signal_id = ?")) return db.rows.get(values[0]) || null;
         if (sql.includes("WHERE idempotency_key = ?")) return [...db.rows.values()].find((r) => r.idempotency_key === values[0]) || null;
+        if (sql.includes("SELECT COUNT(*) AS count FROM leverup_execution_intents")) return { count: [...db.rows.values()].filter((r) => Number(r.action) === Number(values[0]) && ["PREPARED","UNCERTAIN","SUBMITTED","PENDING","EXECUTED"].includes(r.status)).length };
         if (sql.includes("WHERE action = ? AND status IN")) return [...db.rows.values()].filter((r) => Number(r.action) === Number(values[0]) && ["PREPARED","UNCERTAIN","SUBMITTED","PENDING","EXECUTED"].includes(r.status)).sort((a,b)=>b.created_at_ms-a.created_at_ms)[0] || null;
         return null;
       },
@@ -106,12 +107,16 @@ const duplicate = await submitLeverUpIntent(args);
 assert.equal(duplicate.duplicate, true);
 assert.equal(approvalCalls, 1);
 assert.equal(submitCalls, 1);
-const reserved = await submitLeverUpIntent({ ...args, signalId: "ciel-signal-002" });
-assert.equal(reserved.status, "ENTRY_SLOT_RESERVED");
-assert.equal(reserved.blockedByActiveEntry, true);
-assert.equal(reserved.reservedSignalId, args.signalId);
-assert.equal(approvalCalls, 1, "reserved entry must not trigger approvals");
-assert.equal(submitCalls, 1, "reserved entry must not reach the hosted relayer");
+const second = await submitLeverUpIntent({ ...args, signalId: "ciel-signal-002" });
+assert.equal(second.status, "SUBMITTED", "a second distinct live entry must be permitted");
+assert.equal(second.submitted, true);
+assert.equal(approvalCalls, 2);
+assert.equal(submitCalls, 2);
+const third = await submitLeverUpIntent({ ...args, signalId: "ciel-signal-003" });
+assert.equal(third.status, "ENTRY_SLOT_RESERVED");
+assert.equal(third.blockedByActiveEntry, true);
+assert.equal(approvalCalls, 2, "third entry must not trigger approvals");
+assert.equal(submitCalls, 2, "third entry must not reach the hosted relayer");
 
 const failedReconciliation = await reconcilePendingLeverUpIntents({
   env, db, now: Date.now(),
@@ -184,6 +189,11 @@ assert.equal(finalTarget.reason, "TAKE_PROFIT_TRIGGERED");
 const stopped = evaluateLeverUpPositionAction({ position, currentPriceRaw: "98000000000000000000", now: Date.now() });
 assert.equal(stopped.action, "MARKET_CLOSE");
 assert.equal(stopped.reason, "STOP_LOSS_TRIGGERED");
+const stopDuringMinimumHold = evaluateLeverUpPositionAction({
+  position: { ...position, earliestCloseTime: String(Math.floor(Date.now()/1000)+300) },
+  currentPriceRaw: "98000000000000000000", now: Date.now(),
+});
+assert.equal(stopDuringMinimumHold.action, "MARKET_CLOSE", "protective stop must outrank minimum hold");
 const held = evaluateLeverUpPositionAction({
   position: { ...position, earliestCloseTime: String(Math.floor(Date.now()/1000)+300) },
   currentPriceRaw: "100000000000000000000", now: Date.now(),
