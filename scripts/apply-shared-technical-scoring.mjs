@@ -53,21 +53,24 @@ function ensureNoScoreFloor(variants, replacement, label) {
   console.log("Shared scoring: removed numerical floor from " + label);
 }
 
-const trendNoFloor = 'if (signal && isRecommendationScoreEligible(signal.confidence * 100) && (!isCore || signal.mode === "TREND_HOLD")) candidates.push(signal);';
-const scalpNoFloor = 'if (scalp && isRecommendationScoreEligible(scalp.confidence * 100)) candidates.push(scalp);';
-const continuationNoFloor = 'if (continuation && isRecommendationScoreEligible(continuation.confidence * 100)) candidates.push(continuation);';
+const trendNoFloor = 'if (signal && (!isCore || signal.mode === "TREND_HOLD")) candidates.push(signal);';
+const scalpNoFloor = 'if (scalp) candidates.push(scalp);';
+const continuationNoFloor = 'if (continuation) candidates.push(continuation);';
 
 ensureNoScoreFloor([
   'if (signal && isRecommendationScoreEligible(signal.confidence * 100) && signal.confidence >= Math.max(0.78, minimumConfidence) && (!isCore || signal.mode === "TREND_HOLD")) candidates.push(signal);',
-  'if (signal && signal.confidence >= minimumConfidence && (!isCore || signal.mode === "TREND_HOLD")) candidates.push(signal);'
+  'if (signal && signal.confidence >= minimumConfidence && (!isCore || signal.mode === "TREND_HOLD")) candidates.push(signal);',
+  'if (signal && (!isCore || signal.mode === "TREND_HOLD")) candidates.push(signal);'
 ], trendNoFloor, "trend-hold recommendations");
 ensureNoScoreFloor([
   'if (scalp && isRecommendationScoreEligible(scalp.confidence * 100) && scalp.confidence >= Math.max(0.78, minimumConfidence)) candidates.push(scalp);',
-  'if (scalp && scalp.confidence >= minimumConfidence) candidates.push(scalp);'
+  'if (scalp && scalp.confidence >= minimumConfidence) candidates.push(scalp);',
+  'if (scalp) candidates.push(scalp);'
 ], scalpNoFloor, "pullback-scalp recommendations");
 ensureNoScoreFloor([
   'if (continuation && isRecommendationScoreEligible(continuation.confidence * 100) && continuation.confidence >= Math.max(0.78, minimumConfidence)) candidates.push(continuation);',
-  'if (continuation && continuation.confidence >= minimumConfidence) candidates.push(continuation);'
+  'if (continuation && continuation.confidence >= minimumConfidence) candidates.push(continuation);',
+  'if (continuation) candidates.push(continuation);'
 ], continuationNoFloor, "trend-continuation recommendations");
 
 // The trend-hold candidate is already guarded by the earlier strategy-specific patch.
