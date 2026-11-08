@@ -55,9 +55,38 @@ export function evaluateAdaptiveLeverUpExit({ position, currentPriceRaw, state =
     }
   }
   const favourablePct = isLong ? pct(price, entry) : pct(entry, price);
+  const targetRaw = toBig(position.takeProfitRaw);
+  const targetDistancePct = targetRaw > 0n ? Math.abs(pct(targetRaw, entry)) : 0;
+  const peakFavourablePct = isLong ? pct(highWater, entry) : pct(entry, lowWater);
+  const givebackPct = Math.max(0, peakFavourablePct - favourablePct);
+  const profitProtectionArmPct = targetDistancePct > 0
+    ? targetDistancePct * 0.45
+    : Math.max(0.12, atrProxyPct * 2.5);
+  const profitProtectionArmed = peakFavourablePct >= profitProtectionArmPct;
+  const profitGivebackTriggered = profitProtectionArmed &&
+    givebackPct >= peakFavourablePct * 0.45 &&
+    favourablePct > 0 &&
+    (adverseTrend || adverseMomentum) &&
+    closeScore >= 2;
+  nextState.profitProtection = {
+    armed: profitProtectionArmed,
+    peakFavourablePct,
+    currentFavourablePct: favourablePct,
+    givebackPct,
+    armPct: profitProtectionArmPct,
+    updatedAt: now
+  };
+  if (profitGivebackTriggered) {
+    return {
+      action: "MARKET_CLOSE",
+      reason: "PROFIT_PROTECTION_PEAK_GIVEBACK",
+      closeScore, trendPct, momentumPct, atrProxyPct, favourablePct,
+      peakFavourablePct, givebackPct, state: nextState
+    };
+  }
   // Balanced mode requires multi-factor deterioration, not one noisy indicator.
   if (closeScore >= 3 && history.length >= 10 && favourablePct > 0) {
-    return { action: "MARKET_CLOSE", reason: "ADAPTIVE_MULTI_FACTOR_REVERSAL", closeScore, trendPct, momentumPct, atrProxyPct, favourablePct, state: nextState };
+    return { action: "MARKET_CLOSE", reason: "ADAPTIVE_MULTI_FACTOR_REVERSAL", closeScore, trendPct, momentumPct, atrProxyPct, favourablePct, peakFavourablePct, givebackPct, state: nextState };
   }
   if (proposedStop !== stop) {
     return { action: "UPDATE_TP_SL", reason: "ADAPTIVE_TRAILING_STOP_TIGHTEN", stopLossRaw: proposedStop.toString(), takeProfitRaw: toBig(position.takeProfitRaw).toString(), trendPct, momentumPct, atrProxyPct, closeScore, state: nextState };
