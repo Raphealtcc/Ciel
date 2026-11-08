@@ -13,4 +13,12 @@ assert.ok(worker.includes('readTradingControl(env, "ciel:control:live-entry-enab
   "live entries must remain disabled unless explicitly enabled in D1");
 assert.ok(!worker.includes('CIEL_STATE?.get("ciel:control:live-enabled")'),
   "the deployed Worker must not retain a KV trading-mode reader");
+assert.ok(worker.includes("let liveEntrySubmittedThisCycle=false,proposalCountThisCycle=0;"),
+  "the advisor must keep a per-scan live-entry guard and proposal counter");
+assert.ok(worker.includes("const maxProposalsPerCycle=3;"),
+  "the advisor should review and send multiple approved setups per scan");
+assert.ok(worker.includes("CYCLE_LIVE_ENTRY_LIMIT"),
+  "later proposals must remain recommendation-only after one live order is submitted");
+assert.ok(worker.includes("proposalCountThisCycle >= maxProposalsPerCycle") && worker.includes("continue;"),
+  "the advisor must continue reviewing candidates until the proposal cap is reached");
 console.log("PASS: bundled advisor, scheduled handler, feed and Telegram mode readers use D1.");
