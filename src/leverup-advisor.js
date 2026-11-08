@@ -29,6 +29,7 @@ export function buildBudgetedLeverUpPlan({ buildPlan, planArgs, maxEntryBudgetMo
 }
 
 import { inspectLeverUpTraderSigner } from "./leverup-approval.js";
+import { isRecommendationScoreEligible } from "./technical-scoring.js";
 
 const WMON = LEVERUP_TOKENS.WMON.toLowerCase();
 // These USD limits preserve the prior MON caps at the reference MON/USD quote
@@ -127,6 +128,11 @@ export async function prepareLeverUpAdvisorPlan({
     liveExecutionEnabled: liveMode, killSwitchEnabled: !liveMode, ...extra,
   });
   if (!candidate?.symbol) return result("BLOCKED", "CIEL candidate symbol is missing.");
+  if (candidate?.confidence != null && !isRecommendationScoreEligible(Number(candidate.confidence) * 100)) {
+    return result("BLOCKED_SCORE_BELOW_MINIMUM",
+      "CIEL technical score is below the required 78/100 minimum; no LeverUp entry will be prepared.",
+      { technicalScore: Number(candidate.confidence) * 100, minimumTechnicalScore: 78 });
+  }
   if (reviewed?.verdict !== "APPROVE" || technicalOnly) return result("NOT_APPROVED",
     "CIEL did not produce a fully confirmed APPROVE; LeverUp entry preflight was not attempted.");
   if (String(env?.LEVERUP_PREFLIGHT_ENABLED || "").toLowerCase() !== "true") return result("DISABLED",
