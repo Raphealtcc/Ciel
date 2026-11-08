@@ -40,9 +40,19 @@ once(
 );
 
 once(
-  'if (signal && signal.confidence >= setting(env.ADVISORY_MIN_CONFIDENCE, 0.72, 0.5, 0.95)) candidates.push(signal);',
-  'if (signal && isRecommendationScoreEligible(signal.confidence * 100) && signal.confidence >= setting(env.ADVISORY_MIN_CONFIDENCE, 0.72, 0.5, 0.95)) candidates.push(signal);',
-  "suppress every recommendation below the fixed 78/100 score floor"
+  'if (signal && signal.confidence >= minimumConfidence && (!isCore || signal.mode === "TREND_HOLD")) candidates.push(signal);',
+  'if (signal && isRecommendationScoreEligible(signal.confidence * 100) && signal.confidence >= Math.max(0.78, minimumConfidence) && (!isCore || signal.mode === "TREND_HOLD")) candidates.push(signal);',
+  "suppress trend-hold recommendations below the fixed 78/100 score floor"
+);
+once(
+  'if (scalp && scalp.confidence >= minimumConfidence) candidates.push(scalp);',
+  'if (scalp && isRecommendationScoreEligible(scalp.confidence * 100) && scalp.confidence >= Math.max(0.78, minimumConfidence)) candidates.push(scalp);',
+  "suppress pullback-scalp recommendations below the fixed 78/100 score floor"
+);
+once(
+  'if (continuation && continuation.confidence >= minimumConfidence) candidates.push(continuation);',
+  'if (continuation && isRecommendationScoreEligible(continuation.confidence * 100) && continuation.confidence >= Math.max(0.78, minimumConfidence)) candidates.push(continuation);',
+  "suppress trend-continuation recommendations below the fixed 78/100 score floor"
 );
 
 once(
