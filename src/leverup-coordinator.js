@@ -941,16 +941,21 @@ async function reconcileClosedSettlements({ env, db, now, dependencies = {} }) {
     const settlement = reconcileClosedPosition(closed, lastSnapshot, entry?.plan?.preflight || null, {
       marginTokenDecimals: 18, marginTokenPriceUsd: null,
     });
+    const closeReason = String(closed.closeInfo?.reason || closed.closeInfo?.closeReason || closed.closeInfo?.closeType || closed.closeInfo?.trigger || closed.closeInfo?.exitReason || "EXCHANGE_REPORTED_CLOSE");
     if (!existing) {
       await persistSettlementReconciliation(db, settlement, {
         intentSignalId: entry?.signalId || null, source: "LeverUp closed-position history",
-        closeReason: String(closed.closeInfo?.reason || closed.closeInfo?.closeReason || closed.closeInfo?.closeType || closed.closeInfo?.trigger || closed.closeInfo?.exitReason || "EXCHANGE_REPORTED_CLOSE"),
+        closeReason,
         estimatedProtocolCosts: entry?.plan?.preflight?.estimatedProtocolCosts || null,
       });
       if (entry?.signalId) await updateIntent(db, entry.signalId, "RECONCILED", {
         payload: { ...entry, settlement: serializable(settlement), reconciledAt: now },
       });
       reconciled++;
+    } else {
+      // Backfill the original settlement row with its signal and close reason.
+      await db.prepare("UPDATE leverup_settlement_reconciliations SET source_json = json_patch(COALESCE(source_json, '{}'), ?) WHERE position_hash = ?")
+        .bind(JSON.stringify({ intentSignalId: entry?.signalId || null, closeReason }), positionHash).run();
     }
     // Settlement persistence and Telegram delivery are separate idempotent steps.
     // A prior DB write must not suppress a notification that failed or was skipped.
