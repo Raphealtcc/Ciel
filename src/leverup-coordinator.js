@@ -109,7 +109,7 @@ async function claimIntent(db, { signalId, action, pairBase, leverage, marginMon
     if (duplicate) return { created: false, row: duplicate };
     if (Number(action) === OneClickAction.MARKET_OPEN) {
       const activeCount = await db.prepare(`SELECT COUNT(*) AS count FROM leverup_execution_intents
-        WHERE action = ? AND status IN ('PREPARED','UNCERTAIN','SUBMITTED','PENDING','EXECUTED')`)
+        WHERE action = ? AND status IN ('PREPARED','UNCERTAIN','SUBMITTED','PENDING','EXECUTED','RECONCILED')`)
         .bind(OneClickAction.MARKET_OPEN).first().catch(() => null);
       if (Number(activeCount?.count || 0) >= Number(maxConcurrentPositions)) {
         return { created: false, row: { signal_id: null, status: "MAX_CONCURRENT_POSITIONS_REACHED" }, blockedByActiveEntry: true };
@@ -430,7 +430,7 @@ async function readPortfolioRiskFromLedger(db, now) {
     db.prepare("SELECT net_pnl_after_fees_raw FROM leverup_settlement_reconciliations ORDER BY close_time DESC LIMIT 300").all(),
   ]);
   const [activeEntries] = await Promise.all([
-    db.prepare("SELECT payload_json FROM leverup_execution_intents WHERE action = 0 AND status IN ('EXECUTED','SUBMITTED','PENDING','UNCERTAIN')").all(),
+    db.prepare("SELECT payload_json FROM leverup_execution_intents WHERE action = 0 AND status IN ('EXECUTED','RECONCILED','SUBMITTED','PENDING','UNCERTAIN')").all(),
   ]);
   const toMon = (raw) => Number(BigInt(raw || "0")) / 1e18;
   const dailyRealizedLossMon = (daily.results || []).reduce((sum, row) => sum + Math.max(0, -toMon(row.net_pnl_after_fees_raw)), 0);
@@ -750,7 +750,7 @@ export function evaluateLeverUpPositionAction({ position, currentPriceRaw, now =
 
 async function readEntryMetadata(db) {
   if (!db?.prepare) return [];
-  const result = await db.prepare("SELECT signal_id,pair_base,payload_json,status FROM leverup_execution_intents WHERE action = 0 AND status IN ('EXECUTED','SUBMITTED','PENDING','UNCERTAIN')").all();
+  const result = await db.prepare("SELECT signal_id,pair_base,payload_json,status FROM leverup_execution_intents WHERE action = 0 AND status IN ('EXECUTED','RECONCILED','SUBMITTED','PENDING','UNCERTAIN')").all();
   return (result.results || []).map((row) => {
     try { return { signalId: row.signal_id, pairBase: row.pair_base || null, intentStatus: row.status, ...JSON.parse(row.payload_json || "{}") }; }
     catch { return { signalId: row.signal_id, pairBase: row.pair_base || null, intentStatus: row.status }; }
@@ -869,7 +869,7 @@ export async function reconcilePendingLeverUpIntents({ env, db, now = Date.now()
 
 async function reconcileClosedSettlements({ env, db, now, dependencies = {} }) {
   if (!db?.prepare) return { checked: 0, reconciled: 0 };
-  const unsettled = await db.prepare("SELECT COUNT(*) AS count FROM leverup_execution_intents WHERE action = 0 AND status IN ('EXECUTED','CLOSED','SUBMITTED','PENDING')").first();
+  const unsettled = await db.prepare("SELECT COUNT(*) AS count FROM leverup_execution_intents WHERE action = 0 AND status IN ('EXECUTED','RECONCILED','CLOSED','SUBMITTED','PENDING')").first();
   if (!Number(unsettled?.count || 0)) return { checked: 0, reconciled: 0, noUnsettledEntries: true };
   const throttleKey = "ciel:leverup:settlement:last-check:v1";
   const lastCheck = Number(await env?.CIEL_STATE?.get(throttleKey).catch(() => "0") || 0);
@@ -1104,7 +1104,7 @@ export async function runLeverUpPositionManager({ env, db, now = Date.now(), dep
   // Release an entry slot only after the on-chain pair read confirms its position is gone.
   for (const entry of entries) {
     const hash = String(entry.positionHash || "").toLowerCase();
-    if (entry.intentStatus !== "EXECUTED" || !/^0x[0-9a-f]{64}$/.test(hash) || positionMap.has(hash)) continue;
+    if (!['EXECUTED','RECONCILED'].includes(entry.intentStatus) || !/^0x[0-9a-f]{64}$/.test(hash) || positionMap.has(hash)) continue;
     await updateIntent(db, entry.signalId, "CLOSED", {
       payload: { ...entry, closedAt: now, closeReconciledByOnchainPositionRead: true },
     });
