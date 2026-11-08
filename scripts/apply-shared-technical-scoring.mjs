@@ -4,7 +4,7 @@ import path from "node:path";
 const file = path.join(process.cwd(), "reconstructed", "patched-worker.js");
 let source = await readFile(file, "utf8");
 
-const importLine = 'import { scoreTechnicalEvidence } from "../src/technical-scoring.js";';
+const importLine = 'import { scoreTechnicalEvidence, isRecommendationScoreEligible } from "../src/technical-scoring.js";';
 if (!source.includes(importLine)) source = importLine + "\n" + source;
 
 function once(before, after, label) {
@@ -37,6 +37,12 @@ once(
   'scoreModel:"regime-switch-v3", strategy:votes.join("+"),',
   'scoreModel:"ciel-shared-v1", scoreDetails:sharedTechnicalScore, strategy:votes.join("+"),',
   "tag paper score model and expose component/coverage details"
+);
+
+once(
+  'if (signal && signal.confidence >= setting(env.ADVISORY_MIN_CONFIDENCE, 0.72, 0.5, 0.95)) candidates.push(signal);',
+  'if (signal && isRecommendationScoreEligible(signal.confidence * 100) && signal.confidence >= setting(env.ADVISORY_MIN_CONFIDENCE, 0.72, 0.5, 0.95)) candidates.push(signal);',
+  "suppress every recommendation below the fixed 78/100 score floor"
 );
 
 await writeFile(file, source);
