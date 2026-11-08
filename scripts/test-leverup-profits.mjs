@@ -49,8 +49,12 @@ const report = await buildLeverUpProfitReport({
   },
   fetchImpl,
   publicClient,
+  readBalances: async () => ({ "0x91b81bfbe3a747230f0529aa28d8b2bc898e6d56": { balance: 12n * 10n ** 18n, allowance: 0n } }),
 });
 assert.match(report, /CIEL LIVE TRADING/);
+assert.match(report, /Configured starting live allocation: 70.0000 LVMON/);
+assert.match(report, /Available LVMON wallet balance: 12.0000 LVMON/);
+assert.match(report, /Open LVMON margin reserved: 0.0000 LVMON/);
 assert.match(report, /WMON \(MON\): \+1\.0000 token units/);
 assert.match(report, /1 currently open/);
 assert.match(report, /RECENT LIVE ENTRY ATTEMPTS/);
