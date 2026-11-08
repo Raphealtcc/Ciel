@@ -10,7 +10,7 @@ const output = path.join(project, "reconstructed");
 const modules = [
   ["symbols.js", 1647],
   ["cloudflare-forecast.js", 4425],
-  ["advisor.js", 118873],
+  ["advisor.js", 125619],
   ["telegram.js", 13973],
   ["hyperliquid_feed.js", 50261],
   ["index.js", 26321],
@@ -49,7 +49,7 @@ if (preamble.length !== 391) {
 }
 
 const worker = preamble + recoveredModules.join("");
-if (worker.length !== 215891) {
+if (worker.length !== 222637) {
   throw new Error(`Integrity check failed for full Worker: expected 215891, got ${worker.length}`);
 }
 
