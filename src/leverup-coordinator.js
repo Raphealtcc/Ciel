@@ -1112,6 +1112,7 @@ export async function purgeLeverUpPositions({ env, db, symbol = null, now = Date
   let nextNonce = BigInt(await (dependencies.readNonce || readLastAgentNonce)(traderAddress, agentAddress, { publicClient: client })) + 1n;
   let submitted = 0;
   const results = [];
+  const purgeEntries = await readEntryMetadata(db);
   for (const position of positions) {
     const pairView = pairViews.get(position.pairBase);
     if (!pairView?.slippageConfig?.enabled) {
@@ -1125,14 +1126,17 @@ export async function purgeLeverUpPositions({ env, db, symbol = null, now = Date
       const fee = selectFeeToken(oneClickAction, antiDdos.config, balances, [], { requireAllowance: false });
       const nonce = nextNonce;
       nextNonce += 1n;
-      const signalId = "manual-purge-" + position.positionHash.toLowerCase();
+      const linkedEntry = purgeEntries.filter((entry) => String(entry.positionHash || "").toLowerCase() === position.positionHash.toLowerCase())
+        .sort((a,b) => Number(b.executedAt || b.createdAt || 0) - Number(a.executedAt || a.createdAt || 0))[0] || null;
+      const tradeId = leverUpTradeInstanceId(linkedEntry) || ("unlinked:" + position.positionHash.toLowerCase() + ":" + now);
+      const signalId = "manual-purge-" + tradeId + "-" + now;
       const result = await submitLeverUpIntent({
         env, db, signalId, action: oneClickAction, actionValues, traderAddress, agentAddress,
         agentAuthorization: auth, nonce: nonce.toString(), deadline: Math.floor(now / 1000) + 300,
         feeToken: fee.feeToken, antiDdosFee: fee.antiDdosFee,
         allowanceRequirements: fee.feeToken.toLowerCase() === ZERO.toLowerCase() ? [] : [{ tokenAddress: fee.feeToken, amount: fee.antiDdosFee }],
         pairBase: position.pairBase,
-        payload: { positionHash: position.positionHash, action: "MANUAL_PURGE", requestedSymbol, symbol: position.purgeSymbol },
+        payload: { tradeId, positionHash: position.positionHash, action: "MANUAL_PURGE", requestedSymbol, symbol: position.purgeSymbol },
         now, dependencies, allowRiskReducingClose: true,
       });
       if (result.submitted) submitted++;
