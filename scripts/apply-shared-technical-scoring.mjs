@@ -53,14 +53,14 @@ function ensureNoScoreFloor(variants, replacement, label) {
   console.log("Shared scoring: removed numerical floor from " + label);
 }
 
-const trendNoFloor = 'if (signal && signal.confidence >= setting(env.ADVISORY_MIN_CONFIDENCE, 0.72, 0.5, 0.95) && (!isCore || signal.mode === "TREND_HOLD")) candidates.push(signal);';
+const trendNoFloor = 'if (signal && signal.confidence >= setting(env.ADVISORY_MIN_CONFIDENCE, 0.72, 0.5, 0.95) && (!isCore || signal.mode === "TREND_HOLD" || signal.mode === "RANGE_SCALP")) candidates.push(signal);';
 const scalpNoFloor = 'if (scalp && scalp.confidence >= setting(env.ADVISORY_MIN_CONFIDENCE, 0.72, 0.5, 0.95)) candidates.push(scalp);';
 const continuationNoFloor = 'if (continuation && continuation.confidence >= setting(env.ADVISORY_MIN_CONFIDENCE, 0.72, 0.5, 0.95)) candidates.push(continuation);';
 
 ensureNoScoreFloor([
-  'if (signal && isRecommendationScoreEligible(signal.confidence * 100) && signal.confidence >= Math.max(0.78, minimumConfidence) && (!isCore || signal.mode === "TREND_HOLD")) candidates.push(signal);',
-  'if (signal && signal.confidence >= minimumConfidence && (!isCore || signal.mode === "TREND_HOLD")) candidates.push(signal);',
-  'if (signal && (!isCore || signal.mode === "TREND_HOLD")) candidates.push(signal);'
+  'if (signal && isRecommendationScoreEligible(signal.confidence * 100) && signal.confidence >= Math.max(0.78, minimumConfidence) && (!isCore || signal.mode === "TREND_HOLD" || signal.mode === "RANGE_SCALP")) candidates.push(signal);',
+  'if (signal && signal.confidence >= minimumConfidence && (!isCore || signal.mode === "TREND_HOLD" || signal.mode === "RANGE_SCALP")) candidates.push(signal);',
+  'if (signal && (!isCore || signal.mode === "TREND_HOLD" || signal.mode === "RANGE_SCALP")) candidates.push(signal);'
 ], trendNoFloor, "trend-hold recommendations");
 ensureNoScoreFloor([
   'if (scalp && isRecommendationScoreEligible(scalp.confidence * 100) && scalp.confidence >= Math.max(0.78, minimumConfidence)) candidates.push(scalp);',

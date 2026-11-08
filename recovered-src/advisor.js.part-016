@@ -17,7 +17,7 @@
     } else {
       const minimumForecastMovePct = Math.max(0.08, candidate.stopPct * 0.30);
       const aligned = candidate.side === "LONG" ? Number(forecast.medianReturnPct) >= minimumForecastMovePct : Number(forecast.medianReturnPct) <= -minimumForecastMovePct;
-      if (!aligned) {
+      if (!aligned && candidate.mode !== "RANGE_SCALP" && !String(candidate.strategy || "").includes("1M_SWING_REVERSAL")) {
         const reason = "The five-minute forecast did not support a sufficiently meaningful move in this direction; required magnitude " + minimumForecastMovePct.toFixed(3) + "% for this stop distance.";
         await env.DB.prepare("INSERT INTO advisor_ai_audit(created_at_ms,symbol,side,model,verdict,reason,risk_flags,search_queries,grounding_sources,forecast_json,market_context_json) VALUES(?,?,?,?,?,?,?,?,?,?,?)").bind(now, candidate.symbol, candidate.side, "CIEL Statistical Ensemble v1 + technical gate", "WAIT", reason, JSON.stringify(["LOCAL_FORECAST_DIRECTION_CONFLICT","FORECAST_TOO_SMALL_FOR_STOP"]), JSON.stringify([]), JSON.stringify([]), JSON.stringify(forecast), JSON.stringify(reviewerMarket)).run();
         console.log("Ciel skipped " + candidate.symbol + ": " + reason);
