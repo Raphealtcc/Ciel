@@ -6,8 +6,8 @@ const helperStart=source.indexOf("function buildAdaptiveLearningProfile");
 const advisorStart=source.indexOf("async function runAdvisorCycle",helperStart);
 assert.ok(helperStart>=0&&advisorStart>helperStart);
 const context=vm.createContext({__name(){}});
-vm.runInContext(source.slice(helperStart,advisorStart)+"\nglobalThis.learningTests={buildAdaptiveLearningProfile,adaptiveCandidateMultiplier,analyzeCoreTrendContinuation};",context);
-const {buildAdaptiveLearningProfile,adaptiveCandidateMultiplier,analyzeCoreTrendContinuation}=context.learningTests;
+vm.runInContext(source.slice(helperStart,advisorStart)+"\nglobalThis.learningTests={buildAdaptiveLearningProfile,adaptiveCandidateMultiplier,analyzeCoreTrendContinuation,analyzeMicroMomentumContinuation};",context);
+const {buildAdaptiveLearningProfile,adaptiveCandidateMultiplier,analyzeCoreTrendContinuation,analyzeMicroMomentumContinuation}=context.learningTests;
 const now=1800000000000;
 const trade=(i,pnl,mode="CORE_PULLBACK_SCALP",symbol="BTC")=>({status:"CLOSED",closedAtMs:now-i*60000,signalId:"s"+i,symbol,mode,grossPnlMon:pnl,marginMon:10,bestFavorableMovePct:Math.max(0,pnl),closeReason:pnl>0?"TAKE_PROFIT":"STOP_LOSS"});
 const insufficient=buildAdaptiveLearningProfile(Array.from({length:7},(_,i)=>trade(i,1)),now);
@@ -67,8 +67,25 @@ assert.equal(continuationShort?.side,"SHORT");
 assert.equal(continuationLong?.mode,"CORE_TREND_CONTINUATION");
 assert.ok(continuationLong.stopPct<=0.45&&continuationShort.stopPct<=0.45);
 assert.equal(analyzeCoreTrendContinuation("BTC",trendCandles(1).slice(0,20),now),null);
+function microRows(direction){
+  const rows=[];
+  for(let i=0;i<20;i++){
+    let price=100;
+    if(i>=10)price+=direction*(i-9)*0.03;
+    if(i>=15)price+=direction*(i-14)*0.05;
+    rows.push({ts_ms:now-(20-i)*60000,mid_price:price});
+  }
+  return rows;
+}
+const microLong=analyzeMicroMomentumContinuation("BTC",microRows(1),now);
+const microShort=analyzeMicroMomentumContinuation("ETH",microRows(-1),now);
+assert.equal(microLong?.side,"LONG");
+assert.equal(microShort?.side,"SHORT");
+assert.equal(microLong?.mode,"TREND_HOLD");
+assert.ok(microLong.stopPct<=0.45&&microShort.stopPct<=0.45);
+assert.equal(analyzeMicroMomentumContinuation("BTC",microRows(1).slice(0,8),now),null);
 
-assert.ok(source.includes("function analyzeCoreTrendContinuation"));
+assert.ok(source.includes("function analyzeCoreTrendContinuation"));\nassert.ok(source.includes("function analyzeMicroMomentumContinuation"));\nassert.ok(source.includes("1M_MICRO_MOMENTUM_BREAKOUT"));
 assert.ok(source.includes("CORE_TREND_CONTINUATION"));
 assert.ok(source.includes("5M_STRUCTURE+EMA+MACD+RSI+BREAKOUT_RETEST"));
 assert.ok(source.includes("corePullbackScalp: modeStats(\"CORE_PULLBACK_SCALP\")"));
