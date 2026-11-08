@@ -59,6 +59,36 @@ function adaptiveCandidateMultiplier(profile,candidate) {
   return selected&&selected.trades>=8?Math.max(0.9,Math.min(1.1,Number(selected.multiplier)||1)):1;
 }
 __name(adaptiveCandidateMultiplier,"adaptiveCandidateMultiplier");
+
+function analyzeMicroMomentumContinuation(symbol,rows,now){
+  const points=(Array.isArray(rows)?rows:[]).map(row=>({t:Number(row.ts_ms),p:Number(row.mid_price)}))
+    .filter(point=>point.t>0&&point.p>0&&Number.isFinite(point.t)&&Number.isFinite(point.p)).sort((a,b)=>a.t-b.t).slice(-40);
+  if(points.length<12)return null;
+  const last=points[points.length-1];
+  if(now-last.t>90e3||last.t>now+15e3)return null;
+  const recent=points.slice(-11);
+  for(let i=1;i<recent.length;i++)if(recent[i].t-recent[i-1].t>120e3)return null;
+  const at=(minutes)=>{for(let i=points.length-2;i>=0;i--)if(points[i].t<=last.t-minutes*6e4)return points[i];return null;};
+  const p3=at(3),p5=at(5),p10=at(10);
+  if(!p3||!p5||!p10)return null;
+  const r3=(last.p/p3.p-1)*100,r5=(last.p/p5.p-1)*100,r10=(last.p/p10.p-1)*100;
+  const prior=points.slice(-11,-1);
+  if(prior.length<8)return null;
+  const priorHigh=Math.max(...prior.map(point=>point.p)),priorLow=Math.min(...prior.map(point=>point.p));
+  const closes=points.slice(-8).map(point=>point.p),k=2/6;
+  let microEma=closes[0];for(let i=1;i<closes.length;i++)microEma=closes[i]*k+microEma*(1-k);
+  let side=null;
+  if(r3>=0.08&&r5>=0.12&&r10>=0.16&&last.p>priorHigh*1.0002&&last.p>microEma)side="LONG";
+  else if(r3<=-0.08&&r5<=-0.12&&r10<=-0.16&&last.p<priorLow*0.9998&&last.p<microEma)side="SHORT";
+  if(!side)return null;
+  const swing=side==="LONG"?Math.min(...points.slice(-6).map(point=>point.p)):Math.max(...points.slice(-6).map(point=>point.p));
+  const stopPct=Math.max(0.12,(side==="LONG"?(last.p-swing):(swing-last.p))/last.p*100+0.05);
+  if(!(stopPct<=0.45))return null;
+  const targetPct=Math.max(0.3,stopPct*1.6);
+  const confidence=Math.min(0.84,0.73+Math.min(0.05,(Math.abs(r5)-0.12)*0.08)+Math.min(0.04,(Math.abs(r10)-0.16)*0.05));
+  return {symbol,side,entry:last.p,stopPct,targetPct,confidence,scoreComponents:["1M_MOMENTUM","3M_CONFIRMATION","5M_CONFIRMATION","10M_RANGE_BREAKOUT","MICRO_EMA_CONFIRMATION"],scoreModel:"hyperliquid-micro-momentum-v1",strategy:"1M_MICRO_MOMENTUM_BREAKOUT",regime:side==="LONG"?"TREND_UP":"TREND_DOWN",mode:"TREND_HOLD",holdMinutes:45,rsi:null,bounce:null,cci:null,stochRsi:null,rangePositionPct:null,reason:"Hyperliquid in-memory mid-price history confirms aligned 3m/5m/10m momentum, a fresh 10-minute range breakout and micro-EMA direction. No additional candle-table writes are required."};
+}
+__name(analyzeMicroMomentumContinuation,"analyzeMicroMomentumContinuation");
 `;
 const signature="async function runAdvisorCycle(env, prices, now, lastTickAt, priceHistory, liveEvidence, paperStorage, coreScalpCandles = {}, coreTrendCandles = {}) {";
 once(signature,learningHelpers+"\nfunction analyzeCoreTrendContinuation(symbol, fiveMinuteRows, now) {\n  const rows=(Array.isArray(fiveMinuteRows)?fiveMinuteRows:[]).map(row=>({\n    t:Number(row.close_ts_ms||row.open_ts_ms+300e3),o:Number(row.open_price),h:Number(row.high_price),\n    l:Number(row.low_price),c:Number(row.close_price),v:Number(row.volume)||0\n  })).filter(c=>c.t>0&&[c.o,c.h,c.l,c.c].every(v=>Number.isFinite(v)&&v>0)).sort((a,b)=>a.t-b.t);\n  if(rows.length<40)return null;\n  const last=rows[rows.length-1],breakout=rows[rows.length-2];\n  if(now-last.t>7*60e3||last.t>now+15e3)return null;\n  const ema=(values,period)=>{if(values.length<period)return NaN;const k=2/(period+1);let v=values[0];for(let i=1;i<values.length;i++)v=values[i]*k+v*(1-k);return v;};\n  const closes=rows.map(c=>c.c),fast=ema(closes.slice(-30),9),slow=ema(closes.slice(-30),21),priorFast=ema(closes.slice(-31,-1),9);\n  if(![fast,slow,priorFast].every(Number.isFinite))return null;\n  const atrRows=rows.slice(-15),atr=atrRows.reduce((s,c)=>s+c.h-c.l,0)/atrRows.length;\n  if(!(atr>0))return null;\n  const base=rows.slice(-25,-5),resistance=Math.max(...base.map(c=>c.h)),support=Math.min(...base.map(c=>c.l));\n  const avgVol=rows.slice(-21,-1).reduce((s,c)=>s+c.v,0)/20;\n  if(avgVol>0&&last.v<avgVol*0.8)return null;\n  let side=null,pivot=0,level=0;\n  if(fast>slow&&fast>priorFast&&breakout.c>resistance+atr*0.05&&last.l<=resistance+atr*0.35&&last.l>=resistance-atr*0.35&&last.c>resistance&&last.c>last.o){\n    side=\"LONG\";level=resistance;pivot=Math.min(last.l,breakout.l);\n  } else if(fast<slow&&fast<priorFast&&breakout.c<support-atr*0.05&&last.h>=support-atr*0.35&&last.h<=support+atr*0.35&&last.c<support&&last.c<last.o){\n    side=\"SHORT\";level=support;pivot=Math.max(last.h,breakout.h);\n  }\n  if(!side)return null;\n  const raw=side===\"LONG\"?(last.c-pivot+atr*0.1)/last.c*100:(pivot-last.c+atr*0.1)/last.c*100;\n  const stopPct=Math.max(0.12,raw);\n  if(!(stopPct<=0.45))return null;\n  const targetPct=Math.max(0.3,stopPct*1.8);\n  const confidence=Math.min(0.86,0.75+Math.min(0.06,Math.abs(last.c-last.o)/last.c*0.1)+(avgVol<=0||last.v>=avgVol?0.02:0));\n  return {symbol,side,entry:last.c,stopPct,targetPct,confidence,scoreComponents:[\"5M_EMA_TREND\",\"5M_RANGE_BREAKOUT\",\"5M_BREAKOUT_RETEST\",\"VOLUME_CONFIRMATION\"],scoreModel:\"core-5m-breakout-retest-v1\",strategy:\"5M_TREND_CONTINUATION+BREAKOUT_RETEST\",regime:side===\"LONG\"?\"TREND_UP\":\"TREND_DOWN\",mode:\"CORE_TREND_CONTINUATION\",holdMinutes:60,rsi:null,bounce:null,cci:null,stochRsi:null,rangePositionPct:null,reason:\"Closed 5m candles confirm EMA9/EMA21 trend, a prior 20-candle range breakout, and a retest that holds the broken level with volume confirmation.\"};\n}\n__name(analyzeCoreTrendContinuation,\"analyzeCoreTrendContinuation\");\n"+signature,"add bounded paper learning and 5m trend-continuation helpers");
@@ -90,9 +120,11 @@ const oldCandidateBuild = `    const signal = analyzeCandleLevelReversal(sym,mar
       }
     }`;
 const newCandidateBuild = `    const beforeCount = candidates.length;
-    const signal = analyzeCandleLevelReversal(sym,marketRows,candleStructureRows.get(sym),now) || analyse(sym,marketRows,now);
+    const baseSignal = analyzeCandleLevelReversal(sym,marketRows,candleStructureRows.get(sym),now) || analyse(sym,marketRows,now);
+    const confidenceFloor = setting(env.ADVISORY_MIN_CONFIDENCE,0.72,0.5,0.95);
+    const signal = baseSignal && baseSignal.confidence >= confidenceFloor ? baseSignal : analyzeMicroMomentumContinuation(sym,marketRows,now);
     const isCore = coreMarketSet.has(sym);
-    if (signal && signal.confidence >= setting(env.ADVISORY_MIN_CONFIDENCE,0.72,0.5,0.95) && (!isCore || signal.mode === "TREND_HOLD" || signal.mode === "RANGE_SCALP")) candidates.push(signal);
+    if (signal && signal.confidence >= confidenceFloor && (!isCore || signal.mode === "TREND_HOLD" || signal.mode === "RANGE_SCALP")) candidates.push(signal);
     else if (isCore) scanDiagnostics.push({symbol:sym,strategy:"TREND_HOLD",reason:signal ? "BELOW_CONFIDENCE_THRESHOLD" : "NO_VALID_TREND_SIGNAL"});
     if (isCore) {
       const candles = coreScalpData.get(sym);
