@@ -60,6 +60,7 @@ const continuationNoFloor = 'if (continuation && continuation.confidence >= sett
 ensureNoScoreFloor([
   'if (signal && isRecommendationScoreEligible(signal.confidence * 100) && signal.confidence >= Math.max(0.78, minimumConfidence) && (!isCore || signal.mode === "TREND_HOLD" || signal.mode === "RANGE_SCALP")) candidates.push(signal);',
   'if (signal && signal.confidence >= minimumConfidence && (!isCore || signal.mode === "TREND_HOLD" || signal.mode === "RANGE_SCALP")) candidates.push(signal);',
+  'if (signal && signal.confidence >= setting(env.ADVISORY_MIN_CONFIDENCE,0.72,0.5,0.95) && (!isCore || signal.mode === "TREND_HOLD" || signal.mode === "RANGE_SCALP")) candidates.push(signal);',
   'if (signal && (!isCore || signal.mode === "TREND_HOLD" || signal.mode === "RANGE_SCALP")) candidates.push(signal);'
 ], trendNoFloor, "trend-hold recommendations");
 ensureNoScoreFloor([
