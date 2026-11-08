@@ -10,8 +10,6 @@ assert.equal(long.status, "LOW_SCORE_FILTERED");
 assert.equal(long.signal, null);
 assert.equal(long.scoreFiltered, true);
 assert.equal(long.minimumTechnicalScore, 78);
-assert.equal(long.signal.side, "LONG");
-assert.equal(long.signal.executionEligible, false);
 assert.ok(long.scoreFiltered, "native technical scores below 78 must not become recommendations");
 assert.equal(evaluateLeverUpNativeSeries("BTC", rows.slice(-20), now).status, "WARMING_UP");
 const gapped = rows.map((r,i)=>({...r,observed_at_ms:r.observed_at_ms-(i>30&&i<60?300_000:0)}));
