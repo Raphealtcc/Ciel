@@ -125,6 +125,14 @@ assert.equal(ready.coordination.status, "DRY_RUN_APPROVED",
   "dry-run portfolio checks must use the WMON balance and remain non-submitting");
 assert.equal(ready.minimumCollateralUsd, 0.23,
   "100x live advisor sizing must use the configured $0.23 LVMON collateral target");
+assert.equal(ready.minimumNotionalUsd, 20);
+assert.equal(ready.bufferedMinimumNotionalUsd, 21,
+  "the default 5% headroom must lift a $20 venue minimum to $21");
+assert.equal(ready.minimumNotionalBufferBps, 500);
+assert.ok(Math.abs(ready.collateralRatio - (21 / (100 * 0.23))) < 1e-12,
+  "100x collateral ratio must encode 5% notional headroom without increasing the configured collateral target");
+assert.ok(Math.abs((21 / (50 * 0.43)) - 0.9767441860465116) < 1e-12,
+  "50x HYPE sizing must also have headroom while retaining the $0.43 collateral target");
 assert.ok(Math.abs(ready.venueMinimumMarginMon - (0.23 / 0.019038)) < 1e-6,
   "100x minimum collateral must convert the $0.23 target using the fresh MON/USD oracle");
 assert.ok(Math.abs(ready.minimumMarginMon - (0.23 / 0.019038)) < 1e-6,
