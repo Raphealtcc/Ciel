@@ -103,6 +103,7 @@ assert.ok(helperScopeStart>=0&&helperScopeEnd>helperScopeStart);
 const topLevelHelpers=source.slice(helperScopeStart,helperScopeEnd);
 assert.ok(topLevelHelpers.includes("async function getCandleStructureMap("),"candle structure map helper must be top-level and visible to runAdvisorCycle");
 assert.ok(topLevelHelpers.includes("function analyzeCandleLevelReversal("),"candle-level reversal helper must be top-level and visible to runAdvisorCycle");
+assert.ok(topLevelHelpers.includes("async function getCandleStructureEvidence("),"candle evidence helper must be top-level and visible to runAdvisorCycle");
 assert.ok(source.includes("CIEL deterministic core trend continuation guard"));
 assert.ok(source.includes("LOCAL_CORE_TREND_CONTINUATION"));
 
