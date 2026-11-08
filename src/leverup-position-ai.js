@@ -75,7 +75,8 @@ export async function reviewLeverUpPositionWithGemini({ env, position, currentPr
       });
       if (!response.ok) {
         lastError = "GEMINI_HTTP_" + response.status;
-        if ([400, 404].includes(response.status)) break;
+        // Try every configured key for every HTTP failure, including 400/404.
+        // A failure on one key must not prevent trying the remaining keys.
         continue;
       }
       const body = await response.json();
