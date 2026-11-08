@@ -85,7 +85,7 @@ assert.equal(microLong?.mode,"TREND_HOLD");
 assert.ok(microLong.stopPct<=0.45&&microShort.stopPct<=0.45);
 assert.equal(analyzeMicroMomentumContinuation("BTC",microRows(1).slice(0,8),now),null);
 
-assert.ok(source.includes("function analyzeCoreTrendContinuation"));\nassert.ok(source.includes("function analyzeMicroMomentumContinuation"));\nassert.ok(source.includes("1M_MICRO_MOMENTUM_BREAKOUT"));
+assert.ok(source.includes("function analyzeCoreTrendContinuation"));\nassert.ok(source.includes("function analyzeMicroMomentumContinuation"));\nassert.ok(source.includes("NO_CONFIRMED_3M_5M_10M_RANGE_BREAKOUT"));\nassert.ok(source.includes("1M_MICRO_MOMENTUM_BREAKOUT"));
 assert.ok(source.includes("CORE_TREND_CONTINUATION"));
 assert.ok(source.includes("5M_STRUCTURE+EMA+MACD+RSI+BREAKOUT_RETEST"));
 assert.ok(source.includes("corePullbackScalp: modeStats(\"CORE_PULLBACK_SCALP\")"));
