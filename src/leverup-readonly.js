@@ -464,8 +464,9 @@ export async function persistLeverUpPreflight(db, signalId, preflight, {
 
 export async function persistPositionFeeSnapshot(db, position, sourceBlock = null, minIntervalMs = 300_000) {
   if (!db?.prepare || !position?.positionHash) throw new Error("POSITION_SNAPSHOT_PERSISTENCE_INPUT_INVALID");
-  const latest = await db.prepare("SELECT MAX(observed_at_ms) AS observed_at_ms FROM leverup_position_fee_snapshots WHERE position_hash = ?")
-    .bind(position.positionHash).first();
+  const openedAtMs = Number(position.timestamp || 0) * 1000;
+  const latest = await db.prepare("SELECT MAX(observed_at_ms) AS observed_at_ms FROM leverup_position_fee_snapshots WHERE position_hash = ? AND observed_at_ms >= ?")
+    .bind(position.positionHash, openedAtMs).first();
   if (latest?.observed_at_ms && Date.now() - Number(latest.observed_at_ms) < minIntervalMs) {
     return { stored: false, reason: "SNAPSHOT_INTERVAL_NOT_REACHED" };
   }
@@ -502,20 +503,7 @@ export async function persistSettlementReconciliation(db, settlement, source = {
       settlement.fundingSinceLastSnapshotRaw, settlement.holdingSinceLastSnapshotRaw,
       settlement.reconciledAt, JSON.stringify(source),
     ).run();
-  await db.prepare(`INSERT OR REPLACE INTO leverup_settlement_reconciliations (
-    position_hash, symbol, close_time, close_price_raw, gross_pnl_raw,
-    open_fee_raw, close_fee_raw, funding_fee_raw, holding_fee_raw,
-    total_net_costs_raw, net_pnl_after_fees_raw, funding_since_last_snapshot_raw,
-    holding_since_last_snapshot_raw, reconciled_at_ms, source_json
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-    .bind(
-      settlement.positionHash, settlement.pair, settlement.closeTime,
-      settlement.closePriceRaw, settlement.grossPnlRaw, settlement.openFeeRaw,
-      settlement.closeFeeRaw, settlement.fundingFeeRaw, settlement.holdingFeeRaw,
-      settlement.totalNetCostsRaw, settlement.netPnlAfterFeesRaw,
-      settlement.fundingSinceLastSnapshotRaw, settlement.holdingSinceLastSnapshotRaw,
-      settlement.reconciledAt, JSON.stringify(source),
-    ).run();
+  // New settlements are stored only under the per-trade key. Never replace legacy hash-keyed history.
 }
 
 export function selectLeverageTier(leverageMargins, notionalUsd) {

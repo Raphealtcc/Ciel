@@ -432,9 +432,9 @@ async function readPortfolioRiskFromLedger(db, now) {
   if (!db?.prepare) throw new Error("LEVERUP_RISK_LEDGER_UNAVAILABLE");
   const dayStartSeconds = Math.floor(Date.UTC(new Date(now).getUTCFullYear(), new Date(now).getUTCMonth(), new Date(now).getUTCDate()) / 1000);
   const [daily, history] = await Promise.all([
-    db.prepare("SELECT net_pnl_after_fees_raw FROM leverup_settlement_reconciliations WHERE close_time >= ? ORDER BY close_time ASC")
-      .bind(dayStartSeconds).all(),
-    db.prepare("SELECT net_pnl_after_fees_raw FROM leverup_settlement_reconciliations ORDER BY close_time DESC LIMIT 300").all(),
+    db.prepare("SELECT net_pnl_after_fees_raw, close_time FROM leverup_settlement_reconciliations WHERE close_time >= ? UNION ALL SELECT net_pnl_after_fees_raw, close_time FROM leverup_trade_settlements WHERE close_time >= ? ORDER BY close_time ASC")
+      .bind(dayStartSeconds, dayStartSeconds).all(),
+    db.prepare("SELECT net_pnl_after_fees_raw, close_time FROM (SELECT net_pnl_after_fees_raw, close_time FROM leverup_settlement_reconciliations UNION ALL SELECT net_pnl_after_fees_raw, close_time FROM leverup_trade_settlements) ORDER BY close_time DESC LIMIT 300").all(),
   ]);
   const [activeEntries] = await Promise.all([
     db.prepare("SELECT payload_json FROM leverup_execution_intents WHERE action = 0 AND status IN ('EXECUTED','RECONCILED','SUBMITTED','PENDING','UNCERTAIN') AND (status != 'RECONCILED' OR json_extract(payload_json,'$.closedAt') IS NULL)").all(),
@@ -952,8 +952,8 @@ async function reconcileClosedSettlements({ env, db, now, dependencies = {} }) {
     const tradeId = leverUpTradeInstanceId(entry) || ("legacy:" + positionHash + ":" + String(closed.closeInfo.closeTime || closed.closeInfo.timestamp || "unknown"));
     const existing = await db.prepare("SELECT trade_id FROM leverup_trade_settlements WHERE trade_id = ?")
       .bind(tradeId).first();
-    const latest = await db.prepare("SELECT * FROM leverup_position_fee_snapshots WHERE position_hash = ? ORDER BY observed_at_ms DESC LIMIT 1")
-      .bind(positionHash).first();
+    const latest = await db.prepare("SELECT * FROM leverup_position_fee_snapshots WHERE position_hash = ? AND observed_at_ms >= ? ORDER BY observed_at_ms DESC LIMIT 1")
+      .bind(positionHash, Number(entry?.executedAt || entry?.createdAt || 0)).first();
     const lastSnapshot = latest ? {
       fundingFeeRaw: latest.funding_fee_raw, holdingFeeRaw: latest.holding_fee_raw,
     } : null;
@@ -985,8 +985,8 @@ async function reconcileClosedSettlements({ env, db, now, dependencies = {} }) {
       reconciled++;
     } else {
       // Backfill the original settlement row with its signal and close reason.
-      await db.prepare("UPDATE leverup_settlement_reconciliations SET source_json = json_patch(COALESCE(source_json, '{}'), ?) WHERE position_hash = ?")
-        .bind(JSON.stringify({ intentSignalId: entry?.signalId || null, closeIntentSignalId: closeIntent?.signal_id || null, closeIntentStatus: closeIntent?.status || null, closeReason }), positionHash).run();
+      await db.prepare("UPDATE leverup_trade_settlements SET source_json = json_patch(COALESCE(source_json, '{}'), ?) WHERE trade_id = ?")
+        .bind(JSON.stringify({ intentSignalId: entry?.signalId || null, closeIntentSignalId: closeIntent?.signal_id || null, closeIntentStatus: closeIntent?.status || null, closeReason }), tradeId).run();
     }
     // Settlement persistence and Telegram delivery are separate idempotent steps.
     // A prior DB write must not suppress a notification that failed or was skipped.
