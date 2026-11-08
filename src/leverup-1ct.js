@@ -214,7 +214,7 @@ export async function signIntentDryRun({
   if (!/^0x[0-9a-fA-F]{40}$/.test(traderAddress || "")) throw new Error("LEVERUP_TRADER_ADDRESS_MISSING_OR_INVALID");
   if (!/^0x[0-9a-fA-F]{40}$/.test(agentAddress || "")) throw new Error("LEVERUP_AGENT_ADDRESS_MISSING_OR_INVALID");
   if (!agentAuthorization?.authorized || String(agentAuthorization.agentAddress).toLowerCase() !== agentAddress.toLowerCase()) throw new Error("LEVERUP_AGENT_NOT_VERIFIED_AUTHORIZED");
-  const permissionByAction = { 0: "canMarketOpen", 1: "canMarketClose", 9: "canPartialClose" };
+  const permissionByAction = { 0: "canMarketOpen", 1: "canMarketClose", 7: "canUpdateTpSl", 9: "canPartialClose" };
   const permission = permissionByAction[Number(action)];
   if (!permission || agentAuthorization[permission] !== true) throw new Error("LEVERUP_AGENT_ACTION_PERMISSION_MISSING");
   if (Number(action) === 0) {

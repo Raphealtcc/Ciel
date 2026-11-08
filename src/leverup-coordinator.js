@@ -1112,7 +1112,7 @@ export async function runLeverUpPositionManager({ env, db, now = Date.now(), dep
   const pairMap = new Map(pairViews);
   const feeTokens = (antiDdos.config || []).filter((x) => x.enabled && x.feeToken).map((x) => x.feeToken);
   const balances = await (dependencies.readBalances || readTokenBalancesAndAllowances)(traderAddress, feeTokens, { publicClient: client });
-  let submitted = 0, snapshots = 0, evaluated = 0;
+  let submitted = 0, snapshots = 0, evaluated = 0, adaptiveUpdatesBlocked = 0, closePermissionBlocked = 0;
   for (const [hash, position] of positionMap) {
     evaluated++;
     const pairView = pairMap.get(position.pairBase);
@@ -1150,9 +1150,9 @@ export async function runLeverUpPositionManager({ env, db, now = Date.now(), dep
       if (stored?.stored) snapshots++;
     }
     if (!liveEnabled(env) || action.action === "HOLD" || action.action === "WAIT") continue;
-    if (action.action === "MARKET_CLOSE" && !auth.canMarketClose) continue;
-    if (action.action === "PARTIAL_CLOSE" && !auth.canPartialClose) continue;
-    if (action.action === "UPDATE_TP_SL" && !auth.canUpdateTpSl) continue;
+    if (action.action === "MARKET_CLOSE" && !auth.canMarketClose) { closePermissionBlocked++; continue; }
+    if (action.action === "PARTIAL_CLOSE" && !auth.canPartialClose) { closePermissionBlocked++; continue; }
+    if (action.action === "UPDATE_TP_SL" && !auth.canUpdateTpSl) { adaptiveUpdatesBlocked++; continue; }
     const oneClickAction = action.action === "PARTIAL_CLOSE" ? OneClickAction.PARTIAL_CLOSE
       : action.action === "UPDATE_TP_SL" ? OneClickAction.UPDATE_TP_SL : OneClickAction.MARKET_CLOSE;
     const slippage = BigInt(position.isLong ? pairView.slippageConfig.slippageLongP : pairView.slippageConfig.slippageShortP);
@@ -1179,5 +1179,5 @@ export async function runLeverUpPositionManager({ env, db, now = Date.now(), dep
   const settlements = positionMap.size === 0
     ? await reconcileClosedSettlements({ env, db, now, dependencies }).catch((error) => ({ error: String(error?.message || error).slice(0, 200) }))
     : { skippedWhilePositionOpen: true };
-  return { status: liveEnabled(env) ? "LIVE_MONITORING" : "READ_ONLY_MONITORING", checked: evaluated, submitted, snapshots, openPositionCount: positionMap.size, pairBasesChecked: pairBases.length, reconciliation, settlements };
+  return { status: liveEnabled(env) ? "LIVE_MONITORING" : "READ_ONLY_MONITORING", checked: evaluated, submitted, snapshots, adaptiveUpdatesBlocked, closePermissionBlocked, canUpdateTpSl: Boolean(auth.canUpdateTpSl), openPositionCount: positionMap.size, pairBasesChecked: pairBases.length, reconciliation, settlements };
 }
