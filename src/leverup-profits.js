@@ -3,6 +3,8 @@ import {
   fetchLatestOraclePrices,
   fetchOpenPositions,
   readPositionsV4,
+  readTokenBalancesAndAllowances,
+  LEVERUP_TOKENS,
 } from "./leverup-readonly.js";
 
 const WMON = "0x3bd359c1119da7da1d913d1c4d2b7c461115433a";
@@ -65,6 +67,7 @@ async function readOpenPositionsWithUnrealizedPnl({ trader, fetchImpl, publicCli
       qtyRaw: qty.toString(),
       unrealizedUsdRaw,
       marginToken: String(position.marginToken || ""),
+      marginRaw: String(position.margin || "0"),
     });
   }
   return result;
@@ -74,6 +77,7 @@ export async function buildLeverUpProfitReport({
   env,
   fetchImpl = fetch,
   publicClient = createLeverUpPublicClient(env?.LEVERUP_RPC_URL || "https://rpc2.monad.xyz"),
+  readBalances = readTokenBalancesAndAllowances,
 }) {
   const trader = String(env?.LEVERUP_TRADER_ADDRESS || "");
   if (!/^0x[0-9a-fA-F]{40}$/.test(trader)) throw new Error("LEVERUP_TRADER_ADDRESS_MISSING_OR_INVALID");
@@ -111,6 +115,12 @@ export async function buildLeverUpProfitReport({
 
   let open = [];
   let unrealizedError = null;
+  let lvmonAvailableRaw = null;
+  let balanceError = null;
+  try {
+    const balances = await readBalances(trader, [LEVERUP_TOKENS.LVMON], { publicClient });
+    lvmonAvailableRaw = balances[LEVERUP_TOKENS.LVMON.toLowerCase()]?.balance ?? null;
+  } catch (error) { balanceError = String(error?.message || error).slice(0, 160); }
   try {
     open = await readOpenPositionsWithUnrealizedPnl({ trader, fetchImpl, publicClient });
   } catch (error) {
@@ -121,6 +131,9 @@ export async function buildLeverUpProfitReport({
     "🔴 CIEL LIVE TRADING — LEVERUP",
     "Account: " + trader,
     "Settled trades: " + settlements.length + " reconciled" + (unrealizedError ? " | open-position count unavailable" : " | " + open.length + " currently open"),
+    "Configured starting live allocation: 70.0000 LVMON (reference amount, not a verified opening balance)",
+    "Available LVMON wallet balance: " + (lvmonAvailableRaw === null ? "UNAVAILABLE" + (balanceError ? " — " + balanceError : "") : formatUnits(lvmonAvailableRaw, 18) + " LVMON"),
+    "Open LVMON margin reserved: " + (unrealizedError ? "UNAVAILABLE" : formatUnits(open.filter((x) => x.marginToken.toLowerCase() === LEVERUP_TOKENS.LVMON.toLowerCase()).reduce((sum, x) => sum + BigInt(x.marginRaw || "0"), 0n), 18) + " LVMON"),
   ];
   if (grouped.size) {
     lines.push("", "REALIZED NET P&L — AFTER RECORDED FEES / FUNDING");
