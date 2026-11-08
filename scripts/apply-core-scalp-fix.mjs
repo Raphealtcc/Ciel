@@ -105,6 +105,37 @@ const analyzer = `function analyzeCorePullbackScalp(symbol, oneMinuteRows, fiveM
   if (![fast5,slow5,priorFast5,fast1].every(Number.isFinite)) return null;
   const trendUp=fast5>slow5 && fast5>priorFast5 && last5.c>fast5;
   const trendDown=fast5<slow5 && fast5<priorFast5 && last5.c<fast5;
+  // Counter-trend reversal scalp, independent of the 5m EMA direction.
+  const reversalWindow=m1.slice(-18,-3), reversalContext=m1.slice(-25,-3);
+  if(reversalWindow.length>=12&&reversalContext.length>=15){
+    const swingLow=Math.min(...reversalWindow.map(c=>c.l)),swingHigh=Math.max(...reversalWindow.map(c=>c.h));
+    const priorHigh=Math.max(...reversalContext.map(c=>c.h)),priorLow=Math.min(...reversalContext.map(c=>c.l));
+    const reversalAtrRows=m1.slice(-15),reversalAtr=reversalAtrRows.reduce((sum,c)=>sum+c.h-c.l,0)/reversalAtrRows.length;
+    const reversalAvgVol=m1.slice(-21,-1).reduce((sum,c)=>sum+c.v,0)/20;
+    const reversalRsi=(values)=>{
+      if(values.length<15)return 50;
+      let gains=0,losses=0;
+      for(let i=values.length-14;i<values.length;i++){const delta=values[i]-values[i-1];if(delta>0)gains+=delta;else losses-=delta;}
+      return losses===0?100:100-100/(1+gains/losses);
+    };
+    const currentRsi=reversalRsi(closes1.slice(-15)),priorRsi=reversalRsi(closes1.slice(-16,-1));
+    const volumeOk=reversalAvgVol<=0||latest.v>=reversalAvgVol*0.65,recentTouches=m1.slice(-3,-1);
+    const longTouch=recentTouches.some(c=>c.l<=swingLow+reversalAtr*0.45),shortTouch=recentTouches.some(c=>c.h>=swingHigh-reversalAtr*0.45);
+    const declinePct=priorHigh>0?(priorHigh-swingLow)/priorHigh*100:0,rallyPct=priorLow>0?(swingHigh-priorLow)/priorLow*100:0;
+    let side=null,pivot=0;
+    if(reversalAtr>0&&declinePct>=0.18&&longTouch&&latest.c>latest.o&&latest.c>previous.h&&latest.c>swingLow+reversalAtr*0.5&&currentRsi>priorRsi&&currentRsi<=58&&volumeOk){side="LONG";pivot=Math.min(swingLow,...m1.slice(-3).map(c=>c.l));}
+    else if(reversalAtr>0&&rallyPct>=0.18&&shortTouch&&latest.c<latest.o&&latest.c<previous.l&&latest.c<swingHigh-reversalAtr*0.5&&currentRsi<priorRsi&&currentRsi>=42&&volumeOk){side="SHORT";pivot=Math.max(swingHigh,...m1.slice(-3).map(c=>c.h));}
+    if(side){
+      const entry=latest.c,rawStop=side==="LONG"?(entry-pivot)/entry*100:(pivot-entry)/entry*100,stopPct=Math.max(0.12,rawStop+0.04);
+      if(stopPct>0&&stopPct<=0.45){
+        return {symbol,side,entry,stopPct,targetPct:Math.max(0.25,stopPct*1.5),confidence:Math.min(0.88,0.79+(reversalAvgVol>0&&latest.v>=reversalAvgVol?0.03:0)),
+          scoreComponents:["1M_SWING_EXHAUSTION","1M_PIVOT_RECLAIM","1M_RSI_TURN","1M_VOLUME_CONFIRMATION"],scoreModel:"core-1m-swing-reversal-v1",
+          strategy:"1M_SWING_REVERSAL+RECLAIM",regime:"COUNTER_TREND_REVERSAL",mode:"CORE_PULLBACK_SCALP",holdMinutes:12,
+          rsi:currentRsi,bounce:null,cci:null,stochRsi:null,rangePositionPct:null,
+          reason:"Closed 1m candles confirm swing exhaustion, pivot retest, directional reclaim/rejection, improving RSI and volume. Evaluated independently of 5m EMA direction."};
+      }
+    }
+  }
   if (!trendUp && !trendDown) return null;
   const recent=m1.slice(-5,-1), latest=m1[m1.length-1], previous=m1[m1.length-2];
   const ranges=m1.slice(-15).map(c=>c.h-c.l).filter(v=>v>0);
@@ -190,7 +221,7 @@ once(
 
 once(
   '  for (const candidate of candidates) {\n    if (candidate.mode === "RANGE_SCALP" && eventIntel?.marketImpact === "BROAD_RISK_OFF") continue;\n    const cooldownMs = candidate.mode === "RANGE_SCALP" ? 10 * 6e4 : trendCooldownMs;',
-  '  for (const candidate of candidates) {\n    const isScalpMode = candidate.mode === "RANGE_SCALP" || candidate.mode === "CORE_PULLBACK_SCALP";\n    if (isScalpMode && eventIntel?.marketImpact === "BROAD_RISK_OFF") continue;\n    const cooldownMs = isScalpMode ? 10 * 6e4 : trendCooldownMs;',
+  '  for (const candidate of candidates) {\n    const isScalpMode = candidate.mode === "RANGE_SCALP" || candidate.mode === "CORE_PULLBACK_SCALP";\n    if (isScalpMode && eventIntel?.marketImpact === "BROAD_RISK_OFF") continue;\n    const cooldownMs = isScalpMode ? 3 * 6e4 : trendCooldownMs;',
   "evaluate scalp and trend candidates independently without symbol reservation",
 );
 

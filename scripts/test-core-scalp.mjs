@@ -14,7 +14,7 @@ assert.ok(source.includes('this.lastHistoryBootstrapAt = Number(values[27]) || 0
 assert.ok(!source.includes("processedCandidateSymbols"), "trend candidates must not reserve a symbol before scalp evaluation");
 assert.ok(source.includes("model='CIEL deterministic core scalp guard'"), "core scalp cooldown must be mode-specific");
 assert.ok(source.includes("model NOT IN ('CIEL Statistical Ensemble v1','CIEL Statistical Ensemble v1 + technical gate','CIEL deterministic range guard','CIEL deterministic core scalp guard'"), "trend cooldown must ignore scalp and pre-review gate rows");
-assert.ok(source.includes("if (!isScalpMode) { if(forecastChecks>=6) continue;"), "trend review budget must not starve deterministic scalp candidates");
+assert.ok(source.includes("if (!isScalpMode) { if(forecastChecks>=6) continue;"), "trend review budget must not starve deterministic scalp candidates");\nassert.ok(source.includes("const cooldownMs = isScalpMode ? 3 * 6e4 : trendCooldownMs;"), "scalp cooldown should permit frequent fresh setups");\nassert.ok(source.includes("1M_SWING_REVERSAL+RECLAIM"), "counter-trend reversal detector must be present");
 const blockedReview = source.match(/if \(reviewed\.verdict === "REJECT" \|\| reviewed\.verdict === "WAIT" && !waitFallback\) \{([\s\S]*?)\n    \}/);
 assert.ok(blockedReview && /continue;/.test(blockedReview[1]) && !/return;/.test(blockedReview[1]), "a blocked candidate must not abort the whole advisor cycle");
 assert.ok(source.includes('interval: "1m"'));
@@ -85,4 +85,23 @@ assert.equal(shortSignal.side, "SHORT");
 assert.equal(shortSignal.mode, "CORE_PULLBACK_SCALP");
 assert.ok(shortSignal.stopPct > 0 && shortSignal.stopPct <= 0.45, "short stop must fit the risk ceiling");
 
-console.log("PASS: core scalp rejects stale, incomplete, flat and no-pullback data, accepts long and short pullback/reclaims, and evaluates scalp/trend candidates independently.");
+
+// Counter-trend reversal fixtures: a declining market bottoms, retests, then reclaims.
+const reversalLong = Array.from({length:30},(_,i)=>{
+  let close=i<=23?101-i*0.04:i===24?100.05:i===25?100.02:i===26?99.98:i===27?99.95:i===28?99.92:100.30;
+  let open=close+0.01,high=open+0.02,low=close-0.02,volume=100;
+  if(i===27){open=100.02;high=100.04;low=99.92;close=99.95;volume=120;}
+  if(i===28){open=99.97;high=100.01;low=99.95;close=99.96;volume=140;}
+  if(i===29){open=99.90;high=100.35;low=99.95;close=100.30;volume=220;}
+  return {open_ts_ms:now-(30-i)*60e3,close_ts_ms:now-(30-i)*60e3+60e3-1,open_price:open,high_price:high,low_price:low,close_price:close,volume};
+});
+const reversalSignal=analyze("BTC",reversalLong,flatFive,now);
+assert.ok(reversalSignal,"counter-trend 1m reversal should trigger without 5m trend alignment");
+assert.equal(reversalSignal.side,"LONG");
+assert.equal(reversalSignal.strategy,"1M_SWING_REVERSAL+RECLAIM");
+assert.ok(reversalSignal.confidence>=0.72&&reversalSignal.stopPct<=0.45);
+const reversalShort=analyze("SOL",mirror(reversalLong),flatFive,now);
+assert.ok(reversalShort,"mirrored counter-trend short reversal should trigger");
+assert.equal(reversalShort.side,"SHORT");
+assert.equal(reversalShort.strategy,"1M_SWING_REVERSAL+RECLAIM");
+\nconsole.log("PASS: core scalp rejects stale, incomplete, flat and no-pullback data, accepts long and short pullback/reclaims, and evaluates scalp/trend candidates independently.");

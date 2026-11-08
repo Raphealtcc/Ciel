@@ -1,6 +1,6 @@
 // src/advisor.ts
 var MAX_AGE = 12e4;
-var CYCLE = 3e5;
+var CYCLE = 6e4;
 var MIN_SAMPLES = 180;
 var WORDS = ["Discipline", "Patience", "Focus", "Resilience", "Clarity", "Consistency", "Courage", "Precision", "Composure", "Steadiness"];
 var enc = /* @__PURE__ */ __name((s) => encodeURIComponent(s), "enc");

@@ -26,7 +26,7 @@ assert.ok(!source.includes("scalp.confidence >= minimumConfidence"));
 assert.ok(!source.includes("continuation.confidence >= minimumConfidence"));
 assert.ok(source.includes("Math.max(0.04, candidate.stopPct * 0.15)"));
 assert.ok(source.includes("candidate.rsi < 10") && source.includes("candidate.rsi > 90"));
-assert.ok(source.includes('const preferredGroup = Math.floor(now / CYCLE) % 3 === 2 ? "WATCHLIST" : "CORE"'));
+assert.ok(source.includes('const preferredGroup = Math.floor(now / (5 * 60e3)) % 3 === 2 ? "WATCHLIST" : "CORE"'));\nassert.ok(source.includes('signal.mode === "TREND_HOLD" || signal.mode === "RANGE_SCALP"'));\nassert.ok(source.includes("1M_SWING_REVERSAL+RECLAIM"));\nassert.ok(source.includes("var CYCLE = 6e4;"));
 assert.ok(source.includes("coreMarkets:[\"BTC\",\"ETH\",\"SOL\"],preferredGroup"));
 assert.ok(source.includes("scanDiagnostics:scanDiagnostics.slice(-120)"));
 assert.ok(source.includes('"INSUFFICIENT_CLOSED_CANDLE_HISTORY"'));
