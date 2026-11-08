@@ -125,9 +125,10 @@ const failedReconciliation = await reconcilePendingLeverUpIntents({
     fetchOpenPositions: async () => [],
   },
 });
-assert.equal(failedReconciliation.rejected, 1);
+assert.equal(failedReconciliation.rejected, 2, "both submitted live-entry intents must be reconciled independently");
 assert.equal(db.rows.get(args.signalId).status, "REJECTED");
 assert.match(db.rows.get(args.signalId).last_error, /price acceptable/);
+assert.equal(db.rows.get("ciel-signal-002").status, "REJECTED");
 
 const finalQuoteDb = new FakeD1();
 let submittedWithFinalQuote = null;
