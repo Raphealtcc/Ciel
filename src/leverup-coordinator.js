@@ -868,7 +868,7 @@ export async function reconcilePendingLeverUpIntents({ env, db, now = Date.now()
 
 async function reconcileClosedSettlements({ env, db, now, dependencies = {} }) {
   if (!db?.prepare) return { checked: 0, reconciled: 0 };
-  const unsettled = await db.prepare("SELECT COUNT(*) AS count FROM leverup_execution_intents WHERE action = 0 AND status IN ('EXECUTED','SUBMITTED','PENDING')").first();
+  const unsettled = await db.prepare("SELECT COUNT(*) AS count FROM leverup_execution_intents WHERE action = 0 AND status IN ('EXECUTED','CLOSED','SUBMITTED','PENDING')").first();
   if (!Number(unsettled?.count || 0)) return { checked: 0, reconciled: 0, noUnsettledEntries: true };
   const throttleKey = "ciel:leverup:settlement:last-check:v1";
   const lastCheck = Number(await env?.CIEL_STATE?.get(throttleKey).catch(() => "0") || 0);
@@ -1099,6 +1099,14 @@ export async function runLeverUpPositionManager({ env, db, now = Date.now(), dep
     entry.positionHash = position.positionHash;
     entry.executedAt = entry.executedAt || now;
     await updateIntent(db, entry.signalId, "EXECUTED", { payload: entry });
+  }
+  // Release an entry slot only after the on-chain pair read confirms its position is gone.
+  for (const entry of entries) {
+    const hash = String(entry.positionHash || "").toLowerCase();
+    if (entry.intentStatus !== "EXECUTED" || !/^0x[0-9a-f]{64}$/.test(hash) || positionMap.has(hash)) continue;
+    await updateIntent(db, entry.signalId, "CLOSED", {
+      payload: { ...entry, closedAt: now, closeReconciledByOnchainPositionRead: true },
+    });
   }
   const pairMap = new Map(pairViews);
   const feeTokens = (antiDdos.config || []).filter((x) => x.enabled && x.feeToken).map((x) => x.feeToken);
