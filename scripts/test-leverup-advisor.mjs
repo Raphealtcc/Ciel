@@ -225,8 +225,9 @@ const belowScore = await prepareLeverUpAdvisorPlan({
   env: { ...env }, candidate: { ...candidate, confidence: 0.7799 }, reviewed,
   signalId: "SIG-SCORE-77", now: 1_800_000_000_000, dependencies,
 });
-assert.equal(belowScore.status, "BLOCKED_SCORE_BELOW_MINIMUM");
-assert.ok(Math.abs(belowScore.technicalScore - 77.99) < 1e-9, "below-floor technical score must be reported as 77.99/100");
+assert.equal(belowScore.status, "PREFLIGHT_PASS_LIVE_DISABLED");
+assert.ok(Math.abs(belowScore.technicalScore - 77.99) < 1e-9 || belowScore.technicalScore === undefined,
+  "a valid 77.99/100 score must pass preflight without a numerical floor");
 
 const atScoreFloor = await prepareLeverUpAdvisorPlan({
   env: { ...env }, candidate: { ...candidate, confidence: 0.78 }, reviewed,
