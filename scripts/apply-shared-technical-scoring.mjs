@@ -45,5 +45,11 @@ once(
   "suppress every recommendation below the fixed 78/100 score floor"
 );
 
+once(
+  'if (signal && signal.confidence >= setting(env.ADVISORY_MIN_CONFIDENCE, 0.72, 0.5, 0.95)) candidates.push(signal);',
+  'if (signal && isRecommendationScoreEligible(signal.confidence * 100) && signal.confidence >= setting(env.ADVISORY_MIN_CONFIDENCE, 0.72, 0.5, 0.95)) candidates.push(signal);',
+  "suppress every recommendation below the fixed 78/100 score floor"
+);
+
 await writeFile(file, source);
 console.log("Wrote shared-score Worker candidate: " + file);
