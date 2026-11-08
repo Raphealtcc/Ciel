@@ -1,5 +1,4 @@
-const parseKeys = (value) => [...new Set(String(value || "").split(/[,
-;]+/).map((key) => key.trim()).filter(Boolean))];
+const parseKeys = (value) => [...new Set(String(value || "").split(/[,;\n]+/).map((key) => key.trim()).filter(Boolean))];
 
 export function parseGeminiApiKeys(value) {
   return parseKeys(value);
