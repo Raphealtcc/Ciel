@@ -868,6 +868,37 @@ export async function reconcilePendingLeverUpIntents({ env, db, now = Date.now()
   return { checked: rows.length, reconciled, skipped, rejected, uncertain };
 }
 
+async function notifyLeverUpClosedTrade(env, closed, settlement, entry) {
+  const token = String(env?.TELEGRAM_BOT_TOKEN || "").trim();
+  const chatId = String(env?.TELEGRAM_CHAT_ID || "").trim();
+  if (!token || !chatId) throw new Error("TELEGRAM_CLOSE_ALERT_NOT_CONFIGURED");
+  const close = closed.closeInfo || {};
+  const side = closed.isLong === true || closed.side === "LONG" ? "LONG" : closed.isLong === false || closed.side === "SHORT" ? "SHORT" : "SIDE UNKNOWN";
+  const symbol = String(closed.pair || closed.symbol || entry?.candidate?.symbol || entry?.plan?.preflight?.symbol || "UNKNOWN");
+  const reason = String(close.reason || close.closeReason || close.closeType || close.trigger || "EXCHANGE_REPORTED_CLOSE");
+  const net = BigInt(settlement.netPnlAfterFeesRaw || "0");
+  const gross = BigInt(settlement.grossPnlRaw || "0");
+  const sign = (v) => (v > 0n ? "+" : "") + (Number(v) / 1e18).toFixed(6);
+  const lines = [
+    "🔴 CIEL LIVE TRADE CLOSED",
+    side + " " + symbol + " | " + reason,
+    "Exit price: " + String(Number(settlement.closePriceRaw) / 1e18),
+    "Net realised P&L: " + sign(net) + " LVMON",
+    "Gross P&L: " + sign(gross) + " LVMON",
+    "Trading fees: " + sign(-BigInt(settlement.totalTradingFeesRaw || "0")) + " LVMON",
+    "Funding: " + sign(BigInt(settlement.fundingFeeRaw || "0")) + " LVMON | holding fee: " + sign(BigInt(settlement.holdingFeeRaw || "0")) + " LVMON",
+    "Signal: " + String(entry?.signalId || "not linked") + " | position: " + String(closed.positionHash || "unknown"),
+    "Settlement source: LeverUp closed-position history; net includes recorded fees and carry."
+  ];
+  const response = await (env?.FETCH || fetch)("https://api.telegram.org/bot" + token + "/sendMessage", {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ chat_id: chatId, text: lines.join("\\n").slice(0, 3900), disable_web_page_preview: true }),
+    signal: AbortSignal.timeout(8000),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || payload.ok !== true) throw new Error("TELEGRAM_LIVE_CLOSE_ALERT_FAILED: " + String(payload.description || response.status).slice(0, 180));
+}
+
 async function reconcileClosedSettlements({ env, db, now, dependencies = {} }) {
   if (!db?.prepare) return { checked: 0, reconciled: 0 };
   const unsettled = await db.prepare("SELECT COUNT(*) AS count FROM leverup_execution_intents WHERE action = 0 AND status IN ('EXECUTED','RECONCILED','CLOSED','SUBMITTED','PENDING')").first();
@@ -900,6 +931,8 @@ async function reconcileClosedSettlements({ env, db, now, dependencies = {} }) {
     if (entry?.signalId) await updateIntent(db, entry.signalId, "RECONCILED", {
       payload: { ...entry, settlement: serializable(settlement), reconciledAt: now },
     });
+    try { await notifyLeverUpClosedTrade(env, closed, settlement, entry); }
+    catch (error) { console.error("LeverUp live close notification failed: " + String(error?.message || error).slice(0, 250)); }
     reconciled++;
   }
   return { checked: history.length, reconciled };
