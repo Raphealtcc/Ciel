@@ -161,9 +161,21 @@ export async function prepareLeverUpAdvisorPlan({
   }
 
   const account = accountSummary(snapshot);
-  if (Array.isArray(snapshot.indexedPositions) && snapshot.indexedPositions.length > 0) {
-    const blocked = result("BLOCKED_EXISTING_POSITION",
-      "The trader already has an open LeverUp position. CIEL will not add exposure until it is reconciled or closed.", { account });
+  // Position discovery must be complete before considering another entry. A missing
+  // index is not the same as an empty account; fail closed rather than risk stacking
+  // against an incomplete snapshot.
+  if (!Array.isArray(snapshot?.indexedPositions)) {
+    const blocked = result("BLOCKED_POSITION_SNAPSHOT_UNAVAILABLE",
+      "Open LeverUp positions could not be verified. No additional exposure will be opened.", { account });
+    await savePreflight(env, signalId, blocked); return blocked;
+  }
+  const configuredMaxPositions = Number(env?.LEVERUP_MAX_CONCURRENT_POSITIONS ?? 2);
+  const maxConcurrentPositions = Number.isFinite(configuredMaxPositions)
+    ? Math.max(2, Math.floor(configuredMaxPositions)) : 2;
+  if (snapshot.indexedPositions.length >= maxConcurrentPositions) {
+    const blocked = result("BLOCKED_MAX_CONCURRENT_POSITIONS",
+      `The LeverUp account already has ${snapshot.indexedPositions.length} open positions; the configured limit is ${maxConcurrentPositions}. No additional entry will be opened.`,
+      { account, maxConcurrentPositions });
     await savePreflight(env, signalId, blocked); return blocked;
   }
   try {
