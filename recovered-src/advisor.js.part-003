@@ -72,7 +72,7 @@ eData.microEma &&
 __name(analyse, "analyse");
 
 async function review(env, s, forecast, market, intraday, eventIntel = null) {
-  const keys = [env.GEMINI_API_KEY_1, env.GEMINI_API_KEY_2, env.GEMINI_API_KEY_3, env.GEMINI_API_KEY_4, env.GEMINI_API_KEY_5, env.GEMINI_API_KEY_6, env.GEMINI_API_KEY_7].map((x) => (x || "").trim()).filter(Boolean);
+  const keys = [...new Set(String(env.GEMINI_API_KEYS || "").split(/[,;\n]+/).map((x) => x.trim()).filter(Boolean))];
   let model = (env.GEMINI_MODEL || "gemini-3.8-flash").trim();
   const models = [...new Set([model, "gemini-3.8-flash", "gemini-3.6-flash"])];
   const wait = /* @__PURE__ */ __name((reason, flag) => ({ verdict: "WAIT", reason, flags: [flag], model, queries: [], sources: [] }), "wait");
