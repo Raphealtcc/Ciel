@@ -227,9 +227,9 @@ once(
 );
 
 once(
-  '  for (const candidate of candidates) {\n    const isScalpMode = candidate.mode === "RANGE_SCALP" || candidate.mode === "CORE_PULLBACK_SCALP";\n    const isMicroMomentum = candidate.strategy === "1M_MICRO_MOMENTUM_BREAKOUT";\n    if (isScalpMode && eventIntel?.marketImpact === "BROAD_RISK_OFF") continue;\n    const cooldownMs = isScalpMode ? 3 * 6e4 : isMicroMomentum ? 5 * 6e4 : trendCooldownMs;',
-  '  for (const candidate of candidates) {\n    const isScalpMode = candidate.mode === "RANGE_SCALP" || candidate.mode === "CORE_PULLBACK_SCALP";\n    if (isScalpMode && eventIntel?.marketImpact === "BROAD_RISK_OFF") continue;\n    const cooldownMs = isScalpMode ? 3 * 6e4 : trendCooldownMs;',
-  "evaluate scalp and trend candidates independently without symbol reservation",
+  '  for (const candidate of candidates) {\\n    if (candidate.mode === "RANGE_SCALP" && eventIntel?.marketImpact === "BROAD_RISK_OFF") continue;\\n    const cooldownMs = candidate.mode === "RANGE_SCALP" ? 10 * 6e4 : trendCooldownMs;',
+  '  for (const candidate of candidates) {\\n    const isScalpMode = candidate.mode === "RANGE_SCALP" || candidate.mode === "CORE_PULLBACK_SCALP";\\n    const isMicroMomentum = candidate.strategy === "1M_MICRO_MOMENTUM_BREAKOUT";\\n    if (isScalpMode && eventIntel?.marketImpact === "BROAD_RISK_OFF") continue;\\n    const cooldownMs = isScalpMode ? 3 * 6e4 : isMicroMomentum ? 5 * 6e4 : trendCooldownMs;',
+  "evaluate scalp and trend candidates independently and re-review micro momentum after five minutes",
 );
 
 
