@@ -46,6 +46,11 @@ const serializable = (value) => JSON.parse(JSON.stringify(value, (_k, v) => type
 const liveEnabled = (env) => String(env?.LEVERUP_LIVE_TRADING).toLowerCase() === "true" &&
   String(env?.LEVERUP_KILL_SWITCH).toLowerCase() === "false";
 
+export function leverUpTradeInstanceId(entry) {
+  const id = String(entry?.tradeId || entry?.signalId || "").trim();
+  return id || null;
+}
+
 export async function prepareLeverUpExecution({ signal, preflight, account, portfolio, env, store, now = Date.now() }) {
   const signalId = String(signal?.id || "");
   if (!signalId) throw new Error("SIGNAL_ID_REQUIRED");
@@ -535,7 +540,7 @@ export async function submitLeverUpNativeOnchainEntry({
     if (matches.length === 1) {
       const position = normalizePositionAccrual(matches[0]);
       await updateIntent(db, signalId, "EXECUTED", {
-        payload: { executionPath: "ONCHAIN_NATIVE", candidate, plan: serializable(plan), transactionHash: hash, positionHash: position.positionHash, receiptBlock: String(receipt.blockNumber), executedAt: now },
+        payload: { executionPath: "ONCHAIN_NATIVE", candidate, plan: serializable(plan), transactionHash: hash, tradeId: signalId, positionHash: position.positionHash, receiptBlock: String(receipt.blockNumber), executedAt: now },
       });
       return { status: "EXECUTED", submitted: true, transactionHash: hash, positionHash: position.positionHash, signalId };
     }
@@ -752,10 +757,10 @@ export function evaluateLeverUpPositionAction({ position, currentPriceRaw, now =
 
 async function readEntryMetadata(db) {
   if (!db?.prepare) return [];
-  const result = await db.prepare("SELECT signal_id,pair_base,payload_json,status FROM leverup_execution_intents WHERE action = 0 AND status IN ('EXECUTED','RECONCILED','SUBMITTED','PENDING','UNCERTAIN') AND (status != 'RECONCILED' OR json_extract(payload_json,'$.closedAt') IS NULL)").all();
+  const result = await db.prepare("SELECT signal_id,pair_base,payload_json,status,created_at_ms FROM leverup_execution_intents WHERE action = 0 AND status IN ('EXECUTED','RECONCILED','CLOSED','SUBMITTED','PENDING','UNCERTAIN')").all();
   return (result.results || []).map((row) => {
-    try { return { signalId: row.signal_id, pairBase: row.pair_base || null, intentStatus: row.status, ...JSON.parse(row.payload_json || "{}") }; }
-    catch { return { signalId: row.signal_id, pairBase: row.pair_base || null, intentStatus: row.status }; }
+    try { return { signalId: row.signal_id, tradeId: row.signal_id, pairBase: row.pair_base || null, intentStatus: row.status, createdAt: Number(row.created_at_ms || 0), ...JSON.parse(row.payload_json || "{}") }; }
+    catch { return { signalId: row.signal_id, tradeId: row.signal_id, pairBase: row.pair_base || null, intentStatus: row.status, createdAt: Number(row.created_at_ms || 0) }; }
   });
 }
 
@@ -794,7 +799,7 @@ export async function reconcilePendingLeverUpIntents({ env, db, now = Date.now()
         const matches = (positions || []).filter((p) => Boolean(p.isLong) === isLong);
         if (matches.length === 1) {
           const position = normalizePositionAccrual(matches[0]);
-          await updateIntent(db, row.signal_id, "EXECUTED", { payload: { ...payload, positionHash: position.positionHash, executedAt: now, keeperPending: false } });
+          await updateIntent(db, row.signal_id, "EXECUTED", { payload: { ...payload, tradeId: row.signal_id, positionHash: position.positionHash, executedAt: now, keeperPending: false } });
           reconciled++;
         } else {
           await updateIntent(db, row.signal_id, "PENDING", { payload: { ...payload, lastPositionCheckAt: now, keeperPending: true, ambiguousPositionMatches: matches.length } });
@@ -839,6 +844,7 @@ export async function reconcilePendingLeverUpIntents({ env, db, now = Date.now()
           await updateIntent(db, row.signal_id, "PENDING", { payload: { ...payload, intentStatus: state, indexingLag: !indexed, chainMatchAmbiguous: chainMatches.length > 1 } });
           continue;
         }
+        payload.tradeId = row.signal_id;
         payload.positionHash = chainMatch.positionHash;
         payload.executedAt = now;
         await updateIntent(db, row.signal_id, "EXECUTED", { payload });
@@ -927,19 +933,26 @@ async function reconcileClosedSettlements({ env, db, now, dependencies = {} }) {
   let reconciled = 0;
   for (const closed of history.filter((p) => p?.status === "CLOSED" && p?.closeInfo && p?.positionHash)) {
     const positionHash = String(closed.positionHash).toLowerCase();
-    const existing = await db.prepare("SELECT position_hash FROM leverup_settlement_reconciliations WHERE position_hash = ?")
-      .bind(positionHash).first();
+    const closeTimeMs = Number(closed.closeInfo.closeTime || closed.closeInfo.closedAt || closed.closeInfo.timestamp || 0) * (Number(closed.closeInfo.closeTime || 0) < 10_000_000_000 ? 1000 : 1);
+    const matchingEntries = entries.filter((x) => String(x.positionHash || "").toLowerCase() === positionHash)
+      .filter((x) => !Number(x.executedAt || x.createdAt) || !closeTimeMs || Number(x.executedAt || x.createdAt) <= closeTimeMs)
+      .sort((a,b) => Number(b.executedAt || b.createdAt || 0) - Number(a.executedAt || a.createdAt || 0));
+    const entry = matchingEntries[0] || null;
+    const tradeId = leverUpTradeInstanceId(entry) || ("legacy:" + positionHash + ":" + String(closed.closeInfo.closeTime || closed.closeInfo.timestamp || "unknown"));
+    const existing = await db.prepare("SELECT trade_id FROM leverup_trade_settlements WHERE trade_id = ?")
+      .bind(tradeId).first();
     const latest = await db.prepare("SELECT * FROM leverup_position_fee_snapshots WHERE position_hash = ? ORDER BY observed_at_ms DESC LIMIT 1")
       .bind(positionHash).first();
-    let entry = entries.find((x) => String(x.positionHash || "").toLowerCase() === positionHash);
+    let entry = matchingEntries[0] || null;
     if (!entry) {
-      const closedEntry = await db.prepare(`SELECT signal_id,pair_base,payload_json,status
+      const closedEntry = await db.prepare(`SELECT signal_id,pair_base,payload_json,status,created_at_ms
         FROM leverup_execution_intents
         WHERE action = 0 AND lower(json_extract(payload_json, '$.positionHash')) = ?
         ORDER BY created_at_ms DESC LIMIT 1`).bind(positionHash).first();
       if (closedEntry) {
-        entry = { signalId: closedEntry.signal_id, pairBase: closedEntry.pair_base || null,
-          intentStatus: closedEntry.status, ...serializable(JSON.parse(closedEntry.payload_json || "{}")) };
+        entry = { signalId: closedEntry.signal_id, tradeId: closedEntry.signal_id, pairBase: closedEntry.pair_base || null,
+          createdAt: Number(closedEntry.created_at_ms || 0), intentStatus: closedEntry.status,
+          ...serializable(JSON.parse(closedEntry.payload_json || "{}")) };
       }
     }
     const lastSnapshot = latest ? {
@@ -949,8 +962,11 @@ async function reconcileClosedSettlements({ env, db, now, dependencies = {} }) {
       marginTokenDecimals: 18, marginTokenPriceUsd: null,
     });
     const closeIntent = await db.prepare(`SELECT signal_id,payload_json,status FROM leverup_execution_intents
-      WHERE action IN (1,9) AND lower(json_extract(payload_json, '$.positionHash')) = ?
-      ORDER BY created_at_ms DESC LIMIT 1`).bind(positionHash).first().catch(() => null);
+      WHERE action IN (1,9) AND (
+        json_extract(payload_json, '$.tradeId') = ?
+        OR (lower(json_extract(payload_json, '$.positionHash')) = ? AND created_at_ms >= ?)
+      ) ORDER BY created_at_ms DESC LIMIT 1`)
+      .bind(tradeId, positionHash, Number(entry?.executedAt || entry?.createdAt || 0)).first().catch(() => null);
     let closeIntentPayload = {};
     try { closeIntentPayload = JSON.parse(closeIntent?.payload_json || "{}"); } catch {}
     const exchangeCloseReason = closed.closeInfo?.reason || closed.closeInfo?.closeReason || closed.closeInfo?.closeType || closed.closeInfo?.trigger || closed.closeInfo?.exitReason;
@@ -958,6 +974,7 @@ async function reconcileClosedSettlements({ env, db, now, dependencies = {} }) {
     const closeForNotification = { ...closed, closeInfo: { ...closed.closeInfo, reason: closeReason } };
     if (!existing) {
       await persistSettlementReconciliation(db, settlement, {
+        tradeId,
         intentSignalId: entry?.signalId || null, closeIntentSignalId: closeIntent?.signal_id || null,
         closeIntentStatus: closeIntent?.status || null, source: "LeverUp closed-position history",
         closeReason,
@@ -974,7 +991,7 @@ async function reconcileClosedSettlements({ env, db, now, dependencies = {} }) {
     }
     // Settlement persistence and Telegram delivery are separate idempotent steps.
     // A prior DB write must not suppress a notification that failed or was skipped.
-    const notificationKey = "ciel:leverup:close-notified:v1:" + positionHash;
+    const notificationKey = "ciel:leverup:close-notified:v2:" + tradeId;
     const alreadyNotified = await env?.CIEL_STATE?.get(notificationKey).catch(() => null);
     if (!alreadyNotified) {
       try {
@@ -1205,7 +1222,9 @@ export async function runLeverUpPositionManager({ env, db, now = Date.now(), dep
     if (!pairView) { positionsMissingPairView++; continue; }
     const latestPrice = prices[position.pairBase];
     if (!latestPrice) { positionsMissingOraclePrice++; continue; }
-    const saved = entries.find((x) => String(x.positionHash || "").toLowerCase() === hash);
+    const saved = entries.filter((x) => String(x.positionHash || "").toLowerCase() === hash)
+      .sort((a,b) => Number(b.executedAt || b.createdAt || 0) - Number(a.executedAt || a.createdAt || 0))[0] || null;
+    const tradeId = leverUpTradeInstanceId(saved) || ("unlinked:" + hash + ":" + String(position.timestamp || "unknown"));
     // Every on-chain position in the configured trading wallet is managed, even if
     // its original entry metadata is missing. Fixed on-chain SL/TP remain authoritative.
     const candidate = saved?.candidate || {};
@@ -1219,7 +1238,7 @@ export async function runLeverUpPositionManager({ env, db, now = Date.now(), dep
       maxHoldMinutes: saved ? Number(candidate.holdMinutes || 180) : 0,
       partialTakeProfits: partials, completedPartialLevels: completed,
     });
-    const adaptiveKey = "ciel:leverup:adaptive-exit:v1:" + hash;
+    const adaptiveKey = "ciel:leverup:adaptive-exit:v2:" + tradeId;
     let adaptiveState = null;
     try { adaptiveState = await env?.CIEL_STATE?.get(adaptiveKey, "json"); } catch {}
     const adaptive = evaluateAdaptiveLeverUpExit({ position, currentPriceRaw: latestPrice, state: adaptiveState || {}, pairView, now });
@@ -1280,7 +1299,7 @@ export async function runLeverUpPositionManager({ env, db, now = Date.now(), dep
         : [position.positionHash, slippage];
     const fee = selectFeeToken(oneClickAction, antiDdos.config, balances, [], { requireAllowance: false });
     const nonce = await (dependencies.readNonce || readLastAgentNonce)(traderAddress, agentAddress, { publicClient: client });
-    const signalId = "position-" + hash + "-" + action.action.toLowerCase() +
+    const signalId = "position-" + tradeId + "-" + action.action.toLowerCase() +
       (action.levelIndex == null ? "" : "-" + action.levelIndex) +
       (action.action === "UPDATE_TP_SL" ? "-" + String(action.stopLossRaw) : "");
     const result = await submitLeverUpIntent({
@@ -1288,7 +1307,7 @@ export async function runLeverUpPositionManager({ env, db, now = Date.now(), dep
       agentAuthorization: auth, nonce: (BigInt(nonce) + 1n).toString(), deadline: Math.floor(now / 1000) + 300,
       feeToken: fee.feeToken, antiDdosFee: fee.antiDdosFee,
       allowanceRequirements: fee.feeToken.toLowerCase() === ZERO.toLowerCase() ? [] : [{ tokenAddress: fee.feeToken, amount: fee.antiDdosFee }],
-      pairBase: position.pairBase, payload: { positionHash: position.positionHash, action: action.action, reason: action.reason, levelIndex: action.levelIndex ?? null, stopLossRaw: action.stopLossRaw ?? null,
+      pairBase: position.pairBase, payload: { tradeId, positionHash: position.positionHash, action: action.action, reason: action.reason, levelIndex: action.levelIndex ?? null, stopLossRaw: action.stopLossRaw ?? null,
         aiReview: { status: aiReview.status, action: aiReview.action, confidence: aiReview.confidence, reversalConfirmed: aiReview.reversalConfirmed === true, reason: aiReview.reason || null, model: aiReview.model || null, configuredKeyCount: aiReview.configuredKeyCount || 0 },
         adaptiveMetrics: { action: adaptive.action, reason: adaptive.reason, samples: adaptive.samples ?? adaptive.state?.history?.length ?? null, atrProxyPct: adaptive.atrProxyPct ?? null, trendPct: adaptive.trendPct ?? null, momentumPct: adaptive.momentumPct ?? null, closeScore: adaptive.closeScore ?? null, favourablePct: adaptive.favourablePct ?? null, peakFavourablePct: adaptive.peakFavourablePct ?? null, givebackPct: adaptive.givebackPct ?? null, profitProtection: adaptive.state?.profitProtection || null } },
       now, dependencies,

@@ -487,6 +487,21 @@ export async function persistPositionFeeSnapshot(db, position, sourceBlock = nul
 
 export async function persistSettlementReconciliation(db, settlement, source = {}) {
   if (!db?.prepare || !settlement?.positionHash) throw new Error("SETTLEMENT_PERSISTENCE_INPUT_INVALID");
+  const tradeId = String(source?.tradeId || ("legacy:" + String(settlement.positionHash).toLowerCase() + ":" + String(settlement.closeTime)));
+  await db.prepare(`INSERT OR REPLACE INTO leverup_trade_settlements (
+    trade_id, position_hash, symbol, close_time, close_price_raw, gross_pnl_raw,
+    open_fee_raw, close_fee_raw, funding_fee_raw, holding_fee_raw,
+    total_net_costs_raw, net_pnl_after_fees_raw, funding_since_last_snapshot_raw,
+    holding_since_last_snapshot_raw, reconciled_at_ms, source_json
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    .bind(
+      tradeId, settlement.positionHash, settlement.pair, settlement.closeTime,
+      settlement.closePriceRaw, settlement.grossPnlRaw, settlement.openFeeRaw,
+      settlement.closeFeeRaw, settlement.fundingFeeRaw, settlement.holdingFeeRaw,
+      settlement.totalNetCostsRaw, settlement.netPnlAfterFeesRaw,
+      settlement.fundingSinceLastSnapshotRaw, settlement.holdingSinceLastSnapshotRaw,
+      settlement.reconciledAt, JSON.stringify(source),
+    ).run();
   await db.prepare(`INSERT OR REPLACE INTO leverup_settlement_reconciliations (
     position_hash, symbol, close_time, close_price_raw, gross_pnl_raw,
     open_fee_raw, close_fee_raw, funding_fee_raw, holding_fee_raw,

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { submitLeverUpIntent, evaluateLeverUpPositionAction, verifyLeverUpCoordinatorDryRun, reconcilePendingLeverUpIntents, refreshLeverUpMarketOpenPlan, calculateLeverUpQuoteDriftBps, validateLeverUpQuoteAge } from "../src/leverup-coordinator.js";
+import { submitLeverUpIntent, evaluateLeverUpPositionAction, verifyLeverUpCoordinatorDryRun, reconcilePendingLeverUpIntents, refreshLeverUpMarketOpenPlan, calculateLeverUpQuoteDriftBps, validateLeverUpQuoteAge, leverUpTradeInstanceId } from "../src/leverup-coordinator.js";
 
 assert.equal(calculateLeverUpQuoteDriftBps(100_000n, 100_100n), 10n);
 assert.equal(calculateLeverUpQuoteDriftBps(100_000n, 100_101n), 11n, "quote drift must round up, never understate a threshold breach");
@@ -212,3 +212,10 @@ assert.equal(dryRunLedger.intentClaimed, true);
 assert.equal(dryRunLedger.duplicateBlocked, true);
 assert.equal(dryRunLedger.statusReconciled, true);
 assert.equal(db.rows.size, 2, "diagnostic intent must be deleted after verification; the two live-entry lifecycle rows remain");
+
+assert.equal(leverUpTradeInstanceId({ signalId: "entry-A", positionHash: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }), "entry-A");
+assert.equal(leverUpTradeInstanceId({ signalId: "entry-B", positionHash: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }), "entry-B",
+  "two separate entry signals reusing one on-chain hash must retain separate lifecycle identities");
+assert.equal(leverUpTradeInstanceId({ positionHash: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }), null,
+  "hash alone must never be promoted to a trade identity");
+console.log("PASS: reused position hashes retain independent per-entry lifecycle identities.");
