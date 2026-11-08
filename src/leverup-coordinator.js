@@ -1188,7 +1188,7 @@ export async function runLeverUpPositionManager({ env, db, now = Date.now(), dep
   const pairMap = new Map(pairViews);
   const feeTokens = (antiDdos.config || []).filter((x) => x.enabled && x.feeToken).map((x) => x.feeToken);
   const balances = await (dependencies.readBalances || readTokenBalancesAndAllowances)(traderAddress, feeTokens, { publicClient: client });
-  let submitted = 0, snapshots = 0, evaluated = 0, adaptiveUpdatesBlocked = 0, closePermissionBlocked = 0;
+  let submitted = 0, snapshots = 0, evaluated = 0, adaptiveUpdatesBlocked = 0, closePermissionBlocked = 0, aiReviewed = 0, aiCloseSignals = 0;
   for (const [hash, position] of positionMap) {
     evaluated++;
     const pairView = pairMap.get(position.pairBase);
@@ -1270,5 +1270,5 @@ export async function runLeverUpPositionManager({ env, db, now = Date.now(), dep
   }
   const settlements = await reconcileClosedSettlements({ env, db, now, dependencies })
     .catch((error) => ({ error: String(error?.message || error).slice(0, 200) }));
-  return { status: liveEnabled(env) ? "LIVE_MONITORING" : "READ_ONLY_MONITORING", checked: evaluated, submitted, snapshots, adaptiveUpdatesBlocked, closePermissionBlocked, canUpdateTpSl: Boolean(auth.canUpdateTpSl), openPositionCount: positionMap.size, pairBasesChecked: pairBases.length, reconciliation, settlements };
+  return { status: liveEnabled(env) ? "LIVE_MONITORING" : "READ_ONLY_MONITORING", checked: evaluated, submitted, snapshots, adaptiveUpdatesBlocked, closePermissionBlocked, aiReviewed, aiCloseSignals, canUpdateTpSl: Boolean(auth.canUpdateTpSl), openPositionCount: positionMap.size, pairBasesChecked: pairBases.length, reconciliation, settlements };
 }
