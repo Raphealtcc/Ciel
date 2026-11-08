@@ -24,7 +24,7 @@ assert.ok(source.includes("orderedSymbols"));
 assert.ok(!source.includes("signal.confidence >= minimumConfidence"));
 assert.ok(!source.includes("scalp.confidence >= minimumConfidence"));
 assert.ok(!source.includes("continuation.confidence >= minimumConfidence"));
-assert.ok(source.includes("Math.max(0.04, candidate.stopPct * 0.15)"));
+assert.ok(source.includes("Math.max(0.03, candidate.stopPct * 0.10)"));\nassert.ok(source.includes("stronglyOpposed"));\nassert.ok(source.includes('candidate.mode !== "CORE_PULLBACK_SCALP"'));
 assert.ok(source.includes("candidate.rsi < 10") && source.includes("candidate.rsi > 90"));
 assert.ok(source.includes('const preferredGroup = Math.floor(now / (5 * 60e3)) % 3 === 2 ? "WATCHLIST" : "CORE"'));
 assert.ok(source.includes('signal.mode === "TREND_HOLD" || signal.mode === "RANGE_SCALP"'));
