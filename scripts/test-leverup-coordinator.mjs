@@ -5,7 +5,7 @@ import { calculateLeverUpEntryBudget, evaluateLeverUpPortfolioRisk, LEVERUP_RISK
 assert.equal(MIN_LEVERUP_RISK_LIMIT_MON, 15);
 assert.equal(LEVERUP_RISK_DEFAULTS.maxDailyRealizedLossMon, 15);
 assert.equal(LEVERUP_RISK_DEFAULTS.maxRollingDrawdownMon, 15);
-assert.equal(LEVERUP_RISK_DEFAULTS.maxAggregateStopRiskMon, 12);
+assert.equal(LEVERUP_RISK_DEFAULTS.maxAggregateStopRiskMon, 15);
 import { prepareLeverUpExecution, reconcileLeverUpIntent, collectLeverUpPairBases, refreshLeverUpMarketOpenPlan, validateLeverUpTransferBalances, submitLeverUpNativeOnchainEntry } from "../src/leverup-coordinator.js";
 import { privateKeyToAccount } from "viem/accounts";
 const WMON = "0x3bd359C1119dA7Da1D913D1C4D2B7c461115433A";
