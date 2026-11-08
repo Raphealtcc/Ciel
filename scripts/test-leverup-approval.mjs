@@ -90,3 +90,41 @@ await assert.rejects(() => ensureLeverUpTokenAllowance({
   requiredAmount: 1n, publicClient, walletClient,
 }), /TOKEN_NOT_ALLOWLISTED/);
 console.log("PASS: exact allowance, no-op when sufficient, zero-reset compatibility, signer identity, token allowlist and live/kill-switch gates.");
+
+
+// Primary RPC can remain stale after the receipt. The secondary reader confirms the
+// exact allowance without sending a duplicate approval transaction.
+let primaryReadCount = 0;
+let secondaryReadCount = 0;
+let secondaryWrites = [];
+const stalePrimary = {
+  readContract: async () => { primaryReadCount++; return 0n; },
+  waitForTransactionReceipt: async ({ hash }) => ({ status: "success", transactionHash: hash, blockNumber: 987n }),
+};
+const secondaryReader = {
+  getChainId: async () => 143,
+  readContract: async () => { secondaryReadCount++; return 789n; },
+};
+const staleWallet = {
+  account: { address: trader },
+  writeContract: async (args) => { secondaryWrites.push(args); return "0x" + "ab".repeat(32); },
+};
+const recovered = await ensureLeverUpTokenAllowance({
+  env: { ...baseEnv, ALCHEMY_RPC: "https://alchemy.example/rpc" },
+  tokenAddress: LEVERUP_TOKENS.WMON, requiredAmount: 789n,
+  publicClient: stalePrimary, walletClient: staleWallet,
+  secondaryPublicClient: secondaryReader,
+});
+assert.equal(recovered.status, "APPROVED");
+assert.equal(recovered.allowance, "789");
+assert.equal(primaryReadCount, 4);
+assert.equal(secondaryReadCount, 1);
+assert.equal(secondaryWrites.length, 1, "only the single exact approval may be broadcast");
+assert.equal(recovered.allowanceReadDiagnostics.secondaryObservation, "allowance:789");
+
+const wrongChainSecondary = { getChainId: async () => 1, readContract: async () => 999n };
+await assert.rejects(() => ensureLeverUpTokenAllowance({
+  env: baseEnv, tokenAddress: LEVERUP_TOKENS.WMON, requiredAmount: 1000n,
+  publicClient: stalePrimary, walletClient: staleWallet,
+  secondaryPublicClient: wrongChainSecondary,
+}), /secondary=wrong_chain:1/);

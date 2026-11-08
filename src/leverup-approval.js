@@ -65,6 +65,7 @@ export async function ensureLeverUpTokenAllowance({
   requiredAmount,
   publicClient,
   walletClient,
+  secondaryPublicClient,
 }) {
   if (String(env?.LEVERUP_AUTO_APPROVE).toLowerCase() !== "true") {
     throw new Error("LEVERUP_AUTO_APPROVE_DISABLED");
@@ -92,6 +93,13 @@ export async function ensureLeverUpTokenAllowance({
 
   const rpcUrl = String(env?.LEVERUP_RPC_URL || "https://rpc2.monad.xyz");
   const reader = publicClient || createPublicClient({ chain: MONAD, transport: http(rpcUrl) });
+  // A second, independent read-only RPC is used only to verify the mined approval.
+  // It never signs or broadcasts. Invalid/missing URLs are ignored rather than guessed.
+  const secondaryRpcUrl = String(env?.ALCHEMY_RPC || "").trim();
+  let configuredSecondaryReader = secondaryPublicClient || null;
+  if (!configuredSecondaryReader && /^https?:\\/\\//i.test(secondaryRpcUrl)) {
+    configuredSecondaryReader = createPublicClient({ chain: MONAD, transport: http(secondaryRpcUrl) });
+  }
   const signer = walletClient || createWalletClient({
     account, chain: MONAD, transport: http(rpcUrl),
   });
@@ -136,30 +144,57 @@ export async function ensureLeverUpTokenAllowance({
   // bounded number of times. Never broadcast a second approval just because a
   // post-receipt read is stale.
   let confirmedAllowance = 0n;
-  let lastReadError = null;
+  const primaryObservations = [];
+  let secondaryObservation = "not_configured";
   for (let attempt = 0; attempt < 4; attempt++) {
     try {
       confirmedAllowance = attempt === 0 && receipt.blockNumber != null
         ? await readAllowance(receipt.blockNumber)
         : await readAllowance();
+      primaryObservations.push({ read: attempt === 0 && receipt.blockNumber != null ? "receipt_block" : "latest", allowance: confirmedAllowance.toString() });
       if (confirmedAllowance >= amount) break;
     } catch (error) {
-      lastReadError = String(error?.shortMessage || error?.message || error).slice(0, 160);
+      primaryObservations.push({ read: attempt === 0 && receipt.blockNumber != null ? "receipt_block" : "latest",
+        error: String(error?.shortMessage || error?.message || error).slice(0, 140) });
     }
-    if (attempt < 3) await new Promise((resolve) => setTimeout(resolve, 350));
+    if (attempt < 3) await new Promise((resolve) => setTimeout(resolve, 200));
   }
+
+  // The primary RPC may have a stale state view even after confirming the receipt.
+  // Verify against Alchemy (or an injected second reader) before rejecting. Never
+  // broadcast another approval as a response to stale allowance data.
+  if (confirmedAllowance < amount && configuredSecondaryReader) {
+    try {
+      const secondaryChainId = await configuredSecondaryReader.getChainId();
+      if (Number(secondaryChainId) !== 143) {
+        secondaryObservation = "wrong_chain:" + String(secondaryChainId);
+      } else {
+        const secondaryAllowance = await configuredSecondaryReader.readContract({
+          address: tokenAddress, abi: ERC20_APPROVAL_ABI, functionName: "allowance",
+          args: [traderAddress, spender],
+        });
+        secondaryObservation = "allowance:" + BigInt(secondaryAllowance).toString();
+        if (BigInt(secondaryAllowance) > confirmedAllowance) confirmedAllowance = BigInt(secondaryAllowance);
+      }
+    } catch (error) {
+      secondaryObservation = "read_error:" + String(error?.shortMessage || error?.message || error).slice(0, 140);
+    }
+  }
+
   if (confirmedAllowance < amount) {
     throw new Error("LEVERUP_ALLOWANCE_STILL_INSUFFICIENT_AFTER_APPROVAL" +
       ": token=" + tokenAddress + " spender=" + spender +
       " required=" + amount.toString() + " observed=" + confirmedAllowance.toString() +
       " tx=" + approvalTxHash +
       " block=" + String(receipt.blockNumber ?? "unknown") +
-      (lastReadError ? " readError=" + lastReadError : ""));
+      " primary=" + JSON.stringify(primaryObservations) +
+      " secondary=" + secondaryObservation);
   }
 
   return { status: "APPROVED", traderAddress, tokenAddress, spender,
     allowance: confirmedAllowance.toString(), requiredAmount: amount.toString(),
-    approvalTxHash, approvalBlockNumber: receipt.blockNumber == null ? null : String(receipt.blockNumber) };
+    approvalTxHash, approvalBlockNumber: receipt.blockNumber == null ? null : String(receipt.blockNumber),
+    allowanceReadDiagnostics: { primaryObservations, secondaryObservation } };
 }
 
 /**
