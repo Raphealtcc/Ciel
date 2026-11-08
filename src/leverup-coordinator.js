@@ -7,6 +7,7 @@ import {
 } from "./leverup-1ct.js";
 import { ensureLeverUpTokenAllowance } from "./leverup-approval.js";
 import { evaluateAdaptiveLeverUpExit } from "./leverup-adaptive-exits.js";
+import { reviewLeverUpPositionWithGemini } from "./leverup-position-ai.js";
 import {
   LEVERUP_TOKENS, createLeverUpPublicClient, fetchOpenPositions, fetchAllPositions, fetchLeverUpPairs,
   fetchLatestOraclePrices, fetchAntiDdosConfig, readPositionsV4, normalizePositionAccrual,
@@ -1195,8 +1196,9 @@ export async function runLeverUpPositionManager({ env, db, now = Date.now(), dep
     const latestPrice = prices[position.pairBase];
     if (!latestPrice) continue;
     const saved = entries.find((x) => String(x.positionHash || "").toLowerCase() === hash);
-    if (!saved) continue; // Never apply CIEL exit policy to a manually opened or otherwise unmanaged position.
-    const candidate = saved.candidate || {};
+    // Every on-chain position in the configured trading wallet is managed, even if
+    // its original entry metadata is missing. Fixed on-chain SL/TP remain authoritative.
+    const candidate = saved?.candidate || {};
     const partials = Array.isArray(candidate.partialTakeProfits) ? candidate.partialTakeProfits : [];
     const completed = Array.isArray(saved?.completedPartialLevels) ? saved.completedPartialLevels : [];
     const fixedAction = evaluateLeverUpPositionAction({
@@ -1210,8 +1212,21 @@ export async function runLeverUpPositionManager({ env, db, now = Date.now(), dep
     if (adaptive?.state && env?.CIEL_STATE?.put) {
       await env.CIEL_STATE.put(adaptiveKey, JSON.stringify(adaptive.state), { expirationTtl: 7 * 24 * 3600 }).catch(() => void 0);
     }
-    // Hard stop / fixed exits outrank adaptive signals. Adaptive logic may tighten
-    // a confirmed stop or request a multi-factor reversal close, never loosen risk.
+    let aiReview = { status: "SKIPPED_NO_KEYS", action: "HOLD", confidence: 0 };
+    if (String(env?.GEMINI_API_KEYS || "").trim()) {
+      aiReview = await reviewLeverUpPositionWithGemini({
+        env, position: { ...position, symbol: pairView.symbol || pairView.pairName || null },
+        currentPriceRaw: latestPrice, adaptive, state: adaptive?.state || adaptiveState || {}, now,
+        dependencies
+      }).catch((error) => ({ status: "FAILED", action: "HOLD", confidence: 0, reason: String(error?.message || error).slice(0, 180) }));
+    }
+    // AI is advisory, never allowed to override fixed SL/TP or act without local
+    // reversal evidence. A confirmed reversal closes the old position; a new
+    // opposite entry must still pass the independent 78/100 entry gate.
+    const aiCloseConfirmed = ["CLOSE", "REVERSE"].includes(aiReview.action) &&
+      Number(aiReview.confidence) >= 85 && aiReview.reversalConfirmed === true &&
+      Number(adaptive.closeScore || 0) >= 2;
+    // Hard stop / fixed exits outrank all adaptive and AI decisions.
     const minimumHoldActive = BigInt(position.earliestCloseTime || 0) > BigInt(Math.floor(now / 1000));
     const action = fixedAction.action === "MARKET_CLOSE" || fixedAction.action === "PARTIAL_CLOSE"
       ? fixedAction
@@ -1219,7 +1234,9 @@ export async function runLeverUpPositionManager({ env, db, now = Date.now(), dep
         ? { action: "WAIT", reason: "MINIMUM_HOLD_NOT_REACHED_FOR_ADAPTIVE_EXIT" }
         : adaptive.action === "MARKET_CLOSE" || adaptive.action === "UPDATE_TP_SL"
           ? adaptive
-          : fixedAction;
+          : aiCloseConfirmed && !minimumHoldActive
+            ? { action: "MARKET_CLOSE", reason: "GEMINI_CONFIRMED_REVERSAL_" + aiReview.action, aiReview }
+            : fixedAction;
     if (db?.prepare) {
       const stored = await (dependencies.persistFeeSnapshot || persistPositionFeeSnapshot)(db, position, null, 300_000);
       if (stored?.stored) snapshots++;
@@ -1246,12 +1263,12 @@ export async function runLeverUpPositionManager({ env, db, now = Date.now(), dep
       agentAuthorization: auth, nonce: (BigInt(nonce) + 1n).toString(), deadline: Math.floor(now / 1000) + 300,
       feeToken: fee.feeToken, antiDdosFee: fee.antiDdosFee,
       allowanceRequirements: fee.feeToken.toLowerCase() === ZERO.toLowerCase() ? [] : [{ tokenAddress: fee.feeToken, amount: fee.antiDdosFee }],
-      pairBase: position.pairBase, payload: { positionHash: position.positionHash, action: action.action, reason: action.reason, levelIndex: action.levelIndex ?? null, stopLossRaw: action.stopLossRaw ?? null, adaptiveMetrics: action.atrProxyPct == null ? null : { atrProxyPct: action.atrProxyPct, trendPct: action.trendPct, momentumPct: action.momentumPct, closeScore: action.closeScore } },
+      pairBase: position.pairBase, payload: { positionHash: position.positionHash, action: action.action, reason: action.reason, levelIndex: action.levelIndex ?? null, stopLossRaw: action.stopLossRaw ?? null, aiReview: aiReview.status === "REVIEWED" ? { action: aiReview.action, confidence: aiReview.confidence, reversalConfirmed: aiReview.reversalConfirmed, reason: aiReview.reason, model: aiReview.model } : null, adaptiveMetrics: action.atrProxyPct == null ? null : { atrProxyPct: action.atrProxyPct, trendPct: action.trendPct, momentumPct: action.momentumPct, closeScore: action.closeScore, favourablePct: action.favourablePct, peakFavourablePct: action.peakFavourablePct, givebackPct: action.givebackPct } },
       now, dependencies,
     });
     if (result.submitted) submitted++;
   }
   const settlements = await reconcileClosedSettlements({ env, db, now, dependencies })
     .catch((error) => ({ error: String(error?.message || error).slice(0, 200) }));
-  return { status: liveEnabled(env) ? "LIVE_MONITORING" : "READ_ONLY_MONITORING", checked: evaluated, submitted, snapshots, adaptiveUpdatesBlocked, closePermissionBlocked, canUpdateTpSl: Boolean(auth.canUpdateTpSl), openPositionCount: positionMap.size, pairBasesChecked: pairBases.length, reconciliation, settlements };
+  return { status: liveEnabled(env) ? "LIVE_MONITORING" : "READ_ONLY_MONITORING", checked: evaluated, submitted, snapshots, adaptiveUpdatesBlocked, closePermissionBlocked, aiReviews: [...positionMap.keys()].filter((hash) => false).length, canUpdateTpSl: Boolean(auth.canUpdateTpSl), openPositionCount: positionMap.size, pairBasesChecked: pairBases.length, reconciliation, settlements };
 }
