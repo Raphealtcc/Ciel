@@ -80,6 +80,12 @@ assert.ok(source.includes("advisorScanRaw"));
 assert.ok(source.includes("advisorScan") && source.includes("feed:"), "protected diagnostics must include advisor scan data and feed status");
 assert.ok(source.includes("Core pullback scalps: "));
 assert.ok(source.includes("5m trend continuation: "));
+const helperScopeStart=source.indexOf('__name(analyse, "analyse");');
+const helperScopeEnd=source.indexOf("async function review(",helperScopeStart);
+assert.ok(helperScopeStart>=0&&helperScopeEnd>helperScopeStart);
+const topLevelHelpers=source.slice(helperScopeStart,helperScopeEnd);
+assert.ok(topLevelHelpers.includes("async function getCandleStructureMap("),"candle structure map helper must be top-level and visible to runAdvisorCycle");
+assert.ok(topLevelHelpers.includes("function analyzeCandleLevelReversal("),"candle-level reversal helper must be top-level and visible to runAdvisorCycle");
 assert.ok(source.includes("CIEL deterministic core trend continuation guard"));
 assert.ok(source.includes("LOCAL_CORE_TREND_CONTINUATION"));
 
