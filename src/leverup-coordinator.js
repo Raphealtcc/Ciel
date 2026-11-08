@@ -432,9 +432,9 @@ async function readPortfolioRiskFromLedger(db, now) {
   if (!db?.prepare) throw new Error("LEVERUP_RISK_LEDGER_UNAVAILABLE");
   const dayStartSeconds = Math.floor(Date.UTC(new Date(now).getUTCFullYear(), new Date(now).getUTCMonth(), new Date(now).getUTCDate()) / 1000);
   const [daily, history] = await Promise.all([
-    db.prepare("SELECT net_pnl_after_fees_raw, close_time FROM leverup_settlement_reconciliations WHERE close_time >= ? UNION ALL SELECT net_pnl_after_fees_raw, close_time FROM leverup_trade_settlements WHERE close_time >= ? ORDER BY close_time ASC")
+    db.prepare("SELECT l.net_pnl_after_fees_raw, l.close_time FROM leverup_settlement_reconciliations l WHERE l.close_time >= ? AND NOT EXISTS (SELECT 1 FROM leverup_trade_settlements t WHERE t.position_hash = l.position_hash AND t.close_time = l.close_time) UNION ALL SELECT net_pnl_after_fees_raw, close_time FROM leverup_trade_settlements WHERE close_time >= ? ORDER BY close_time ASC")
       .bind(dayStartSeconds, dayStartSeconds).all(),
-    db.prepare("SELECT net_pnl_after_fees_raw, close_time FROM (SELECT net_pnl_after_fees_raw, close_time FROM leverup_settlement_reconciliations UNION ALL SELECT net_pnl_after_fees_raw, close_time FROM leverup_trade_settlements) ORDER BY close_time DESC LIMIT 300").all(),
+    db.prepare("SELECT net_pnl_after_fees_raw, close_time FROM (SELECT l.net_pnl_after_fees_raw, l.close_time FROM leverup_settlement_reconciliations l WHERE NOT EXISTS (SELECT 1 FROM leverup_trade_settlements t WHERE t.position_hash = l.position_hash AND t.close_time = l.close_time) UNION ALL SELECT net_pnl_after_fees_raw, close_time FROM leverup_trade_settlements) ORDER BY close_time DESC LIMIT 300").all(),
   ]);
   const [activeEntries] = await Promise.all([
     db.prepare("SELECT payload_json FROM leverup_execution_intents WHERE action = 0 AND status IN ('EXECUTED','RECONCILED','SUBMITTED','PENDING','UNCERTAIN') AND (status != 'RECONCILED' OR json_extract(payload_json,'$.closedAt') IS NULL)").all(),
