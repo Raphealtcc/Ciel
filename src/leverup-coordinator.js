@@ -311,7 +311,7 @@ export async function submitLeverUpIntent({
       ].filter((token) => token && String(token).toLowerCase() !== ZERO.toLowerCase()))];
       const readStates = dependencies.readTokenBalancesAndAllowances || readTokenBalancesAndAllowances;
       const tokenStates = await readStates(traderAddress, diagnosticTokens, {
-        publicClient: dependencies.publicClient || createLeverUpPublicClient(env?.LEVERUP_RPC_URL || "https://rpc2.monad.xyz"),
+        publicClient: dependencies.publicClient || createLeverUpPublicClient(env?.ALCHEMY_RPC || env?.LEVERUP_RPC_URL || "https://rpc2.monad.xyz"),
       });
       const transferCheck = validateLeverUpTransferBalances({
         action, actionValues, feeToken, antiDdosFee, tokenStates,
@@ -485,7 +485,7 @@ export async function submitLeverUpNativeOnchainEntry({
   if (!claim.created) return { status: claim.row?.status || "DUPLICATE", duplicate: true, transactionHash: claim.row?.intent_hash || null };
   let broadcastStarted = false;
   try {
-    const rpcUrl = env?.LEVERUP_RPC_URL || "https://rpc2.monad.xyz";
+    const rpcUrl = env?.ALCHEMY_RPC || env?.LEVERUP_RPC_URL || "https://rpc2.monad.xyz";
     const rawKey = String(env?.LEVERUP_TRADER_PRIVATE_KEY || "").trim();
     const key = rawKey.startsWith("0x") ? rawKey : "0x" + rawKey;
     if (!/^0x[0-9a-fA-F]{64}$/.test(key)) throw new Error("LEVERUP_TRADER_PRIVATE_KEY_MISSING_OR_INVALID");
@@ -640,7 +640,7 @@ export async function executeLeverUpEntry({ env, db, candidate, signalId, snapsh
 
   let nonce;
   try {
-    const client = dependencies.publicClient || createLeverUpPublicClient(effectiveEnv?.LEVERUP_RPC_URL || "https://rpc2.monad.xyz");
+    const client = dependencies.publicClient || createLeverUpPublicClient(effectiveEnv?.ALCHEMY_RPC || effectiveEnv?.LEVERUP_RPC_URL || "https://rpc2.monad.xyz");
     const readNonce = dependencies.readNonce || readLastAgentNonce;
     const lastNonce = BigInt(await readNonce(traderAddress, agentAddress, { publicClient: client }));
     const candidates = [lastNonce + 1n, BigInt(now), BigInt(executionPlan.nonce || 0)];
@@ -779,7 +779,7 @@ export async function reconcilePendingLeverUpIntents({ env, db, now = Date.now()
         const pairBase = String(row.pair_base || payload.plan?.preflight?.pairBase || "").toLowerCase();
         const isLong = payload.candidate?.side === "LONG";
         if (!/^0x[0-9a-f]{40}$/.test(pairBase)) throw new Error("ONCHAIN_PENDING_PAIR_BASE_MISSING");
-        const client = dependencies.publicClient || createLeverUpPublicClient(env?.LEVERUP_RPC_URL || "https://rpc2.monad.xyz");
+        const client = dependencies.publicClient || createLeverUpPublicClient(env?.ALCHEMY_RPC || env?.LEVERUP_RPC_URL || "https://rpc2.monad.xyz");
         const receipt = client.getTransactionReceipt
           ? await client.getTransactionReceipt({ hash: row.intent_hash }).catch(() => null)
           : null;
@@ -827,7 +827,7 @@ export async function reconcilePendingLeverUpIntents({ env, db, now = Date.now()
           await updateIntent(db, row.signal_id, "PENDING", { payload: { ...payload, intentStatus: state, pairBaseMissing: true } });
           continue;
         }
-        const client = dependencies.publicClient || createLeverUpPublicClient(env?.LEVERUP_RPC_URL || "https://rpc2.monad.xyz");
+        const client = dependencies.publicClient || createLeverUpPublicClient(env?.ALCHEMY_RPC || env?.LEVERUP_RPC_URL || "https://rpc2.monad.xyz");
         const chainPositions = await (dependencies.readPositions || readPositionsV4)(trader, pairBase, { publicClient: client });
         const indexedHash = String(indexed?.positionHash || indexed?.position?.positionHash || "").toLowerCase();
         const chainMatches = (chainPositions || []).filter((p) => {
@@ -1011,7 +1011,7 @@ export async function purgeLeverUpPositions({ env, db, symbol = null, now = Date
     return { status: "BLOCKED_WALLET_CONFIGURATION", checked: 0, submitted: 0 };
   }
   const fetchImpl = dependencies.fetchImpl || fetch;
-  const client = dependencies.publicClient || createLeverUpPublicClient(env?.LEVERUP_RPC_URL || "https://rpc2.monad.xyz");
+  const client = dependencies.publicClient || createLeverUpPublicClient(env?.ALCHEMY_RPC || env?.LEVERUP_RPC_URL || "https://rpc2.monad.xyz");
   let pairs = [], apiPositions = [], pairDiscoveryError = null;
   try { pairs = await (dependencies.fetchPairs || fetchLeverUpPairs)({ fetchImpl }); }
   catch (error) { pairDiscoveryError = String(error?.message || error).slice(0, 180); }
@@ -1134,7 +1134,7 @@ export async function runLeverUpPositionManager({ env, db, now = Date.now(), dep
     return { status: "BLOCKED_WALLET_CONFIGURATION", checked: 0, submitted: 0 };
   }
   const fetchImpl = dependencies.fetchImpl || fetch;
-  const client = dependencies.publicClient || createLeverUpPublicClient(env?.LEVERUP_RPC_URL || "https://rpc2.monad.xyz");
+  const client = dependencies.publicClient || createLeverUpPublicClient(env?.ALCHEMY_RPC || env?.LEVERUP_RPC_URL || "https://rpc2.monad.xyz");
   let apiPositions = [];
   let positionIndexError = null;
   try { apiPositions = await (dependencies.fetchOpenPositions || fetchOpenPositions)(traderAddress, { fetchImpl }); }
@@ -1188,13 +1188,15 @@ export async function runLeverUpPositionManager({ env, db, now = Date.now(), dep
   const pairMap = new Map(pairViews);
   const feeTokens = (antiDdos.config || []).filter((x) => x.enabled && x.feeToken).map((x) => x.feeToken);
   const balances = await (dependencies.readBalances || readTokenBalancesAndAllowances)(traderAddress, feeTokens, { publicClient: client });
-  let submitted = 0, snapshots = 0, evaluated = 0, adaptiveUpdatesBlocked = 0, closePermissionBlocked = 0, aiReviewed = 0, aiCloseSignals = 0;
+  let submitted = 0, snapshots = 0, evaluated = 0, adaptiveUpdatesBlocked = 0, closePermissionBlocked = 0, aiReviewed = 0, aiCloseSignals = 0, positionsMissingPairView = 0, positionsMissingOraclePrice = 0, geminiConfiguredKeyCount = 0;
+  const aiReviewStatusCounts = {};
+  const aiReviewFailures = [];
   for (const [hash, position] of positionMap) {
     evaluated++;
     const pairView = pairMap.get(position.pairBase);
-    if (!pairView) continue;
+    if (!pairView) { positionsMissingPairView++; continue; }
     const latestPrice = prices[position.pairBase];
-    if (!latestPrice) continue;
+    if (!latestPrice) { positionsMissingOraclePrice++; continue; }
     const saved = entries.find((x) => String(x.positionHash || "").toLowerCase() === hash);
     // Every on-chain position in the configured trading wallet is managed, even if
     // its original entry metadata is missing. Fixed on-chain SL/TP remain authoritative.
@@ -1223,6 +1225,11 @@ export async function runLeverUpPositionManager({ env, db, now = Date.now(), dep
         currentPriceRaw: latestPrice, adaptive, state: adaptive?.state || adaptiveState || {}, now,
         dependencies
       }).catch((error) => ({ status: "FAILED", action: "HOLD", confidence: 0, reason: String(error?.message || error).slice(0, 180) }));
+    }
+    aiReviewStatusCounts[aiReview.status] = (aiReviewStatusCounts[aiReview.status] || 0) + 1;
+    geminiConfiguredKeyCount = Math.max(geminiConfiguredKeyCount, Number(aiReview.configuredKeyCount || 0));
+    if (aiReview.status === "FAILED" && aiReviewFailures.length < 5) {
+      aiReviewFailures.push(String(aiReview.reason || "GEMINI_REVIEW_FAILED").slice(0, 180));
     }
     // AI is advisory, never allowed to override fixed SL/TP or act without local
     // reversal evidence. A confirmed reversal closes the old position; a new
@@ -1276,5 +1283,5 @@ export async function runLeverUpPositionManager({ env, db, now = Date.now(), dep
   }
   const settlements = await reconcileClosedSettlements({ env, db, now, dependencies })
     .catch((error) => ({ error: String(error?.message || error).slice(0, 200) }));
-  return { status: liveEnabled(env) ? "LIVE_MONITORING" : "READ_ONLY_MONITORING", checked: evaluated, submitted, snapshots, adaptiveUpdatesBlocked, closePermissionBlocked, aiReviewed, aiCloseSignals, canUpdateTpSl: Boolean(auth.canUpdateTpSl), openPositionCount: positionMap.size, pairBasesChecked: pairBases.length, reconciliation, settlements };
+  return { status: liveEnabled(env) ? "LIVE_MONITORING" : "READ_ONLY_MONITORING", checked: evaluated, submitted, snapshots, adaptiveUpdatesBlocked, closePermissionBlocked, aiReviewed, aiCloseSignals, aiReviewStatusCounts, aiReviewFailures, geminiConfiguredKeyCount, positionsMissingPairView, positionsMissingOraclePrice, canMarketClose: Boolean(auth.canMarketClose), canUpdateTpSl: Boolean(auth.canUpdateTpSl), openPositionCount: positionMap.size, pairBasesChecked: pairBases.length, reconciliation, settlements };
 }
