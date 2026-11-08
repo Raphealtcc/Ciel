@@ -6,7 +6,7 @@ assert.equal(MIN_LEVERUP_RISK_LIMIT_MON, 15);
 assert.equal(LEVERUP_RISK_DEFAULTS.maxDailyRealizedLossMon, 15);
 assert.equal(LEVERUP_RISK_DEFAULTS.maxRollingDrawdownMon, 15);
 assert.equal(LEVERUP_RISK_DEFAULTS.maxAggregateStopRiskMon, 15);
-import { prepareLeverUpExecution, reconcileLeverUpIntent, collectLeverUpPairBases, refreshLeverUpMarketOpenPlan, validateLeverUpTransferBalances, submitLeverUpNativeOnchainEntry } from "../src/leverup-coordinator.js";
+import { prepareLeverUpExecution, reconcileLeverUpIntent, collectLeverUpPairBases, refreshLeverUpMarketOpenPlan, validateLeverUpTransferBalances, submitLeverUpNativeOnchainEntry, notifyLeverUpClosedTrade } from "../src/leverup-coordinator.js";
 import { privateKeyToAccount } from "viem/accounts";
 const WMON = "0x3bd359C1119dA7Da1D913D1C4D2B7c461115433A";
 const LVMON = "0x91b81bfbe3A747230F0529Aa28d8b2Bc898E6D56";
@@ -275,5 +275,34 @@ assert.ok(BigInt(hostedSubmitArgs.nonce) > 77n, "hosted-agent entry must use a n
 assert.equal(hostedApprovalCount, 1);
 assert.equal(hostedDb.rows.get("HOSTED-AGENT-ENTRY").status, "SUBMITTED");
 assert.equal(JSON.parse(hostedDb.rows.get("HOSTED-AGENT-ENTRY").payload_json).executionPath, "1CT_HOSTED_AGENT");
+
+let telegramBody = null;
+await notifyLeverUpClosedTrade({
+  TELEGRAM_BOT_TOKEN: "test-token",
+  TELEGRAM_CHAT_ID: "test-chat",
+  FETCH: async (_url, init) => {
+    telegramBody = JSON.parse(init.body);
+    return new Response(JSON.stringify({ ok: true, result: { message_id: 42 } }), { status: 200 });
+  },
+}, {
+  pair: "AAVE/USD", isLong: false, positionHash: "0x" + "aa".repeat(32),
+  marginToken: LVMON, closeInfo: { reason: "PROFIT_PROTECTION" },
+}, {
+  closePriceRaw: "129661357649685000000",
+  netPnlAfterFeesRaw: "943282404397656421",
+  grossPnlRaw: "1100000000000000000",
+  totalTradingFeesRaw: "100000000000000000",
+  fundingFeeRaw: "0", holdingFeeRaw: "565717595602343579",
+}, {
+  signalId: "AAVE-CLOSE-TEST",
+  plan: { actionValues: ["0x" + "11".repeat(20), false, WMON, LVMON, "30000000000000000000"] },
+});
+assert.ok(telegramBody, "live close alert must call Telegram");
+assert.ok(telegramBody.text.includes("SHORT AAVE/USD | PROFIT_PROTECTION"));
+assert.ok(telegramBody.text.includes("Executed exit $129.661358 | P&L +0.943 LVMON"));
+assert.ok(telegramBody.text.includes("Return on margin: +3.14% | signal AAVE-CLOSE-TEST"));
+assert.ok(telegramBody.text.includes("\n"), "Telegram alert must use real line breaks");
+assert.ok(!telegramBody.text.includes("\\n"), "Telegram alert must not contain escaped newline text");
+console.log("PASS: live close alert matches paper structure, includes exchange close reason, net P&L, margin return and costs.");
 
 console.log("PASS: collateral budget incl. fees/buffers, portfolio risk gates, hard-off dry-run coordinator, intent reconciliation primitives.");
