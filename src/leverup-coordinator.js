@@ -898,7 +898,7 @@ export async function notifyLeverUpClosedTrade(env, closed, settlement, entry) {
   ];
   const response = await (env?.FETCH || fetch)("https://api.telegram.org/bot" + token + "/sendMessage", {
     method: "POST", headers: { "content-type": "application/json" },
-    body: JSON.stringify({ chat_id: chatId, text: lines.join("\\n").slice(0, 3900), disable_web_page_preview: true }),
+    body: JSON.stringify({ chat_id: chatId, text: lines.join("\n").slice(0, 3900), disable_web_page_preview: true }),
     signal: AbortSignal.timeout(8000),
   });
   const payload = await response.json().catch(() => ({}));
