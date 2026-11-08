@@ -120,15 +120,8 @@ if (source.split(anchor).length !== 2) throw new Error("Trading-mode handler anc
 if (!source.includes("async function handleTradingModeCommand(")) source = source.replace(anchor, helper + anchor);
 
 const dispatch = '  if (await handleAdvisorCommand(env, text)) return;\n  const command = (text.trim().split(/\\s+/, 1)[0] || "").split("@")[0].toLowerCase();';
-const dispatchReplacement = '  const command = (text.trim().split(/\\s+/, 1)[0] || "").split("@")[0].toLowerCase();\n  if (await handleGeminiStatusCommand(env, command)) return;
-  if (await handleTradingModeCommand(env, command)) return;\n  if (await handleAdvisorCommand(env, text)) return;';
-if (source.includes(dispatch)) source = source.replace(dispatch, dispatchReplacement);
+const dispatchReplacement = '  const command = (text.trim().split(/\\s+/, 1)[0] || "").split("@")[0].toLowerCase();\n  if (await handleGeminiStatusCommand(env, command)) return;\n  if (await handleTradingModeCommand(env, command)) return;\n  if (await handleAdvisorCommand(env, text)) return;';\nif (source.includes(dispatch)) source = source.replace(dispatch, dispatchReplacement);
 else if (!source.includes("if (await handleTradingModeCommand(env, command)) return;")) throw new Error("Telegram command dispatch anchor mismatch");
 
-const helpAnchor = '      "/test — verify Telegram delivery",';
-if (source.includes(helpAnchor)) source = source.replace(helpAnchor,
-  '      "/paperactive /paperdeactivate — toggle paper entries",\n      "/liveactive /livedeactivate — toggle live entries",\n      "/modes — show effective trading modes",
-      "/geministatus — Gemini keys, latest review and manager health",\n' + helpAnchor);
-
-await writeFile(file, source);
+const helpAnchor = '      "/test — verify Telegram delivery",';\nif (source.includes(helpAnchor)) source = source.replace(helpAnchor,\n  '      "/paperactive /paperdeactivate — toggle paper entries",\n      "/liveactive /livedeactivate — toggle live entries",\n      "/modes — show effective trading modes",\n      "/geministatus — Gemini keys, latest review and manager health",\n' + helpAnchor);\n\nawait writeFile(file, source);
 console.log("Applied D1-backed Telegram trading-mode controls.");
