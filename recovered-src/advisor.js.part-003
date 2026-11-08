@@ -71,7 +71,7 @@ eData.microEma &&
 }
 __name(analyse, "analyse");
 
-async function review(env, s, forecast, market, intraday, eventIntel = null) {
+async function review(env, s, forecast, market, intraday, eventIntel = null, candleStructure = null) {
   const keys = [...new Set(String(env.GEMINI_API_KEYS || "").split(/[,;\n]+/).map((x) => x.trim()).filter(Boolean))];
   let model = (env.GEMINI_MODEL || "gemini-3.8-flash").trim();
   const models = [...new Set([model, "gemini-3.8-flash", "gemini-3.6-flash"])];

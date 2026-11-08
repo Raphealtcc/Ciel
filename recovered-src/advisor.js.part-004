@@ -3,6 +3,35 @@
     const seconds = Math.max(1, Math.ceil((Number(cooldown.untilMs) - Date.now()) / 1000));
     return { ...wait("Gemini cooldown after HTTP " + (cooldown.httpStatus || "error") + " " + (cooldown.errorCode || "") + ": " + (cooldown.message || "quota/service backoff") + " Retry in about " + Math.ceil(seconds / 60) + " minute(s).", "GEMINI_COOLDOWN"), flags: ["GEMINI_COOLDOWN", ...(cooldown.httpStatus === 429 ? ["GEMINI_RATE_LIMIT"] : [])], httpStatus: cooldown.httpStatus || null, retryAt: Number(cooldown.untilMs), retryInSeconds: seconds, errorCode: cooldown.errorCode || null };
   }
+async function getCandleStructureEvidence(env,symbol,now,currentPrice){
+  const empty={available:false,symbol,reason:"Hourly candle levels are not yet available."};
+  try{
+    const hourStart=Math.floor(now/36e5)*36e5,dayStart=now-24*36e5,price=Number(currentPrice);
+    const row=await env.DB.prepare(
+      "SELECT MIN(low_price) AS dayLow,MAX(high_price) AS dayHigh,"+
+      "MIN(CASE WHEN bucket_ms>=? THEN low_price END) AS currentHourLow,"+
+      "MAX(CASE WHEN bucket_ms>=? THEN high_price END) AS currentHourHigh,"+
+      "MIN(CASE WHEN bucket_ms>=? AND bucket_ms<? THEN low_price END) AS priorHourLow,"+
+      "MAX(CASE WHEN bucket_ms>=? AND bucket_ms<? THEN high_price END) AS priorHourHigh,"+
+      "MAX(bucket_ms) AS latestBucket,COUNT(*) AS buckets "+
+      "FROM market_candle_hourly_stats WHERE symbol=? AND bucket_ms>=? AND bucket_ms<=?"
+    ).bind(hourStart,hourStart,hourStart-36e5,hourStart,hourStart-36e5,hourStart,symbol,dayStart,hourStart).first();
+    const dayLow=Number(row?.dayLow),dayHigh=Number(row?.dayHigh),latestBucket=Number(row?.latestBucket);
+    if(!(dayLow>0&&dayHigh>dayLow&&price>0&&latestBucket>0)||now-latestBucket>2*36e5)return {...empty,reason:"24h hourly-candle coverage is incomplete or stale."};
+    const currentHourLow=Number(row.currentHourLow),currentHourHigh=Number(row.currentHourHigh),priorHourLow=Number(row.priorHourLow),priorHourHigh=Number(row.priorHourHigh);
+    const pctAway=(level)=>Number.isFinite(level)&&level>0?(price/level-1)*100:null;
+    const highDistance=pctAway(dayHigh),lowDistance=pctAway(dayLow);
+    const rangePositionPct=(price-dayLow)/(dayHigh-dayLow)*100;
+    const proximity=(v)=>v!==null&&Math.abs(v)<=0.15;
+    return {available:true,symbol,source:"Hyperliquid 5m candles aggregated into hourly high/low buckets",asOfBucketMs:latestBucket,
+      coverageHours:Number(row.buckets),day24h:{high:dayHigh,low:dayLow,positionPct:Math.max(0,Math.min(100,rangePositionPct)),distanceToHighPct:highDistance,distanceToLowPct:lowDistance,nearHigh:proximity(highDistance),nearLow:proximity(lowDistance)},
+      currentHour:{high:Number.isFinite(currentHourHigh)?currentHourHigh:null,low:Number.isFinite(currentHourLow)?currentHourLow:null},
+      previousHour:{high:Number.isFinite(priorHourHigh)?priorHourHigh:null,low:Number.isFinite(priorHourLow)?priorHourLow:null,distanceToHighPct:pctAway(priorHourHigh),distanceToLowPct:pctAway(priorHourLow)},
+      interpretation:"Use prior-hour and 24h extremes as support/resistance, breakout, liquidity-sweep and reclaim context. Levels are sampled 5m-candle aggregates, not tick-perfect exchange marks."};
+  }catch(error){return {...empty,reason:"Candle structure query failed: "+String(error).slice(0,140)};}
+}
+__name(getCandleStructureEvidence,"getCandleStructureEvidence");
+
   const cursor = Number(await env.CIEL_STATE.get("ciel:gemini:key-cursor") || "0"), prompt = [
     "You are Ciel's conservative crypto-perpetual setup reviewer. Analyze only the supplied CIEL evidence and any explicitly supplied active event-intelligence bundle.",
     "External news and fundamentals are not assessed unless an active event-intelligence bundle is explicitly supplied. Never imply that you checked anything beyond that bundle.",
@@ -16,7 +45,7 @@
     "Return JSON only: verdict APPROVE, REJECT or WAIT; reason under 240 characters; flags array.",
     "Candidate technical evidence: the technicalStrengthIndex is a 0-100 grouped evidence score, NOT a win probability. Review the underlying scoreComponents and raw evidence; never infer win odds from this index. " + JSON.stringify({ ...s, technicalStrengthIndex: Math.round(s.confidence * 100), confidence: void 0 }),
     "CIEL in-process Cloudflare five-minute statistical forecast (its lower/upper values are a conservative cumulative envelope of per-step q10\u2013q90 bands (80% central interval), not a joint calibrated interval): " + JSON.stringify(forecast),
-    "Supplementary Africa/Lagos intraday price history: " + JSON.stringify(intraday),
+    "Supplementary Africa/Lagos intraday price history: " + JSON.stringify(intraday),\n    "24h daily and current/previous hourly high-low levels from stored 5m candles: " + JSON.stringify(candleStructure),
     "Live Hyperliquid market-quality data: " + JSON.stringify(market),
     "Active event intelligence (headline-level only; null means none is active): " + JSON.stringify(eventIntel),
     "Assumptions: 22 MON minimum collateral and 50x requested leverage. MON collateral CR varies; all P&L estimates assume 100% CR and are upper bounds. Ciel never executes orders."
