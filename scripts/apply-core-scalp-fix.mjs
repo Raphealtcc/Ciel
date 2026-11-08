@@ -13,6 +13,12 @@ function once(before, after, label) {
 }
 
 once(
+  'JSON.stringify(intraday),\\n    "24h daily and current/previous hourly high-low levels from stored 5m candles: " + JSON.stringify(candleStructure),',
+  'JSON.stringify(intraday),\n    "24h daily and current/previous hourly high-low levels from stored 5m candles: " + JSON.stringify(candleStructure),',
+  "normalize literal reviewer-context separator",
+);
+
+once(
   'var CANDLE_HISTORY_SYMBOLS = /* @__PURE__ */ new Set(["BTC", "ETH", "MON"]);',
   'var CANDLE_HISTORY_SYMBOLS = /* @__PURE__ */ new Set(["BTC", "ETH", "MON", "SOL"]);',
   "add SOL five-minute candle history while preserving MON",
