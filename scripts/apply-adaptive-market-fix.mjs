@@ -222,5 +222,70 @@ once(
   "mark 5m continuation as deterministic technical confirmation rather than missing AI confirmation",
 );
 
+
+function patchGeminiMultiProjectFailover() {
+  const replaceOnce = (before, after, label) => {
+    const count = source.split(before).length - 1;
+    if (count !== 1) throw new Error("Gemini failover patch " + label + ": expected one match, found " + count);
+    source = source.replace(before, after);
+  };
+  replaceOnce("if (Number(cooldown.untilMs) > Date.now()) {",
+    "if (cooldown.allKeysFailed === true && Number(cooldown.untilMs) > Date.now()) {",
+    "only honor cooldown after all keys fail");
+  replaceOnce("for (let i = 0; i < keys.length && transientAttempts < 2; i++) {",
+    "for (let i = 0; i < keys.length; i++) {", "attempt every configured key");
+  replaceOnce("let transientAttempts = 0;",
+    'let quotaFailures = 0, maxRetryAt = 0, lastFailure = "Gemini request failed."; ',
+    "track all-key failure state");
+  const start = source.indexOf("if (r.status === 429) {", source.indexOf("for (let i = 0; i < keys.length; i++) {"));
+  const end = source.indexOf("const data = await r.json();", start);
+  if (start < 0 || end < 0) throw new Error("Gemini failover HTTP block not found");
+  const httpBlock = [
+    "if (!r.ok) {",
+    ' const bodyText = await r.text().catch(() => "");',
+    " let errorBody = {}; try { errorBody = bodyText ? JSON.parse(bodyText) : {}; } catch {}",
+    ' const errorCode = errorBody?.error?.status || errorBody?.error?.code || "HTTP_" + r.status;',
+    ' const errorMessage3 = errorBody?.error?.message || bodyText || "No error details returned."; ',
+    ' lastFailure = "Gemini HTTP " + r.status + " " + String(errorCode) + ": " + String(errorMessage3).slice(0,150);',
+    " if (r.status === 429) {",
+    "  quotaFailures++; let retryMs = 60000;",
+    '  const retryHeader = r.headers.get("retry-after"), retryNumber = Number(retryHeader), retryDate = Date.parse(retryHeader || "");',
+    "  if (Number.isFinite(retryNumber) && retryNumber >= 0) retryMs = Math.max(retryMs,retryNumber*1000); else if (Number.isFinite(retryDate)) retryMs = Math.max(retryMs,retryDate-Date.now());",
+    '  for (const detail of (Array.isArray(errorBody?.error?.details) ? errorBody.error.details : [])) { const value=detail?.retryDelay||detail?.retry_delay; if(typeof value==="string"&&value.endsWith("s"))retryMs=Math.max(retryMs,Number(value.slice(0,-1))*1000); }',
+    "  maxRetryAt=Math.max(maxRetryAt,Date.now()+retryMs);",
+    " }",
+    ' await env.CIEL_STATE.put("ciel:gemini:key-cursor",String((ix+1)%keys.length),{expirationTtl:86400});',
+    " continue;",
+    "}",
+    ""
+  ].join("\\n");
+  source = source.slice(0, start) + httpBlock + source.slice(end);
+  const outIndex = source.indexOf("const out = { verdict, paperMarginMon:");
+  const catchStart = source.indexOf("} catch (e) {", outIndex);
+  const loopEnd = source.indexOf('\\n  }\\n  await env.CIEL_STATE.put("ciel:gemini:key-cursor", String((cursor + 1)', catchStart);
+  if (outIndex < 0 || catchStart < 0 || loopEnd < 0) throw new Error("Gemini failover catch block not found");
+  const catchBlock = [
+    "} catch(e){",
+    " lastFailure=String(e).slice(0,180);",
+    ' await env.CIEL_STATE.put("ciel:gemini:key-cursor",String((ix+1)%keys.length),{expirationTtl:86400});',
+    " continue;",
+    "}"
+  ].join("\\n");
+  source = source.slice(0, catchStart) + catchBlock + source.slice(loopEnd);
+  replaceOnce("const out = { verdict, paperMarginMon:",
+    "const out = { verdict, keyIndexUsed: ix + 1, configuredKeyCount: keys.length, paperMarginMon:",
+    "expose successful key index");
+  const oldTail = 'await env.CIEL_STATE.put("ciel:gemini:key-cursor", String((cursor + 1) % keys.length), { expirationTtl: 86400 });\\n  return wait2("No Gemini key completed review after invalid-credential rotation.", "GEMINI_KEYS_FAILED");';
+  const newTail = [
+    "const allQuotaLimited=quotaFailures===keys.length;",
+    "const untilMs=allQuotaLimited?Math.max(Date.now()+60000,maxRetryAt):Date.now()+60000;",
+    'await env.CIEL_STATE.put(cooldownKey,JSON.stringify({allKeysFailed:true,failures:keys.length,httpStatus:allQuotaLimited?429:503,errorCode:allQuotaLimited?"ALL_KEYS_RATE_LIMITED":"ALL_KEYS_FAILED",message:String(lastFailure).slice(0,170),lastFailureAt:Date.now(),untilMs}),{expirationTtl:604800});',
+    'await env.CIEL_STATE.put("ciel:gemini:key-cursor",String((cursor+1)%keys.length),{expirationTtl:86400});',
+    'return {...wait2("All "+keys.length+" configured Gemini keys failed. Last error: "+String(lastFailure).slice(0,150)+". Retry after "+Math.ceil((untilMs-Date.now())/60000)+" minute(s).",allQuotaLimited?"GEMINI_RATE_LIMIT":"GEMINI_KEYS_FAILED"),flags:[allQuotaLimited?"GEMINI_RATE_LIMIT":"GEMINI_KEYS_FAILED","GEMINI_COOLDOWN"],httpStatus:allQuotaLimited?429:503,retryAt:untilMs,retryInSeconds:Math.ceil((untilMs-Date.now())/1000)};'
+  ].join("\\n");
+  replaceOnce(oldTail, newTail, "apply cooldown only after all keys fail");
+}
+patchGeminiMultiProjectFailover();
+
 await writeFile(file,source);
 console.log("Adaptive core-market patch complete: BTC/ETH/SOL lead the scan, all other configured markets remain eligible, paper outcomes adjust ranking only after eight closed samples, and no D1 writes or risk-limit changes are introduced.");
