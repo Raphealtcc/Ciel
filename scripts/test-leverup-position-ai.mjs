@@ -34,6 +34,12 @@ assert.equal(result.action, "REVERSE");
 assert.equal(result.confidence, 91);
 assert.equal(result.keyIndexUsed, 2);
 assert.equal(writes.get("ciel:gemini:key-cursor"), "0");
+const savedReview = JSON.parse(writes.get("ciel:leverup:gemini-review:last"));
+assert.equal(savedReview.status, "REVIEWED");
+assert.equal(savedReview.action, "REVERSE");
+assert.equal(savedReview.configuredKeyCount, 2);
+assert.equal(savedReview.keyIndexUsed, 2);
+assert.equal(savedReview.symbol, "UNKNOWN");
 
 let failedCalls = 0;
 const exhausted = await reviewLeverUpPositionWithGemini({

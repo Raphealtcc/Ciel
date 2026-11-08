@@ -6,7 +6,7 @@ const isolation = await readFile("scripts/apply-paper-live-isolation.mjs", "utf8
 const advisor = await readFile("src/leverup-advisor.js", "utf8");
 const coordinator = await readFile("src/leverup-coordinator.js", "utf8");
 
-for (const command of ["/paperactive", "/paperdeactivate", "/liveactive", "/livedeactivate", "/modes"]) {
+for (const command of ["/paperactive", "/paperdeactivate", "/liveactive", "/livedeactivate", "/modes", "/geministatus"]) {
   assert.ok(worker.includes(command), "missing Telegram command " + command);
 }
 assert.ok(worker.includes("ciel:control:paper-enabled"));
@@ -31,6 +31,10 @@ assert.ok(coordinator.includes('readTradingControl(env, "ciel:control:live-enabl
 assert.ok(coordinator.includes('readTradingControl(env, "ciel:control:live-entry-enabled", "false")'));
 assert.ok(!coordinator.includes('env?.CIEL_STATE?.get("ciel:control:live-entry-enabled")'));
 assert.ok(coordinator.includes("BLOCKED_POSITION_DISCOVERY"));
+assert.ok(worker.includes('ciel:leverup:gemini-review:last'));
+assert.ok(worker.includes('ciel:leverup:position-manager:last-run'));
+assert.ok(worker.includes('Configured API keys: '));
+assert.ok(worker.includes('Last result: '));
 assert.ok(worker.includes("This command will not bypass it"));
 assert.ok(worker.includes("LeverUp-native feed is not READY or its latest sample is stale"));
 assert.ok(worker.includes("recent read-only LeverUp market and coordinator diagnostics have not passed"));

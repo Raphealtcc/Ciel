@@ -4,17 +4,52 @@ export function parseGeminiApiKeys(value) {
   return parseKeys(value);
 }
 
+async function persistGeminiReview(storage, review, context = {}) {
+  if (!storage?.put) return;
+  const record = {
+    at: Number(context.now || Date.now()),
+    status: String(review?.status || "UNKNOWN"),
+    action: String(review?.action || "HOLD"),
+    confidence: Number(review?.confidence || 0),
+    reversalConfirmed: review?.reversalConfirmed === true,
+    reason: String(review?.reason || "").slice(0, 180),
+    model: String(review?.model || context.model || ""),
+    configuredKeyCount: Number(review?.configuredKeyCount ?? context.configuredKeyCount ?? 0),
+    keyIndexUsed: review?.keyIndexUsed ?? null,
+    retryAt: review?.retryAt ?? null,
+    symbol: String(context.symbol || "UNKNOWN"),
+    positionHash: String(context.positionHash || "")
+  };
+  await storage.put("ciel:leverup:gemini-review:last", JSON.stringify(record), { expirationTtl: 30 * 24 * 3600 }).catch(() => void 0);
+  if (/^0x[0-9a-f]{64}$/.test(record.positionHash)) {
+    await storage.put("ciel:leverup:gemini-review:v1:" + record.positionHash, JSON.stringify(record), { expirationTtl: 30 * 24 * 3600 }).catch(() => void 0);
+  }
+}
+
 export async function reviewLeverUpPositionWithGemini({ env, position, currentPriceRaw, adaptive = {}, state = {}, now = Date.now(), maxHoldReached = false, positionAgeMinutes = null, dependencies = {} }) {
   const keys = parseGeminiApiKeys(env?.GEMINI_API_KEYS);
-  if (!keys.length) return { status: "SKIPPED_NO_KEYS", action: "HOLD", confidence: 0 };
   const hash = String(position?.positionHash || "").toLowerCase();
-  if (!/^0x[0-9a-f]{64}$/.test(hash)) return { status: "SKIPPED_INVALID_POSITION", action: "HOLD", confidence: 0 };
   const storage = env?.CIEL_STATE;
+  const context = { now, model: env?.GEMINI_MODEL || "gemini-2.5-flash", configuredKeyCount: keys.length, symbol: position?.symbol || position?.pairSymbol || "UNKNOWN", positionHash: hash };
+  if (!keys.length) {
+    const skipped = { status: "SKIPPED_NO_KEYS", action: "HOLD", confidence: 0, configuredKeyCount: 0 };
+    await persistGeminiReview(storage, skipped, context);
+    return skipped;
+  }
+  if (!/^0x[0-9a-f]{64}$/.test(hash)) {
+    const skipped = { status: "SKIPPED_INVALID_POSITION", action: "HOLD", confidence: 0, configuredKeyCount: keys.length };
+    await persistGeminiReview(storage, skipped, context);
+    return skipped;
+  }
   const cooldownKey = "ciel:leverup:gemini-review:v1:" + hash;
   if (storage?.get) {
     const last = Number(await storage.get(cooldownKey).catch(() => "0"));
     const cooldownMs = Math.max(60_000, Math.min(10 * 60_000, Number(env?.GEMINI_POSITION_REVIEW_COOLDOWN_MS || 120_000)));
-    if (last > 0 && now - last < cooldownMs) return { status: "COOLDOWN", action: "HOLD", confidence: 0, retryAt: last + cooldownMs };
+    if (last > 0 && now - last < cooldownMs) {
+      const cooldown = { status: "COOLDOWN", action: "HOLD", confidence: 0, retryAt: last + cooldownMs, configuredKeyCount: keys.length, model: String(env?.GEMINI_MODEL || "gemini-2.5-flash").trim() };
+      await persistGeminiReview(storage, cooldown, context);
+      return cooldown;
+    }
     await storage.put(cooldownKey, String(now), { expirationTtl: 3600 }).catch(() => void 0);
   }
   const cursorKey = "ciel:gemini:key-cursor";
@@ -88,16 +123,20 @@ export async function reviewLeverUpPositionWithGemini({ env, position, currentPr
       const action = ["HOLD", "CLOSE", "REVERSE"].includes(parsed.action) ? parsed.action : "HOLD";
       const confidence = Math.max(0, Math.min(100, Math.round(Number(parsed.confidence) || 0)));
       if (storage?.put) await storage.put(cursorKey, String((index + 1) % keys.length), { expirationTtl: 30 * 24 * 3600 }).catch(() => void 0);
-      return {
+      const reviewed = {
         status: "REVIEWED", action, confidence,
         reversalConfirmed: parsed.reversalConfirmed === true,
         reason: String(parsed.reason || "No reason supplied.").slice(0, 240),
         keyIndexUsed: index + 1, configuredKeyCount: keys.length, model
       };
+      await persistGeminiReview(storage, reviewed, { ...context, model });
+      return reviewed;
     } catch (error) {
       lastError = String(error?.message || error).slice(0, 180);
     }
   }
   if (storage?.put) await storage.put(cursorKey, String((cursor + 1) % keys.length), { expirationTtl: 30 * 24 * 3600 }).catch(() => void 0);
-  return { status: "FAILED", action: "HOLD", confidence: 0, reason: lastError, configuredKeyCount: keys.length };
+  const failed = { status: "FAILED", action: "HOLD", confidence: 0, reason: lastError, configuredKeyCount: keys.length, model };
+  await persistGeminiReview(storage, failed, { ...context, model });
+  return failed;
 }
