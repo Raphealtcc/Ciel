@@ -103,7 +103,7 @@ once(
 
 once(
   '    const id = crypto.randomUUID().replace(/-/g, "").slice(0, 10).toUpperCase(), direction = candidate.side === "LONG" ? 1 : -1;\n    const stop = candidate.entry * (1 - direction * candidate.stopPct / 100), target = candidate.entry * (1 + direction * candidate.targetPct / 100), expires = now + 15 * 6e4;',
-  '    const id = crypto.randomUUID().replace(/-/g, "").slice(0, 10).toUpperCase(), direction = candidate.side === "LONG" ? 1 : -1;\n    const stop = candidate.entry * (1 - direction * candidate.stopPct / 100), target = candidate.entry * (1 + direction * candidate.targetPct / 100), expires = now + 15 * 6e4;\n    const leverUpPlan = await prepareLeverUpAdvisorPlan({ env, candidate, reviewed, signalId: id, now, technicalOnly });',
+  '    const id = crypto.randomUUID().replace(/-/g, "").slice(0, 10).toUpperCase(), direction = candidate.side === "LONG" ? 1 : -1;\n    const stop = candidate.entry * (1 - direction * candidate.stopPct / 100), target = candidate.entry * (1 + direction * candidate.targetPct / 100), expires = now + 15 * 6e4;\n    const leverUpPlan = liveEntrySubmittedThisCycle\n      ? { status: "CYCLE_LIVE_ENTRY_LIMIT", reason: "One live entry was already submitted during this scan; this setup remains recommendation-only.", coordination: { status: "CYCLE_LIVE_ENTRY_LIMIT", submitted: false } }\n      : await prepareLeverUpAdvisorPlan({ env, candidate, reviewed, signalId: id, now, technicalOnly });\n    if (leverUpPlan?.coordination?.submitted === true || ["SUBMITTED","EXECUTED","RECONCILED","PENDING","UNCERTAIN"].includes(String(leverUpPlan?.coordination?.status || "").toUpperCase())) liveEntrySubmittedThisCycle = true;',
   "run a live read-only LeverUp preflight for fully confirmed CIEL approvals",
 );
 
