@@ -21,8 +21,10 @@ ON, leverage = PAPER_LEVERAGE;
         [{ text: "\u25B6\uFE0F START TRACKING", callback_data: "start:" + id }],
         [{ text: "Skip this setup", callback_data: "skip:" + id }]
       ]).catch((error) => console.error("Proposal message failed", String(error)));
+      proposalCountThisCycle++;
     }
-    return;
+    if (proposalCountThisCycle >= maxProposalsPerCycle) break;
+    continue;
   }
 }
 __name(runAdvisorCycle, "runAdvisorCycle");
