@@ -30,7 +30,7 @@ const env = {
   LEVERUP_AGENT_PRIVATE_KEY: testAgentKey,
   CIEL_STATE: { put: async () => {} }, DB: { prepare: () => ({ bind() { return this; }, first: async () => null }) },
 };
-const candidate = { symbol: "BTC", side: "LONG", stopPct: 0.4, targetPct: 0.64, holdMinutes: 180, mode: "TREND_HOLD" };
+const candidate = { symbol: "BTC", side: "LONG", confidence: 0.82, stopPct: 0.4, targetPct: 0.64, holdMinutes: 180, mode: "TREND_HOLD" };
 const advisorSource = await readFile(new URL("../src/leverup-advisor.js", import.meta.url), "utf8");
 assert.ok(advisorSource.includes("Number(plan.marginMonUsed) * Number(plan.selectedLeverage) * stopPct / 100"),
   "LeverUp stop-risk must include the actual leverage multiplier");
@@ -214,6 +214,20 @@ const notApproved = await prepareLeverUpAdvisorPlan({
   signalId: "SIG-WAIT", now: 1_800_000_000_000, dependencies,
 });
 assert.equal(notApproved.status, "NOT_APPROVED");
+
+const belowScore = await prepareLeverUpAdvisorPlan({
+  env: { ...env }, candidate: { ...candidate, confidence: 0.7799 }, reviewed,
+  signalId: "SIG-SCORE-77", now: 1_800_000_000_000, dependencies,
+});
+assert.equal(belowScore.status, "BLOCKED_SCORE_BELOW_MINIMUM");
+assert.equal(belowScore.technicalScore, 77.99);
+
+const atScoreFloor = await prepareLeverUpAdvisorPlan({
+  env: { ...env }, candidate: { ...candidate, confidence: 0.78 }, reviewed,
+  signalId: "SIG-SCORE-78", now: 1_800_000_000_000, dependencies,
+});
+assert.equal(atScoreFloor.status, "PREFLIGHT_PASS_LIVE_DISABLED",
+  "a score of exactly 78/100 must pass the score gate and continue through the existing checks");
 
 
 import { runLeverUpDiagnostics } from "../src/leverup-advisor.js";
