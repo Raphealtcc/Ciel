@@ -903,7 +903,9 @@ export async function notifyLeverUpClosedTrade(env, closed, settlement, entry) {
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok || payload.ok !== true) throw new Error("TELEGRAM_LIVE_CLOSE_ALERT_FAILED: " + String(payload.description || response.status).slice(0, 180));
-  console.log("LeverUp live close alert delivered", JSON.stringify({ positionHash: closed.positionHash || null, messageId: payload.result?.message_id || null }));
+  const messageId = payload.result?.message_id || null;
+  console.log("LeverUp live close alert delivered", JSON.stringify({ positionHash: closed.positionHash || null, messageId }));
+  return { messageId };
 }
 
 async function reconcileClosedSettlements({ env, db, now, dependencies = {} }) {
@@ -967,8 +969,8 @@ async function reconcileClosedSettlements({ env, db, now, dependencies = {} }) {
     const alreadyNotified = await env?.CIEL_STATE?.get(notificationKey).catch(() => null);
     if (!alreadyNotified) {
       try {
-        await notifyLeverUpClosedTrade(env, closed, settlement, entry);
-        await env?.CIEL_STATE?.put(notificationKey, String(now), { expirationTtl: 365 * 24 * 3600 });
+        const delivery = await notifyLeverUpClosedTrade(env, closed, settlement, entry);
+        await env?.CIEL_STATE?.put(notificationKey, JSON.stringify({ sentAt: now, messageId: delivery?.messageId || null }), { expirationTtl: 365 * 24 * 3600 });
       } catch (error) {
         console.error("LeverUp live close notification failed: " + String(error?.message || error).slice(0, 250));
       }
