@@ -1,3 +1,9 @@
+export const MIN_RECOMMENDATION_SCORE = 78;
+export function isRecommendationScoreEligible(score) {
+  const value = Number(score);
+  return Number.isFinite(value) && value >= MIN_RECOMMENDATION_SCORE;
+}
+
 const WEIGHTS = Object.freeze({ trend: 25, momentumPerHorizon: 10, structure: 25, timing: 20 });
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
