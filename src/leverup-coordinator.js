@@ -109,7 +109,8 @@ async function claimIntent(db, { signalId, action, pairBase, leverage, marginMon
     if (duplicate) return { created: false, row: duplicate };
     if (Number(action) === OneClickAction.MARKET_OPEN) {
       const activeCount = await db.prepare(`SELECT COUNT(*) AS count FROM leverup_execution_intents
-        WHERE action = ? AND status IN ('PREPARED','UNCERTAIN','SUBMITTED','PENDING','EXECUTED','RECONCILED')`)
+        WHERE action = ? AND status IN ('PREPARED','UNCERTAIN','SUBMITTED','PENDING','EXECUTED','RECONCILED')
+          AND (status != 'RECONCILED' OR json_extract(payload_json,'$.closedAt') IS NULL)`)
         .bind(OneClickAction.MARKET_OPEN).first().catch(() => null);
       if (Number(activeCount?.count || 0) >= Number(maxConcurrentPositions)) {
         return { created: false, row: { signal_id: null, status: "MAX_CONCURRENT_POSITIONS_REACHED" }, blockedByActiveEntry: true };
@@ -750,7 +751,7 @@ export function evaluateLeverUpPositionAction({ position, currentPriceRaw, now =
 
 async function readEntryMetadata(db) {
   if (!db?.prepare) return [];
-  const result = await db.prepare("SELECT signal_id,pair_base,payload_json,status FROM leverup_execution_intents WHERE action = 0 AND status IN ('EXECUTED','RECONCILED','SUBMITTED','PENDING','UNCERTAIN')").all();
+  const result = await db.prepare("SELECT signal_id,pair_base,payload_json,status FROM leverup_execution_intents WHERE action = 0 AND status IN ('EXECUTED','RECONCILED','SUBMITTED','PENDING','UNCERTAIN') AND (status != 'RECONCILED' OR json_extract(payload_json,'$.closedAt') IS NULL)").all();
   return (result.results || []).map((row) => {
     try { return { signalId: row.signal_id, pairBase: row.pair_base || null, intentStatus: row.status, ...JSON.parse(row.payload_json || "{}") }; }
     catch { return { signalId: row.signal_id, pairBase: row.pair_base || null, intentStatus: row.status }; }
@@ -1105,7 +1106,7 @@ export async function runLeverUpPositionManager({ env, db, now = Date.now(), dep
   for (const entry of entries) {
     const hash = String(entry.positionHash || "").toLowerCase();
     if (!['EXECUTED','RECONCILED'].includes(entry.intentStatus) || !/^0x[0-9a-f]{64}$/.test(hash) || positionMap.has(hash)) continue;
-    await updateIntent(db, entry.signalId, "CLOSED", {
+    await updateIntent(db, entry.signalId, "RECONCILED", {
       payload: { ...entry, closedAt: now, closeReconciledByOnchainPositionRead: true },
     });
   }

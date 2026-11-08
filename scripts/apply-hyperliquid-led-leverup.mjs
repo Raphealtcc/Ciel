@@ -33,7 +33,7 @@ const replacement = `  async scheduled(_event, env, ctx) {
       } catch (advisorError) { console.error("CIEL Hyperliquid advisor cycle failed: " + String(advisorError?.message || advisorError).slice(0, 220)); }
       // Only reconcile LeverUp while there are active/pending entry records.
       try {
-        const active = await env.DB.prepare("SELECT COUNT(*) AS count FROM leverup_execution_intents WHERE action = 0 AND status IN ('SUBMITTED','PENDING','UNCERTAIN','EXECUTED','RECONCILED')").first();
+        const active = await env.DB.prepare("SELECT COUNT(*) AS count FROM leverup_execution_intents WHERE action = 0 AND status IN ('SUBMITTED','PENDING','UNCERTAIN','EXECUTED','RECONCILED') AND (status != 'RECONCILED' OR json_extract(payload_json,'$.closedAt') IS NULL)").first();
         if (Number(active?.count || 0) > 0) {
           await env.CIEL_STATE.put("ciel:leverup:position-manager:last-run", JSON.stringify({ at: now, status: "STARTED", activeEntryCount: Number(active.count) }), { expirationTtl: 3600 });
           const lifecycle = await runLeverUpPositionManager({ env, db: env.DB, now });
