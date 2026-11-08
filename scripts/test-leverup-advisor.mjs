@@ -220,7 +220,7 @@ const belowScore = await prepareLeverUpAdvisorPlan({
   signalId: "SIG-SCORE-77", now: 1_800_000_000_000, dependencies,
 });
 assert.equal(belowScore.status, "BLOCKED_SCORE_BELOW_MINIMUM");
-assert.equal(belowScore.technicalScore, 77.99);
+assert.ok(Math.abs(belowScore.technicalScore - 77.99) < 1e-9, "below-floor technical score must be reported as 77.99/100");
 
 const atScoreFloor = await prepareLeverUpAdvisorPlan({
   env: { ...env }, candidate: { ...candidate, confidence: 0.78 }, reviewed,
