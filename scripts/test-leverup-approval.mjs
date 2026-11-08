@@ -117,7 +117,7 @@ const recovered = await ensureLeverUpTokenAllowance({
 });
 assert.equal(recovered.status, "APPROVED");
 assert.equal(recovered.allowance, "789");
-assert.equal(primaryReadCount, 4);
+assert.equal(primaryReadCount, 5, "one pre-approval read plus four bounded post-receipt primary reads");
 assert.equal(secondaryReadCount, 1);
 assert.equal(secondaryWrites.length, 1, "only the single exact approval may be broadcast");
 assert.equal(recovered.allowanceReadDiagnostics.secondaryObservation, "allowance:789");
