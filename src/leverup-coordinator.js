@@ -6,6 +6,7 @@ import {
   LEVERUP_1CT, OneClickAction, getIntentStatusOnce, selectFeeToken, signAndSubmitIntent,
 } from "./leverup-1ct.js";
 import { ensureLeverUpTokenAllowance } from "./leverup-approval.js";
+import { evaluateAdaptiveLeverUpExit } from "./leverup-adaptive-exits.js";
 import {
   LEVERUP_TOKENS, createLeverUpPublicClient, fetchOpenPositions, fetchAllPositionsPaginated, fetchLeverUpPairs,
   fetchLatestOraclePrices, fetchAntiDdosConfig, readPositionsV4, normalizePositionAccrual,
@@ -1123,10 +1124,24 @@ export async function runLeverUpPositionManager({ env, db, now = Date.now(), dep
     const candidate = saved.candidate || {};
     const partials = Array.isArray(candidate.partialTakeProfits) ? candidate.partialTakeProfits : [];
     const completed = Array.isArray(saved?.completedPartialLevels) ? saved.completedPartialLevels : [];
-    const action = evaluateLeverUpPositionAction({
+    const fixedAction = evaluateLeverUpPositionAction({
       position, currentPriceRaw: latestPrice, now,
       maxHoldMinutes: Number(candidate.holdMinutes || 180), partialTakeProfits: partials, completedPartialLevels: completed,
     });
+    const adaptiveKey = "ciel:leverup:adaptive-exit:v1:" + hash;
+    let adaptiveState = null;
+    try { adaptiveState = await env?.CIEL_STATE?.get(adaptiveKey, "json"); } catch {}
+    const adaptive = evaluateAdaptiveLeverUpExit({ position, currentPriceRaw: latestPrice, state: adaptiveState || {}, pairView, now });
+    if (adaptive?.state && env?.CIEL_STATE?.put) {
+      await env.CIEL_STATE.put(adaptiveKey, JSON.stringify(adaptive.state), { expirationTtl: 7 * 24 * 3600 }).catch(() => void 0);
+    }
+    // Hard stop / fixed exits outrank adaptive signals. Adaptive logic may tighten
+    // a confirmed stop or request a multi-factor reversal close, never loosen risk.
+    const action = fixedAction.action === "MARKET_CLOSE" || fixedAction.action === "PARTIAL_CLOSE"
+      ? fixedAction
+      : adaptive.action === "MARKET_CLOSE" || adaptive.action === "UPDATE_TP_SL"
+        ? adaptive
+        : fixedAction;
     if (db?.prepare) {
       const stored = await (dependencies.persistFeeSnapshot || persistPositionFeeSnapshot)(db, position, null, 300_000);
       if (stored?.stored) snapshots++;
@@ -1134,20 +1149,26 @@ export async function runLeverUpPositionManager({ env, db, now = Date.now(), dep
     if (!liveEnabled(env) || action.action === "HOLD" || action.action === "WAIT") continue;
     if (action.action === "MARKET_CLOSE" && !auth.canMarketClose) continue;
     if (action.action === "PARTIAL_CLOSE" && !auth.canPartialClose) continue;
-    const oneClickAction = action.action === "PARTIAL_CLOSE" ? OneClickAction.PARTIAL_CLOSE : OneClickAction.MARKET_CLOSE;
+    if (action.action === "UPDATE_TP_SL" && !auth.canUpdateTpSl) continue;
+    const oneClickAction = action.action === "PARTIAL_CLOSE" ? OneClickAction.PARTIAL_CLOSE
+      : action.action === "UPDATE_TP_SL" ? OneClickAction.UPDATE_TP_SL : OneClickAction.MARKET_CLOSE;
     const slippage = BigInt(position.isLong ? pairView.slippageConfig.slippageLongP : pairView.slippageConfig.slippageShortP);
     const actionValues = action.action === "PARTIAL_CLOSE"
       ? [position.positionHash, BigInt(action.qtyRaw), slippage]
-      : [position.positionHash, slippage];
+      : action.action === "UPDATE_TP_SL"
+        ? [position.positionHash, BigInt(action.stopLossRaw), BigInt(action.takeProfitRaw)]
+        : [position.positionHash, slippage];
     const fee = selectFeeToken(oneClickAction, antiDdos.config, balances, [], { requireAllowance: false });
     const nonce = await (dependencies.readNonce || readLastAgentNonce)(traderAddress, agentAddress, { publicClient: client });
-    const signalId = "position-" + hash + "-" + action.action.toLowerCase() + (action.levelIndex == null ? "" : "-" + action.levelIndex);
+    const signalId = "position-" + hash + "-" + action.action.toLowerCase() +
+      (action.levelIndex == null ? "" : "-" + action.levelIndex) +
+      (action.action === "UPDATE_TP_SL" ? "-" + String(action.stopLossRaw) : "");
     const result = await submitLeverUpIntent({
       env, db, signalId, action: oneClickAction, actionValues, traderAddress, agentAddress,
       agentAuthorization: auth, nonce: (BigInt(nonce) + 1n).toString(), deadline: Math.floor(now / 1000) + 300,
       feeToken: fee.feeToken, antiDdosFee: fee.antiDdosFee,
       allowanceRequirements: fee.feeToken.toLowerCase() === ZERO.toLowerCase() ? [] : [{ tokenAddress: fee.feeToken, amount: fee.antiDdosFee }],
-      pairBase: position.pairBase, payload: { positionHash: position.positionHash, action: action.action, reason: action.reason, levelIndex: action.levelIndex ?? null },
+      pairBase: position.pairBase, payload: { positionHash: position.positionHash, action: action.action, reason: action.reason, levelIndex: action.levelIndex ?? null, stopLossRaw: action.stopLossRaw ?? null, adaptiveMetrics: action.atrProxyPct == null ? null : { atrProxyPct: action.atrProxyPct, trendPct: action.trendPct, momentumPct: action.momentumPct, closeScore: action.closeScore } },
       now, dependencies,
     });
     if (result.submitted) submitted++;
