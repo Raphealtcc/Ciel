@@ -31,20 +31,16 @@ const replacement = `  async scheduled(_event, env, ctx) {
           }
         }
       } catch (advisorError) { console.error("CIEL Hyperliquid advisor cycle failed: " + String(advisorError?.message || advisorError).slice(0, 220)); }
-      // Only reconcile LeverUp while there are active/pending entry records.
+      // Run the live position manager every scheduled minute. It discovers positions
+      // from the LeverUp account index rather than relying on a matching CIEL entry row.
       try {
-        const active = await env.DB.prepare("SELECT COUNT(*) AS count FROM leverup_execution_intents WHERE action = 0 AND status IN ('SUBMITTED','PENDING','UNCERTAIN','EXECUTED','RECONCILED') AND (status != 'RECONCILED' OR json_extract(payload_json,'$.closedAt') IS NULL)").first();
-        if (Number(active?.count || 0) > 0) {
-          await env.CIEL_STATE.put("ciel:leverup:position-manager:last-run", JSON.stringify({ at: now, status: "STARTED", activeEntryCount: Number(active.count) }), { expirationTtl: 3600 });
-          const lifecycle = await runLeverUpPositionManager({ env, db: env.DB, now });
-          await env.CIEL_STATE.put("ciel:leverup:position-manager:last-run", JSON.stringify({ at: now, status: lifecycle.status, checked: lifecycle.checked || 0, submitted: lifecycle.submitted || 0, adaptiveUpdatesBlocked: lifecycle.adaptiveUpdatesBlocked || 0, closePermissionBlocked: lifecycle.closePermissionBlocked || 0, canUpdateTpSl: lifecycle.canUpdateTpSl ?? null, discoveryError: lifecycle.discoveryError || null, reconciliation: lifecycle.reconciliation?.status || null, settlements: lifecycle.settlements || null }), { expirationTtl: 3600 });
-          if (lifecycle.adaptiveUpdatesBlocked) console.warn("LeverUp adaptive TP/SL updates blocked by missing agent permission: " + lifecycle.adaptiveUpdatesBlocked);
-          if (lifecycle.closePermissionBlocked) console.error("LeverUp position closes blocked by missing agent close permission: " + lifecycle.closePermissionBlocked);
-          if (lifecycle.status === "BLOCKED_POSITION_DISCOVERY") console.error("LeverUp position management blocked: position indexer unavailable; no false empty-position state assumed.");
-          if (lifecycle.submitted) console.log("LeverUp position manager submitted " + lifecycle.submitted + " exit intent(s).");
-        } else {
-          await env.CIEL_STATE.put("ciel:leverup:position-manager:last-run", JSON.stringify({ at: now, status: "SKIPPED_NO_ACTIVE_ENTRIES", activeEntryCount: 0 }), { expirationTtl: 3600 });
-        }
+        await env.CIEL_STATE.put("ciel:leverup:position-manager:last-run", JSON.stringify({ at: now, status: "STARTED" }), { expirationTtl: 3600 });
+        const lifecycle = await runLeverUpPositionManager({ env, db: env.DB, now });
+        await env.CIEL_STATE.put("ciel:leverup:position-manager:last-run", JSON.stringify({ at: now, status: lifecycle.status, checked: lifecycle.checked || 0, submitted: lifecycle.submitted || 0, adaptiveUpdatesBlocked: lifecycle.adaptiveUpdatesBlocked || 0, closePermissionBlocked: lifecycle.closePermissionBlocked || 0, canUpdateTpSl: lifecycle.canUpdateTpSl ?? null, discoveryError: lifecycle.discoveryError || null, reconciliation: lifecycle.reconciliation?.status || null, settlements: lifecycle.settlements || null }), { expirationTtl: 3600 });
+        if (lifecycle.adaptiveUpdatesBlocked) console.warn("LeverUp adaptive TP/SL updates blocked by missing agent permission: " + lifecycle.adaptiveUpdatesBlocked);
+        if (lifecycle.closePermissionBlocked) console.error("LeverUp position closes blocked by missing agent close permission: " + lifecycle.closePermissionBlocked);
+        if (lifecycle.status === "BLOCKED_POSITION_DISCOVERY") console.error("LeverUp position management blocked: position indexer unavailable; no false empty-position state assumed.");
+        if (lifecycle.submitted) console.log("LeverUp position manager submitted " + lifecycle.submitted + " exit intent(s).");
       } catch (error) {
         const detail = String(error?.message || error).slice(0, 400);
         console.error("LeverUp active-position management failed: " + detail);
