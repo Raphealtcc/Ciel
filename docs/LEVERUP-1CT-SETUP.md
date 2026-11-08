@@ -22,7 +22,7 @@ These are public addresses only. The trader wallet remains the owner of funds an
 
 ## Hard execution policy
 
-All absolute MON-denominated risk caps have a hard 12 MON floor: daily realized loss, rolling drawdown, and aggregate stop-risk. Operator configuration can raise these limits, but a lower value is normalized to 12 MON in the risk gate.
+All absolute MON-denominated risk caps have a hard 15 MON floor: daily realized loss, rolling drawdown, and aggregate stop-risk. Operator configuration can raise these limits, but a lower value is normalized to 15 MON in the risk gate.
 
 1. Minimum leverage is **50x**. A model inference below 50x means skip the trade; never force it upward or fall back to 25x/10x/5x/2x.
 2. If the applicable notional tier allows less than 50x, skip the market/size.
@@ -43,9 +43,9 @@ The staging `wrangler.jsonc` now contains the two confirmed public addresses and
 | `LEVERUP_LIVE_TRADING` | Plain text | `false` |
 | `LEVERUP_KILL_SWITCH` | Plain text | `true` |
 | `LEVERUP_MIN_LEVERAGE` | Plain text | `50` |
-| `LEVERUP_MAX_DAILY_LOSS_MON` | Plain text | `12` |
-| `LEVERUP_MAX_DRAWDOWN_MON` | Plain text | `12` |
-| `LEVERUP_MAX_AGGREGATE_STOP_RISK_MON` | Plain text | `12` |
+| `LEVERUP_MAX_DAILY_LOSS_MON` | Plain text | `15` |
+| `LEVERUP_MAX_DRAWDOWN_MON` | Plain text | `15` |
+| `LEVERUP_MAX_AGGREGATE_STOP_RISK_MON` | Plain text | `15` |
 | `LEVERUP_TOTAL_ALLOCATION_MON` | Plain text | `50` MON total capital ceiling |\n| `LEVERUP_PREFLIGHT_ENABLED` | Plain text | `true` |\n| `LEVERUP_RESERVE_MON` | Plain text | `25` MON reserved; only the minimum venue margin is used unless a per-trade cap is configured |
 | `LEVERUP_AGENT_PRIVATE_KEY` | Secret | Agent intent-signing key; configure only through Cloudflare secret management |
 | `LEVERUP_TRADER_PRIVATE_KEY` | Secret | Trader-only ERC-20 approval signer; configure only through Cloudflare secret management |
