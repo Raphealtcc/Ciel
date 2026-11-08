@@ -99,7 +99,7 @@ export function evaluateLeverUpNativeSeries(symbol, rows, now = Date.now()) {
     executionEligible: false,
     reason: "Technical-only native-feed candidate. Full LeverUp preflight, portfolio checks and independent execution confirmation remain mandatory."
   } : null;
-  return { symbol, status: signal ? "SIGNAL_CANDIDATE" : direction ? "LOW_SCORE_FILTERED" : "NO_SIGNAL", samples: points.length, latestAt: Number(latest.observed_at_ms), signal, scoreFiltered: Boolean(direction && !signal), minimumTechnicalScore: 78 };
+  return { symbol, status: signal ? "SIGNAL_CANDIDATE" : direction ? "INVALID_SCORE" : "NO_SIGNAL", samples: points.length, latestAt: Number(latest.observed_at_ms), signal, scoreFiltered: false, minimumTechnicalScore: 0 };
 }
 
 export async function runLeverUpNativeSampler({ env, now = Date.now(), dependencies = {} }) {
