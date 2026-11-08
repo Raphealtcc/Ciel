@@ -182,7 +182,7 @@ assert.match(below50.reason, /BELOW_50X/);
 const oneExistingPosition = await prepareLeverUpAdvisorPlan({
   env: { ...env }, candidate, reviewed,
   signalId: "SIG-ONE-OPEN", now: 1_800_000_000_000,
-  dependencies: { readSnapshot: async ({ collateralRatio }) => ({ ...baseSnapshot(collateralRatio), indexedPositions: [{ positionHash: "0xabc" }] }) },
+  dependencies: { ...dependencies, readSnapshot: async ({ collateralRatio }) => ({ ...baseSnapshot(collateralRatio), indexedPositions: [{ positionHash: "0xabc" }] }) },
 });
 assert.equal(oneExistingPosition.status, "PREFLIGHT_PASS_LIVE_DISABLED",
   "one existing position must leave the second configured slot available");
