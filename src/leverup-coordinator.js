@@ -1223,9 +1223,11 @@ export async function runLeverUpPositionManager({ env, db, now = Date.now(), dep
     // AI is advisory, never allowed to override fixed SL/TP or act without local
     // reversal evidence. A confirmed reversal closes the old position; a new
     // opposite entry must still pass the independent 78/100 entry gate.
+    if (aiReview.status === "REVIEWED") aiReviewed++;
     const aiCloseConfirmed = ["CLOSE", "REVERSE"].includes(aiReview.action) &&
       Number(aiReview.confidence) >= 85 && aiReview.reversalConfirmed === true &&
       Number(adaptive.closeScore || 0) >= 2;
+    if (aiCloseConfirmed) aiCloseSignals++;
     // Hard stop / fixed exits outrank all adaptive and AI decisions.
     const minimumHoldActive = BigInt(position.earliestCloseTime || 0) > BigInt(Math.floor(now / 1000));
     const action = fixedAction.action === "MARKET_CLOSE" || fixedAction.action === "PARTIAL_CLOSE"
