@@ -1,4 +1,4 @@
-import { scoreTechnicalEvidence } from "./technical-scoring.js";
+import { scoreTechnicalEvidence, isRecommendationScoreEligible } from "./technical-scoring.js";
 import { fetchLeverUpPairs, fetchLatestOraclePrices } from "./leverup-readonly.js";
 
 const SAMPLE_INTERVAL_MS = 60_000;
@@ -87,7 +87,7 @@ export function evaluateLeverUpNativeSeries(symbol, rows, now = Date.now()) {
     structureConfirmed: null,
     rsi: strength,
   }) : null;
-  const signal = direction ? {
+  const signal = direction && isRecommendationScoreEligible(technicalScore.score) ? {
     symbol, side: direction, source: "LEVERUP_ORACLE_SAMPLES",
     score: technicalScore.score / 100,
     scoreDetails: technicalScore,
@@ -99,7 +99,7 @@ export function evaluateLeverUpNativeSeries(symbol, rows, now = Date.now()) {
     executionEligible: false,
     reason: "Technical-only native-feed candidate. Full LeverUp preflight, portfolio checks and independent execution confirmation remain mandatory."
   } : null;
-  return { symbol, status: signal ? "SIGNAL_CANDIDATE" : "NO_SIGNAL", samples: points.length, latestAt: Number(latest.observed_at_ms), signal };
+  return { symbol, status: signal ? "SIGNAL_CANDIDATE" : direction ? "LOW_SCORE_FILTERED" : "NO_SIGNAL", samples: points.length, latestAt: Number(latest.observed_at_ms), signal, scoreFiltered: Boolean(direction && !signal), minimumTechnicalScore: 78 };
 }
 
 export async function runLeverUpNativeSampler({ env, now = Date.now(), dependencies = {} }) {
