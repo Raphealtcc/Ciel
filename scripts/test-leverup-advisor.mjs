@@ -179,12 +179,35 @@ const below50 = await prepareLeverUpAdvisorPlan({
 assert.equal(below50.status, "BLOCKED_PREFLIGHT");
 assert.match(below50.reason, /BELOW_50X/);
 
-const existing = await prepareLeverUpAdvisorPlan({
+const oneExistingPosition = await prepareLeverUpAdvisorPlan({
   env: { ...env }, candidate, reviewed,
-  signalId: "SIG-OPEN", now: 1_800_000_000_000,
+  signalId: "SIG-ONE-OPEN", now: 1_800_000_000_000,
   dependencies: { readSnapshot: async ({ collateralRatio }) => ({ ...baseSnapshot(collateralRatio), indexedPositions: [{ positionHash: "0xabc" }] }) },
 });
-assert.equal(existing.status, "BLOCKED_EXISTING_POSITION");
+assert.equal(oneExistingPosition.status, "PREFLIGHT_PASS_LIVE_DISABLED",
+  "one existing position must leave the second configured slot available");
+assert.equal(oneExistingPosition.coordination.status, "DRY_RUN_APPROVED",
+  "portfolio risk checks must allow one existing position when the concurrency limit is two");
+
+const atPositionLimit = await prepareLeverUpAdvisorPlan({
+  env: { ...env }, candidate, reviewed,
+  signalId: "SIG-TWO-OPEN", now: 1_800_000_000_000,
+  dependencies: { readSnapshot: async ({ collateralRatio }) => ({ ...baseSnapshot(collateralRatio),
+    indexedPositions: [{ positionHash: "0xabc" }, { positionHash: "0xdef" }] }) },
+});
+assert.equal(atPositionLimit.status, "BLOCKED_MAX_CONCURRENT_POSITIONS");
+assert.equal(atPositionLimit.maxConcurrentPositions, 2,
+  "the configured two-position limit must remain enforced");
+
+const missingPositionIndex = await prepareLeverUpAdvisorPlan({
+  env: { ...env }, candidate, reviewed,
+  signalId: "SIG-POSITIONS-UNKNOWN", now: 1_800_000_000_000,
+  dependencies: { readSnapshot: async ({ collateralRatio }) => {
+    const snapshot = baseSnapshot(collateralRatio); delete snapshot.indexedPositions; return snapshot;
+  } },
+});
+assert.equal(missingPositionIndex.status, "BLOCKED_POSITION_SNAPSHOT_UNAVAILABLE",
+  "unknown position state must fail closed");
 
 const notApproved = await prepareLeverUpAdvisorPlan({
   env: { ...env }, candidate, reviewed: { verdict: "WAIT" },
