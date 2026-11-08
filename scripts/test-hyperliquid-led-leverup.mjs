@@ -16,6 +16,8 @@ assert.ok(!scheduled.includes("runLeverUpDiagnostics("), "periodic LeverUp diagn
 assert.ok(!scheduled.includes("fetchLeverUpPairs("), "scheduled path must not fetch LeverUp pair catalogue");
 assert.ok(scheduled.includes("status IN ('SUBMITTED','PENDING','UNCERTAIN','EXECUTED','RECONCILED')"), "position manager must be gated by active/pending entry records");
 assert.ok(scheduled.includes("runLeverUpPositionManager("), "position manager must remain available for real open positions");
+assert.ok(scheduled.includes("status: \"STARTED\""), "position manager must persist a start marker before live monitoring");
+assert.ok(scheduled.includes("position-manager:last-error"), "position manager failures must be persisted for diagnosis");
 
 const candidateCall = source.indexOf("prepareLeverUpAdvisorPlan({ env, candidate, reviewed");
 assert.ok(candidateCall > 0, "candidate-time LeverUp preflight must remain");
