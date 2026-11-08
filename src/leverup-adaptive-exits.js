@@ -56,7 +56,7 @@ export function evaluateAdaptiveLeverUpExit({ position, currentPriceRaw, state =
   }
   const favourablePct = isLong ? pct(price, entry) : pct(entry, price);
   // Balanced mode requires multi-factor deterioration, not one noisy indicator.
-  if (closeScore >= 4 && history.length >= 10 && favourablePct > 0) {
+  if (closeScore >= 3 && history.length >= 10 && favourablePct > 0) {
     return { action: "MARKET_CLOSE", reason: "ADAPTIVE_MULTI_FACTOR_REVERSAL", closeScore, trendPct, momentumPct, atrProxyPct, favourablePct, state: nextState };
   }
   if (proposedStop !== stop) {

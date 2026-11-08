@@ -210,4 +210,4 @@ assert.equal(dryRunLedger.orderSubmitted, false);
 assert.equal(dryRunLedger.intentClaimed, true);
 assert.equal(dryRunLedger.duplicateBlocked, true);
 assert.equal(dryRunLedger.statusReconciled, true);
-assert.equal(db.rows.size, 1, "diagnostic intent must be deleted after verification; only the original lifecycle test row remains");
+assert.equal(db.rows.size, 2, "diagnostic intent must be deleted after verification; the two live-entry lifecycle rows remain");

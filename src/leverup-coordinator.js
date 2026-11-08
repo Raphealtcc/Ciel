@@ -1137,11 +1137,14 @@ export async function runLeverUpPositionManager({ env, db, now = Date.now(), dep
     }
     // Hard stop / fixed exits outrank adaptive signals. Adaptive logic may tighten
     // a confirmed stop or request a multi-factor reversal close, never loosen risk.
+    const minimumHoldActive = BigInt(position.earliestCloseTime || 0) > BigInt(Math.floor(now / 1000));
     const action = fixedAction.action === "MARKET_CLOSE" || fixedAction.action === "PARTIAL_CLOSE"
       ? fixedAction
-      : adaptive.action === "MARKET_CLOSE" || adaptive.action === "UPDATE_TP_SL"
-        ? adaptive
-        : fixedAction;
+      : adaptive.action === "MARKET_CLOSE" && minimumHoldActive
+        ? { action: "WAIT", reason: "MINIMUM_HOLD_NOT_REACHED_FOR_ADAPTIVE_EXIT" }
+        : adaptive.action === "MARKET_CLOSE" || adaptive.action === "UPDATE_TP_SL"
+          ? adaptive
+          : fixedAction;
     if (db?.prepare) {
       const stored = await (dependencies.persistFeeSnapshot || persistPositionFeeSnapshot)(db, position, null, 300_000);
       if (stored?.stored) snapshots++;
