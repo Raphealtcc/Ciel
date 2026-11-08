@@ -66,7 +66,7 @@ if (scheduled.includes("runLeverUpNativeSampler(") || scheduled.includes("runLev
   throw new Error("Periodic LeverUp sampling or diagnostics remain in scheduled handler.");
 }
 if (!scheduled.includes("HyperliquidFeed Durable Object owns the scan.") || !scheduled.includes("ciel:advisor:last-scan")) throw new Error("HyperliquidFeed-owned advisor scan freshness check is missing.");
-if (!scheduled.includes("status IN ('SUBMITTED','PENDING','UNCERTAIN','EXECUTED','RECONCILED')")) throw new Error("Active-position-only LeverUp management gate is missing.");
+if (!scheduled.includes("Run the live position manager every scheduled minute") || scheduled.includes("const active = await env.DB.prepare")) throw new Error("Unconditional minute-level LeverUp position management is missing.");
 if (!source.includes("prepareLeverUpAdvisorPlan({ env, candidate, reviewed")) throw new Error("Candidate-time LeverUp preflight call is missing.");
 
 await writeFile(file, source);
