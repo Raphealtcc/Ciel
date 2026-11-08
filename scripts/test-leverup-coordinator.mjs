@@ -73,7 +73,7 @@ assert.equal(evaluateLeverUpPortfolioRisk({requestedLeverage:1000,totalAllocatio
 assert.equal(safe.allowed,true);
 const floored = evaluateLeverUpPortfolioRisk({
   requestedLeverage:100, availableWmonMon:25, requestedMarginMon:1, entryBudgetMon:1,
-  currentOpenPositions:[], proposedStopRiskMon:0.2, dailyRealizedLossMon:11.9,
+  currentOpenPositions:[], proposedStopRiskMon:0.2, dailyRealizedLossMon:14.9,
   maxDailyRealizedLossMon:1, rollingDrawdownMon:11.9, maxRollingDrawdownMon:2,
   aggregateStopRiskMon:11.9, maxAggregateStopRiskMon:1, killSwitchActive:false,
 });
@@ -81,12 +81,12 @@ assert.equal(floored.allowed,false, "configured risk caps below 15 MON remain fl
 assert.deepEqual(floored.riskLimitsMon, {dailyLoss:15, drawdown:15, aggregateStopRisk:15});
 assert.equal(evaluateLeverUpPortfolioRisk({
   requestedLeverage: 100, availableWmonMon: 25, requestedMarginMon: 1, entryBudgetMon: 1,
-  currentOpenPositions: [], proposedStopRiskMon: 0.2, dailyRealizedLossMon: 11.9,
+  currentOpenPositions: [], proposedStopRiskMon: 0.2, dailyRealizedLossMon: 14.9,
   maxDailyRealizedLossMon: 1, killSwitchActive: false,
 }).allowed, false, "projected stop loss must fit inside the remaining daily loss budget");
 assert.equal(evaluateLeverUpPortfolioRisk({
   requestedLeverage: 100, availableWmonMon: 25, requestedMarginMon: 1, entryBudgetMon: 1,
-  currentOpenPositions: [], proposedStopRiskMon: 0.2, rollingDrawdownMon: 11.9,
+  currentOpenPositions: [], proposedStopRiskMon: 0.2, rollingDrawdownMon: 14.9,
   maxRollingDrawdownMon: 2, killSwitchActive: false,
 }).allowed, false, "projected stop loss must fit inside the remaining drawdown budget");
 for (const patch of [{requestedLeverage:25},{availableWmonMon:0},{requestedMarginMon:26},{currentOpenPositions:[{},{}]},{staleFeed:true},{executionUncertain:true},{dailyRealizedLossMon:15},{rollingDrawdownMon:15},{proposedStopRiskMon:15.01}]) {
