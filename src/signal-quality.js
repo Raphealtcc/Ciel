@@ -96,6 +96,24 @@ export function evaluateSignalQuality({ candidate, forecast, market, eventIntel 
     const aligned = side === "LONG" ? medianReturnPct > 0 : medianReturnPct < 0;
     const opposedMagnitude = Math.abs(medianReturnPct);
     const counter = isCounterTrend(candidate);
+    const forecastParts = forecast?.components || {};
+    const r5 = finite(forecastParts.return5mPct), r15 = finite(forecastParts.return15mPct), r60 = finite(forecastParts.return60mPct);
+    const direction = side === "LONG" ? 1 : -1;
+    const f5 = r5 === null ? null : r5 * direction;
+    const f15 = r15 === null ? null : r15 * direction;
+    const f60 = r60 === null ? null : r60 * direction;
+    const micro = strategy.includes("MICRO_MOMENTUM");
+    const continuation = strategy.includes("CONTINUATION") || strategy.includes("PULLBACK") || candidate?.mode === "TREND_HOLD";
+    const reversal = strategy.includes("LEVEL_SWEEP") || strategy.includes("SWING_REVERSAL");
+    if ((micro || continuation || reversal) && (f5 === null || f15 === null)) {
+      vetoes.push("MULTI_HORIZON_FORECAST_INCOMPLETE");
+    } else if ((micro || continuation) && f60 === null) {
+      vetoes.push("60M_TREND_CONFIRMATION_MISSING");
+    } else if ((micro || continuation) && (f5 <= 0 || f15 <= 0 || f60 <= (micro ? 0.08 : -0.10))) {
+      vetoes.push("HIGHER_TIMEFRAME_FORECAST_DISAGREEMENT");
+    } else if (reversal && (f5 <= 0 || f15 <= 0 || f60 !== null && f60 < -0.75)) {
+      vetoes.push("REVERSAL_LACKS_MULTI_HORIZON_CONFIRMATION");
+    }
     if (!aligned && opposedMagnitude >= minimumMovePct) {
       vetoes.push("FORECAST_STRONGLY_OPPOSES_ENTRY");
     } else if (aligned && opposedMagnitude >= minimumMovePct) {
@@ -108,7 +126,7 @@ export function evaluateSignalQuality({ candidate, forecast, market, eventIntel 
     }
   }
   components.push({ key: "STATISTICAL_FORECAST", score: forecastScore, max: 25,
-    detail: medianReturnPct === null ? "unavailable" : medianReturnPct.toFixed(3) + "% median" });
+    detail: medianReturnPct === null ? "unavailable" : medianReturnPct.toFixed(3) + "% median; 5m/15m/60m components checked" });
 
   let spreadScore = 0, depthScore = 0, volumeScore = 0;
   if (spreadBps !== null) {
@@ -159,7 +177,7 @@ export function evaluateSignalQuality({ candidate, forecast, market, eventIntel 
 
   const score = Math.round(components.reduce((sum, item) => sum + item.score, 0));
   const threshold = strategy.includes("SWING_REVERSAL") ? 84 :
-    strategy.includes("LEVEL_SWEEP") ? 82 :
+    strategy.includes("LEVEL_SWEEP") ? 85 :
     strategy.includes("PULLBACK") ? 82 :
     strategy.includes("MICRO_MOMENTUM") ? 84 :
     strategy.includes("CONTINUATION") ? 82 : 80;
