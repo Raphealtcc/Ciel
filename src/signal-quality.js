@@ -102,10 +102,9 @@ export function evaluateSignalQuality({ candidate, forecast, market, eventIntel 
       forecastScore = 25;
     } else if (counter) {
       forecastScore = 18;
-    } else if (aligned) {
-      forecastScore = 18;
     } else {
-      forecastScore = 12;
+      vetoes.push("FORECAST_TOO_WEAK_FOR_TREND_ENTRY");
+      forecastScore = 0;
     }
   }
   components.push({ key: "STATISTICAL_FORECAST", score: forecastScore, max: 25,
@@ -160,10 +159,10 @@ export function evaluateSignalQuality({ candidate, forecast, market, eventIntel 
 
   const score = Math.round(components.reduce((sum, item) => sum + item.score, 0));
   const threshold = strategy.includes("SWING_REVERSAL") ? 84 :
-    strategy.includes("LEVEL_SWEEP") ? 80 :
-    strategy.includes("PULLBACK") ? 80 :
-    strategy.includes("MICRO_MOMENTUM") ? 80 :
-    strategy.includes("CONTINUATION") ? 78 : 78;
+    strategy.includes("LEVEL_SWEEP") ? 82 :
+    strategy.includes("PULLBACK") ? 82 :
+    strategy.includes("MICRO_MOMENTUM") ? 84 :
+    strategy.includes("CONTINUATION") ? 82 : 80;
   const allowed = vetoes.length === 0 && score >= threshold;
   if (score < threshold) vetoes.push("QUALITY_SCORE_BELOW_THRESHOLD");
   return {
@@ -193,7 +192,12 @@ export function shouldSuppressDuplicateSignal({ candidate, priorSignal, now }) {
   const ageMs = Number(now) - createdAt;
   if (!Number.isFinite(ageMs) || ageMs < 0 || ageMs >= windowMs) return { suppress: false, reason: "OUTSIDE_REARM_WINDOW", ageMs, windowMs };
   const displacementPct = Math.abs(entry / priorEntry - 1) * 100;
-  const rearmPct = clamp((finite(candidate.stopPct) || 0.25) * 0.6, 0.15, 0.45);
+  const stop = finite(candidate.stopPct) || 0.25;
+  const rearmBase = strategy.includes("MICRO_MOMENTUM") ? Math.max(0.5, stop * 1.25) :
+    mode === "RANGE_SCALP" ? Math.max(0.35, stop * 0.9) :
+    mode === "CORE_PULLBACK_SCALP" ? Math.max(0.25, stop * 0.8) :
+    mode === "CORE_TREND_CONTINUATION" ? Math.max(0.35, stop) : Math.max(0.35, stop);
+  const rearmPct = clamp(rearmBase, 0.25, 1.0);
   const suppress = displacementPct < rearmPct;
   return { suppress, reason: suppress ? "SAME_SETUP_STILL_ACTIVE" : "PRICE_REARMED",
     ageMs, windowMs, displacementPct, rearmPct };
