@@ -7,7 +7,6 @@ import {
 } from "./leverup-1ct.js";
 import { ensureLeverUpTokenAllowance } from "./leverup-approval.js";
 import { evaluateAdaptiveLeverUpExit } from "./leverup-adaptive-exits.js";
-import { reviewLeverUpPositionWithGemini } from "./leverup-position-ai.js";
 import {
   LEVERUP_TOKENS, createLeverUpPublicClient, fetchOpenPositions, fetchAllPositions, fetchLeverUpPairs,
   fetchLatestOraclePrices, fetchAntiDdosConfig, readPositionsV4, normalizePositionAccrual,
@@ -1253,42 +1252,38 @@ export async function runLeverUpPositionManager({ env, db, now = Date.now(), dep
     if (adaptive?.state && env?.CIEL_STATE?.put) {
       await env.CIEL_STATE.put(adaptiveKey, JSON.stringify(adaptive.state), { expirationTtl: 7 * 24 * 3600 }).catch(() => void 0);
     }
-    let aiReview = { status: "SKIPPED_NO_KEYS", action: "HOLD", confidence: 0 };
-    if (String(env?.GEMINI_API_KEYS || "").trim()) {
-      aiReview = await reviewLeverUpPositionWithGemini({
-        env, position: { ...position, symbol: pairView.symbol || pairView.pairName || null },
-        currentPriceRaw: latestPrice, adaptive, state: adaptive?.state || adaptiveState || {}, now,
-        maxHoldReached: fixedAction.maxHoldReached === true,
-        positionAgeMinutes: Number.isFinite(Number(position.timestamp)) && Number(position.timestamp) > 0
-          ? Math.max(0, (now - Number(position.timestamp) * 1000) / 60_000) : null,
-        dependencies
-      }).catch((error) => ({ status: "FAILED", action: "HOLD", confidence: 0, reason: String(error?.message || error).slice(0, 180) }));
-    }
+    // Live risk exits are deterministic and never wait for a Gemini API request.
+    // Gemini remains available to the signal/research pipeline, not position-close authorization.
+    const aiReview = { status: "DISABLED_DETERMINISTIC_EXIT_ENGINE", action: "HOLD", confidence: 0 };
     aiReviewStatusCounts[aiReview.status] = (aiReviewStatusCounts[aiReview.status] || 0) + 1;
-    geminiConfiguredKeyCount = Math.max(geminiConfiguredKeyCount, Number(aiReview.configuredKeyCount || 0));
-    if (aiReview.status === "FAILED" && aiReviewFailures.length < 5) {
-      aiReviewFailures.push(String(aiReview.reason || "GEMINI_REVIEW_FAILED").slice(0, 180));
-    }
-    // AI is advisory, never allowed to override fixed SL/TP or act without local
-    // reversal evidence. The max-hold timer is a review checkpoint, not a forced exit.
-    // A confirmed reversal closes the old position; an opposite entry still passes
-    // market, collateral, authorization and portfolio-risk checks.
-    if (aiReview.status === "REVIEWED") aiReviewed++;
-    const aiCloseConfirmed = ["CLOSE", "REVERSE"].includes(aiReview.action) &&
-      Number(aiReview.confidence) >= 85 && aiReview.reversalConfirmed === true &&
-      Number(adaptive.closeScore || 0) >= 2;
-    if (aiCloseConfirmed) aiCloseSignals++;
-    // Hard stop / fixed exits outrank all adaptive and AI decisions.
     const minimumHoldActive = BigInt(position.earliestCloseTime || 0) > BigInt(Math.floor(now / 1000));
+    // Reconcile exact entry SL/TP against the values stored on the live position.
+    const expectedStop = BigInt(saved?.plan?.actionValues?.[7] || 0);
+    const expectedTarget = BigInt(saved?.plan?.actionValues?.[8] || 0);
+    const actualStop = BigInt(position.stopLossRaw || 0);
+    const actualTarget = BigInt(position.takeProfitRaw || 0);
+    const protectionMismatch = Boolean(saved && (
+      (expectedStop > 0n && actualStop !== expectedStop) ||
+      (expectedTarget > 0n && actualTarget !== expectedTarget)
+    ));
+    let protectionRepair = null;
+    if (protectionMismatch) {
+      const stopAlreadyCrossed = expectedStop > 0n &&
+        (position.isLong ? BigInt(latestPrice) <= expectedStop : BigInt(latestPrice) >= expectedStop);
+      const targetAlreadyCrossed = expectedTarget > 0n &&
+        (position.isLong ? BigInt(latestPrice) >= expectedTarget : BigInt(latestPrice) <= expectedTarget);
+      protectionRepair = stopAlreadyCrossed || targetAlreadyCrossed
+        ? { action: "MARKET_CLOSE", reason: stopAlreadyCrossed ? "EXPECTED_STOP_ALREADY_CROSSED" : "EXPECTED_TARGET_ALREADY_CROSSED" }
+        : { action: "UPDATE_TP_SL", reason: "ENTRY_PROTECTION_MISMATCH", stopLossRaw: expectedStop.toString(), takeProfitRaw: expectedTarget.toString() };
+    }
+    // Hard SL/TP triggers outrank repair, adaptive exits and every other review.
     const action = fixedAction.action === "MARKET_CLOSE" || fixedAction.action === "PARTIAL_CLOSE"
       ? fixedAction
-      : adaptive.action === "MARKET_CLOSE" && minimumHoldActive
-        ? { action: "WAIT", reason: "MINIMUM_HOLD_NOT_REACHED_FOR_ADAPTIVE_EXIT" }
+      : protectionRepair
+        ? protectionRepair
         : adaptive.action === "MARKET_CLOSE" || adaptive.action === "UPDATE_TP_SL"
           ? adaptive
-          : aiCloseConfirmed && !minimumHoldActive
-            ? { action: "MARKET_CLOSE", reason: "GEMINI_CONFIRMED_REVERSAL_" + aiReview.action, aiReview }
-            : fixedAction;
+          : fixedAction;
     if (db?.prepare) {
       const stored = await (dependencies.persistFeeSnapshot || persistPositionFeeSnapshot)(db, position, null, 300_000);
       if (stored?.stored) snapshots++;
@@ -1315,7 +1310,7 @@ export async function runLeverUpPositionManager({ env, db, now = Date.now(), dep
       agentAuthorization: auth, nonce: (BigInt(nonce) + 1n).toString(), deadline: Math.floor(now / 1000) + 300,
       feeToken: fee.feeToken, antiDdosFee: fee.antiDdosFee,
       allowanceRequirements: fee.feeToken.toLowerCase() === ZERO.toLowerCase() ? [] : [{ tokenAddress: fee.feeToken, amount: fee.antiDdosFee }],
-      pairBase: position.pairBase, payload: { tradeId, positionHash: position.positionHash, action: action.action, reason: action.reason, levelIndex: action.levelIndex ?? null, stopLossRaw: action.stopLossRaw ?? null,
+      pairBase: position.pairBase, payload: { tradeId, positionHash: position.positionHash, action: action.action, reason: action.reason, protectionMismatch, expectedStopRaw: expectedStop.toString(), actualStopRaw: actualStop.toString(), expectedTargetRaw: expectedTarget.toString(), actualTargetRaw: actualTarget.toString(), levelIndex: action.levelIndex ?? null, stopLossRaw: action.stopLossRaw ?? null,
         aiReview: { status: aiReview.status, action: aiReview.action, confidence: aiReview.confidence, reversalConfirmed: aiReview.reversalConfirmed === true, reason: aiReview.reason || null, model: aiReview.model || null, configuredKeyCount: aiReview.configuredKeyCount || 0 },
         adaptiveMetrics: { action: adaptive.action, reason: adaptive.reason, samples: adaptive.samples ?? adaptive.state?.history?.length ?? null, atrProxyPct: adaptive.atrProxyPct ?? null, trendPct: adaptive.trendPct ?? null, momentumPct: adaptive.momentumPct ?? null, closeScore: adaptive.closeScore ?? null, favourablePct: adaptive.favourablePct ?? null, peakFavourablePct: adaptive.peakFavourablePct ?? null, givebackPct: adaptive.givebackPct ?? null, profitProtection: adaptive.state?.profitProtection || null } },
       now, dependencies,

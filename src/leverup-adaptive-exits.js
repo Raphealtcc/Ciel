@@ -60,21 +60,38 @@ export function evaluateAdaptiveLeverUpExit({ position, currentPriceRaw, state =
   const peakFavourablePct = isLong ? pct(highWater, entry) : pct(entry, lowWater);
   const givebackPct = Math.max(0, peakFavourablePct - favourablePct);
   const profitProtectionArmPct = targetDistancePct > 0
-    ? targetDistancePct * 0.45
+    ? targetDistancePct * 0.35
     : Math.max(0.12, atrProxyPct * 2.5);
   const profitProtectionArmed = peakFavourablePct >= profitProtectionArmPct;
+  const nearTarget = targetDistancePct > 0 && peakFavourablePct >= targetDistancePct * 0.80;
+  const recentAgainstSide = recent.length >= 3 && (
+    isLong
+      ? recent[recent.length - 1] < recent[recent.length - 2] && recent[recent.length - 2] < recent[recent.length - 3]
+      : recent[recent.length - 1] > recent[recent.length - 2] && recent[recent.length - 2] > recent[recent.length - 3]
+  );
+  const targetApproachGiveback = nearTarget && recentAgainstSide &&
+    givebackPct >= Math.max(0.025, Math.min(targetDistancePct * 0.10, atrProxyPct * 0.5 || 0.025));
   const profitGivebackTriggered = profitProtectionArmed &&
-    givebackPct >= peakFavourablePct * 0.45 &&
+    givebackPct >= peakFavourablePct * 0.30 &&
     (adverseTrend || adverseMomentum) &&
-    closeScore >= 2;
+    (closeScore >= 1 || recentAgainstSide);
   nextState.profitProtection = {
     armed: profitProtectionArmed,
+    nearTarget,
     peakFavourablePct,
     currentFavourablePct: favourablePct,
     givebackPct,
     armPct: profitProtectionArmPct,
     updatedAt: now
   };
+  if (targetApproachGiveback) {
+    return {
+      action: "MARKET_CLOSE",
+      reason: "TAKE_PROFIT_APPROACH_REVERSAL",
+      closeScore, trendPct, momentumPct, atrProxyPct, favourablePct,
+      peakFavourablePct, givebackPct, targetDistancePct, state: nextState
+    };
+  }
   if (profitGivebackTriggered) {
     return {
       action: "MARKET_CLOSE",
