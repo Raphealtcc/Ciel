@@ -94,4 +94,6 @@ const dispatch = '  if (await handleLeverUpPreflightCommand(env, text)) return;'
 once(dispatch, dispatch + '\n  if (await handleLeverUpManualEntryCommand(env, text)) return;', "dispatch manual commands before other Telegram handlers");
 
 await writeFile(file, source);
+const debugLines = source.split("\n");
+console.log("SYNTAX DEBUG AROUND EXPORT:\n" + debugLines.slice(4455, 4482).map((line, index) => (4456 + index) + ": " + line).join("\n"));
 console.log("Wrote manual LeverUp execution-test command.");
