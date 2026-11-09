@@ -77,7 +77,7 @@ export function appendBookFlowSnapshot(previous = {}, snapshot, now = Date.now()
   next.bookEvents = pruneEvents(next.bookEvents, now - 60000, 240);
   if (prior && now - Number(prior.t) >= 0 && now - Number(prior.t) <= 5000) {
     const bidFlow = bid > prior.bid ? bidSize : bid === prior.bid ? bidSize - prior.bidSize : -prior.bidSize;
-    const askFlow = ask < prior.ask ? askSize : ask === prior.ask ? prior.askSize - askSize : -prior.askSize;
+    const askFlow = ask < prior.ask ? -askSize : ask === prior.ask ? prior.askSize - askSize : prior.askSize;
     const ofi = bidFlow + askFlow;
     const liquidity = Math.max(1e-12, (prior.bidSize + prior.askSize + bidSize + askSize) / 2);
     next.bookEvents.push({ t: Number(snapshot?.ts_ms) || now, ofi, liquidity });
