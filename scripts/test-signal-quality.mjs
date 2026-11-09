@@ -26,6 +26,13 @@ const opposingForecast = evaluateSignalQuality({ ...base, forecast: { available:
 assert.equal(opposingForecast.allowed, false);
 assert.ok(opposingForecast.vetoes.includes("FORECAST_STRONGLY_OPPOSES_ENTRY"));
 
+const losingStrategyHistory = evaluateSignalQuality({
+  ...base,
+  strategyStats: { "1M_MICRO_MOMENTUM_BREAKOUT": { sampleCount: 30, expectancyR: 0.04, winRate: 0.31 } },
+});
+assert.equal(losingStrategyHistory.allowed, false);
+assert.ok(losingStrategyHistory.vetoes.includes("STRATEGY_SHADOW_EXPECTANCY_NOT_POSITIVE"));
+
 const weakTrendForecast = evaluateSignalQuality({ ...base, forecast: { available: true, medianReturnPct: 0.03 } });
 assert.equal(weakTrendForecast.allowed, false);
 assert.ok(weakTrendForecast.vetoes.includes("FORECAST_TOO_WEAK_FOR_TREND_ENTRY"));
@@ -72,4 +79,7 @@ assert.ok(worker.includes("evaluateSignalQuality({candidate,forecast,market:revi
 assert.ok(worker.includes("REPEATED_SETUP_SUPPRESSED"));
 assert.ok(worker.includes("5M_REVERSAL_CONFIRMATION"));
 assert.ok(worker.includes("Signal quality "));
+assert.ok(worker.includes("updateAdvisorShadowOutcomes"));
+assert.ok(worker.includes("SHADOW_TARGET_FIRST"));
+assert.ok(worker.includes("strategyStats:strategyShadowStats"));
 console.log("PASS: quality gates, regime-aware evidence, same-setup suppression, 5m reversal confirmation and Worker integration.");
