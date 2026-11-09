@@ -6,8 +6,8 @@ const db = { prepare(sql) {
     assert.match(sql, /FROM leverup_trade_settlements t/);
     assert.match(sql, /FROM leverup_settlement_reconciliations r/);
     assert.match(sql, /WHERE NOT EXISTS/);
-    assert.match(sql, /ON i\\.signal_id = COALESCE/);
-    assert.doesNotMatch(sql, /OR lower\\(json_extract\\(i\\.payload_json/);
+    assert.match(sql, /ON i\.signal_id = COALESCE/);
+    assert.doesNotMatch(sql, /OR lower\(json_extract\(i\.payload_json/);
     return { async all() { return { results: [
       { trade_id: "T-BTC", position_hash: "0x1", symbol: "BTC/USD", close_time: 1,
         net_pnl_after_fees_raw: "1500000000000000000", margin_token: "0x91b81bfbe3a747230f0529aa28d8b2bc898e6d56",
