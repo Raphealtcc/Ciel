@@ -279,13 +279,13 @@ function patchGeminiMultiProjectFailover() {
   replaceOnce("const out = { verdict, paperMarginMon:",
     "const out = { verdict, keyIndexUsed: ix + 1, configuredKeyCount: keys.length, paperMarginMon:",
     "expose successful key index");
-  const oldTail = 'await env.CIEL_STATE.put("ciel:gemini:key-cursor", String((cursor + 1) % keys.length), { expirationTtl: 86400 });\n  return wait2("No Gemini key completed review after invalid-credential rotation.", "GEMINI_KEYS_FAILED");';
+  const oldTail = 'await env.CIEL_STATE.put("ciel:gemini:key-cursor", String((cursor + 1) % keys.length), { expirationTtl: 86400 });\n  return wait("No Gemini key completed review after invalid-credential rotation.", "GEMINI_KEYS_FAILED");';
   const newTail = [
     "const allQuotaLimited=quotaFailures===keys.length;",
     "const untilMs=allQuotaLimited?Math.max(Date.now()+60000,maxRetryAt):Date.now()+60000;",
     'await env.CIEL_STATE.put(cooldownKey,JSON.stringify({allKeysFailed:true,failures:keys.length,httpStatus:allQuotaLimited?429:503,errorCode:allQuotaLimited?"ALL_KEYS_RATE_LIMITED":"ALL_KEYS_FAILED",message:String(lastFailure).slice(0,170),lastFailureAt:Date.now(),untilMs}),{expirationTtl:604800});',
     'await env.CIEL_STATE.put("ciel:gemini:key-cursor",String((cursor+1)%keys.length),{expirationTtl:86400});',
-    'return {...wait2("All "+keys.length+" configured Gemini keys failed. Last error: "+String(lastFailure).slice(0,150)+". Retry after "+Math.ceil((untilMs-Date.now())/60000)+" minute(s).",allQuotaLimited?"GEMINI_RATE_LIMIT":"GEMINI_KEYS_FAILED"),flags:[allQuotaLimited?"GEMINI_RATE_LIMIT":"GEMINI_KEYS_FAILED","GEMINI_COOLDOWN"],httpStatus:allQuotaLimited?429:503,retryAt:untilMs,retryInSeconds:Math.ceil((untilMs-Date.now())/1000)};'
+    'return {...wait("All "+keys.length+" configured Gemini keys failed. Last error: "+String(lastFailure).slice(0,150)+". Retry after "+Math.ceil((untilMs-Date.now())/60000)+" minute(s).",allQuotaLimited?"GEMINI_RATE_LIMIT":"GEMINI_KEYS_FAILED"),flags:[allQuotaLimited?"GEMINI_RATE_LIMIT":"GEMINI_KEYS_FAILED","GEMINI_COOLDOWN"],httpStatus:allQuotaLimited?429:503,retryAt:untilMs,retryInSeconds:Math.ceil((untilMs-Date.now())/1000)};'
   ].join("\n");
   replaceOnce(oldTail, newTail, "apply cooldown only after all keys fail");
 }
