@@ -229,8 +229,8 @@ function patchGeminiMultiProjectFailover() {
     if (count !== 1) throw new Error("Gemini failover patch " + label + ": expected one match, found " + count);
     source = source.replace(before, after);
   };
-  const cooldownGuard = /if\\s*\\(\\s*Number\\(cooldown\\.untilMs\\)\\s*>\\s*Date\\.now\\(\\)\\s*\\)\\s*\\{/;
-  const allKeysGuard = /if\\s*\\(\\s*cooldown\\.allKeysFailed\\s*===\\s*true\\s*&&\\s*Number\\(cooldown\\.untilMs\\)\\s*>\\s*Date\\.now\\(\\)\\s*\\)\\s*\\{/;
+  const cooldownGuard = /if\s*\(\s*Number\(cooldown\.untilMs\)\s*>\s*Date\.now\(\)\s*\)\s*\{/;
+  const allKeysGuard = /if\s*\(\s*cooldown\.allKeysFailed\s*===\s*true\s*&&\s*Number\(cooldown\.untilMs\)\s*>\s*Date\.now\(\)\s*\)\s*\{/;
   if (cooldownGuard.test(source)) {
     source = source.replace(cooldownGuard, "if (cooldown.allKeysFailed === true && Number(cooldown.untilMs) > Date.now()) {");
   } else if (!allKeysGuard.test(source)) {
