@@ -73,6 +73,12 @@ const runIndexAfterHelper = source.indexOf(runSig);
 const runBodyInsertAt = runIndexAfterHelper + runSig.length;
 source = source.slice(0, runBodyInsertAt) + newline + "  const strategyShadowStats = await updateAdvisorShadowOutcomes(env, now);" + newline + source.slice(runBodyInsertAt);
 console.log("Applied signal-quality patch: evaluate unfilled recommendations and learn gross shadow expectancy");
+once(
+  '"Technical: " + score + "/100 · " + String(s?.strategy || "—"),',
+  '"Technical: " + score + "/100 · " + String(s?.strategy || "—"),' + String.fromCharCode(10) + '"Signal quality: " + Number(s?.signalQualityScore || 0) + "/100 · evidence score, not win probability",',
+  "show the evidence-quality score on each Telegram recommendation"
+);
+
 const duplicateAnchor = '    if (priorReview && now - Number(priorReview.created_at_ms) < cooldownMs) continue;\n    const quality = await getMarketEvidence';
 const duplicateReplacement = `    if (priorReview && now - Number(priorReview.created_at_ms) < cooldownMs) continue;
     const priorSameSignal = await env.DB.prepare("SELECT created_at_ms,entry_price FROM advisor_positions WHERE symbol=? AND side=? AND strategy=? AND created_at_ms>=? ORDER BY created_at_ms DESC LIMIT 1").bind(candidate.symbol,candidate.side,candidate.strategy,now-90*6e4).first();
