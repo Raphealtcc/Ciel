@@ -19,7 +19,8 @@ for (let i = 0; i < symbols.length; i++) {
     { t: now - 30000, p: base * (up ? 1.012 : 0.988) },
   ];
 }
-const breadth = calculateCrossAssetBreadth({ history, symbols, excludeSymbol: "BTC", now });
+const volumeBySymbol = Object.fromEntries(symbols.map((s) => [s, 1_000_000]));
+const breadth = calculateCrossAssetBreadth({ history, symbols, excludeSymbol: "BTC", volumeBySymbol, now });
 assert.equal(breadth.status, "READY");
 assert.equal(breadth.n5, 11);
 assert.ok(breadth.up5Pct > 60 && breadth.up15Pct > 60);
@@ -35,7 +36,7 @@ for (let i = 0; i < 15; i++) {
   const t = now - 28000 + i * 1800;
   flow = appendBookFlowSnapshot(flow, {
     ts_ms: t, best_bid: 100, best_ask: 101,
-    bid_size: 10 + i * 0.8, ask_size: 18 - i * 0.8,
+    bid_size: 10 + i * 1.2, ask_size: 18 - i * 1.2,
   }, t);
 }
 const buyTrades = Array.from({length:12}, (_,i) => ({

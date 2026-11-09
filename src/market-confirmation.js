@@ -23,12 +23,13 @@ function median(values) {
  * Cross-sectional advance/decline breadth from the existing in-memory price
  * history. It deliberately excludes the candidate asset and never writes D1.
  */
-export function calculateCrossAssetBreadth({ history = {}, symbols = [], excludeSymbol = "", now = Date.now() }) {
+export function calculateCrossAssetBreadth({ history = {}, symbols = [], excludeSymbol = "", volumeBySymbol = null, minimumVolumeUsd = 250000, now = Date.now() }) {
   const excluded = String(excludeSymbol).toUpperCase();
   const returns5 = [], returns15 = [];
   const unique = [...new Set((Array.isArray(symbols) ? symbols : []).map((s) => String(s).toUpperCase()))]
-    .filter((s) => s && s !== excluded);
+    .filter((s) => s && s !== excluded && s !== "MON");
   for (const symbol of unique) {
+    if (volumeBySymbol && !(Number(volumeBySymbol[symbol]) >= minimumVolumeUsd)) continue;
     const points = Array.isArray(history?.[symbol]) ? history[symbol] : [];
     if (points.length < 3) continue;
     const latest = pointAtOrBefore(points, now, 120000);
@@ -78,7 +79,7 @@ export function appendBookFlowSnapshot(previous = {}, snapshot, now = Date.now()
     const bidFlow = bid > prior.bid ? bidSize : bid === prior.bid ? bidSize - prior.bidSize : -prior.bidSize;
     const askFlow = ask < prior.ask ? askSize : ask === prior.ask ? prior.askSize - askSize : -prior.askSize;
     const ofi = bidFlow - askFlow;
-    const liquidity = Math.max(1e-12, prior.bidSize + prior.askSize + bidSize + askSize);
+    const liquidity = Math.max(1e-12, (prior.bidSize + prior.askSize + bidSize + askSize) / 2);
     next.bookEvents.push({ t: Number(snapshot?.ts_ms) || now, ofi, liquidity });
   }
   next.bookEvents = pruneEvents(next.bookEvents, now - 60000, 240);

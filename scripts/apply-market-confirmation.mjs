@@ -62,7 +62,14 @@ once(
 
 once(
   "        oiChangePct\n      };",
-  "        oiChangePct,\n        marketBreadth: calculateCrossAssetBreadth({ history: this.history, symbols: this.watchlist(), excludeSymbol: symbol, now }),\n        orderFlow: summarizePersistentOrderFlow(this.orderFlow[symbol], now)\n      };",
+  "        oiChangePct,\n        marketBreadth: calculateCrossAssetBreadth({
+          history: this.history,
+          symbols: this.watchlist(),
+          excludeSymbol: symbol,
+          volumeBySymbol: Object.fromEntries(this.watchlist().map((asset) => [asset, Number(this.contextHistory[asset]?.[this.contextHistory[asset].length - 1]?.day_ntl_volume)])),
+          minimumVolumeUsd: 250000,
+          now
+        }),\n        orderFlow: summarizePersistentOrderFlow(this.orderFlow[symbol], now)\n      };",
   "attach candidate-excluded 5m/15m cross-asset breadth and persistent-flow research snapshots"
 );
 
