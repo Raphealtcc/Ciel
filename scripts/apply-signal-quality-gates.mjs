@@ -27,14 +27,15 @@ function patchFunction(name, endMarker, transform, label) {
 
 patchFunction("analyzeMicroMomentumContinuation", "__name(analyzeMicroMomentumContinuation", (segment) => {
   let next = segment.replace(".slice(-40);", ".slice(-200);");
+  next = next.replace("function analyzeMicroMomentumContinuation(symbol,rows,now){", 'function analyzeMicroMomentumContinuation(symbol,rows,now){\n  if(!["BTC","ETH","SOL"].includes(symbol))return null;');
   if (next === segment) throw new Error("micro-momentum history window was not found");
   const anchor = "  if(!side)return null;\n  const swing=";
   const replacement = `  if(!side)return null;
-  const r15=anchoredReturn(points,15);
+  const r15=anchoredReturn(points,15),r60=anchoredReturn(points,60);
   const e20=emaTimed(points.slice(-120),20),e50=emaTimed(points,50);
   const regimeData=classifyMarketRegime(points,r5,r15,anchoredReturn(points,60),e20,e50);
-  const trendUp=regimeData.efficiency>=0.24&&regimeData.emaGapPct>=0.035&&e20>e50&&r15>0.06&&r5>0.025;
-  const trendDown=regimeData.efficiency>=0.24&&regimeData.emaGapPct>=0.035&&e20<e50&&r15< -0.06&&r5< -0.025;
+  const trendUp=regimeData.efficiency>=0.24&&regimeData.emaGapPct>=0.035&&e20>e50&&r15>0.06&&r5>0.025&&r60>0.08;
+  const trendDown=regimeData.efficiency>=0.24&&regimeData.emaGapPct>=0.035&&e20<e50&&r15< -0.06&&r5< -0.025&&r60< -0.08;
   if((side==="LONG"&&!trendUp)||(side==="SHORT"&&!trendDown))return null;
   const swing=`;
   if (!next.includes(anchor)) throw new Error("micro-momentum trend-regime anchor not found");
