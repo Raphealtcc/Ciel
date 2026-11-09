@@ -60,10 +60,10 @@ assert.equal(belowEntryGiveback.action, "MARKET_CLOSE",
 assert.equal(belowEntryGiveback.reason, "PROFIT_PROTECTION_PEAK_GIVEBACK");
 console.log("PASS: adaptive warm-up, multi-factor reversal, long/short trailing direction, and TP preservation.");
 
-const nearTargetHistory = [100,101,102,103,104,105,106,105.94].map((price,i)=>({at:6000+i*60000,price:String(BigInt(Math.round(price*100))*10n**16n)}));
+const nearTargetHistory = [100,101,102,103,104,105,106,105.8,105.5].map((price,i)=>({at:6000+i*60000,price:String(BigInt(Math.round(price*100))*10n**16n)}));
 const nearTargetExit = evaluateAdaptiveLeverUpExit({
   position: {...long, takeProfitRaw:String(107n*10n**18n)},
-  currentPriceRaw:String(10594n*10n**16n),
+  currentPriceRaw:String(1055n*10n**17n),
   state:{history:nearTargetHistory,highWaterRaw:String(106n*10n**18n),lowWaterRaw:String(100n*10n**18n)},
   pairView:{slippageConfig:{onePercentDepthAboveUsdRaw:"100000",onePercentDepthBelowUsdRaw:"100000"}},
   now:6000+8*60000,
