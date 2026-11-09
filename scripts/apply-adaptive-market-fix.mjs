@@ -234,7 +234,7 @@ function patchGeminiMultiProjectFailover() {
   if (cooldownGuard.test(source)) {
     source = source.replace(cooldownGuard, "if (cooldown.allKeysFailed === true && Number(cooldown.untilMs) > Date.now()) {");
   } else if (!allKeysGuard.test(source)) {
-    throw new Error("Gemini failover patch only honor cooldown after all keys fail: cooldown guard not found");
+    throw new Error("Gemini failover patch only honor cooldown after all keys fail: cooldown guard not found; context=" + source.slice(Math.max(0, source.indexOf("cooldownKey") - 120), source.indexOf("cooldownKey") + 700));
   }
   replaceOnce("for (let i = 0; i < keys.length && transientAttempts < 2; i++) {",
     "for (let i = 0; i < keys.length; i++) {", "attempt every configured key");
