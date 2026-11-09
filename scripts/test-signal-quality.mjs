@@ -8,7 +8,7 @@ const base = {
     strategy: "1M_MICRO_MOMENTUM_BREAKOUT", mode: "TREND_HOLD", regime: "TREND_UP",
     scoreComponents: ["1M_MOMENTUM","3M_CONFIRMATION","5M_CONFIRMATION","10M_RANGE_BREAKOUT","MICRO_EMA_CONFIRMATION"],
   },
-  forecast: { available: true, medianReturnPct: 0.22 },
+  forecast: { available: true, medianReturnPct: 0.22, components: { return5mPct: 0.15, return15mPct: 0.22, return60mPct: 0.35 } },
   market: { spreadBps: 3, topDepthUsd: 8000, volume: 5000000, funding: 0.00001, premiumBps: 2, oiChangePct: 4 },
   eventIntel: { marketImpact: "NEUTRAL" },
 };
@@ -63,7 +63,7 @@ const swing = evaluateSignalQuality({
     strategy: "1M_SWING_REVERSAL+RECLAIM", mode: "CORE_PULLBACK_SCALP", regime: "COUNTER_TREND_REVERSAL",
     scoreComponents: ["1M_SWING_EXHAUSTION","1M_PIVOT_RECLAIM","1M_RSI_TURN","1M_VOLUME_CONFIRMATION","5M_REVERSAL_CONFIRMATION"],
   },
-  forecast: { available: true, medianReturnPct: 0.01 },
+  forecast: { available: true, medianReturnPct: 0.01, components: { return5mPct: 0.04, return15mPct: 0.08, return60mPct: -0.25 } },
 });
 assert.equal(swing.allowed, true);
 
