@@ -11,6 +11,7 @@ import {
 const WMON = "0x3bd359c1119da7da1d913d1c4d2b7c461115433a";
 const LVMON = LEVERUP_TOKENS.LVMON.toLowerCase();
 const PRICE_SCALE = 10n ** 10n;
+const USD_SCALE = 10n ** 18n;
 
 function formatUnits(raw, decimals = 18) {
   const value = BigInt(raw || "0");
@@ -88,12 +89,18 @@ async function readOpenPositionsWithUnrealizedPnl({ trader, fetchImpl, publicCli
 
 async function readLvmonUsdPrice(fetchImpl) {
   const pairs = await fetchLeverUpPairs({ fetchImpl });
-  const pair = pairs.find((item) =>
+  const lvmonPair = pairs.find((item) =>
     String(item.symbol || "").toUpperCase() === "LVMON" ||
     String(item.pairName || "").toUpperCase() === "LVMON/USD" ||
     String(item.pair || "").toUpperCase() === "LVMON/USD");
-  const base = String(pair?.base || pair?.pairBase || "").toLowerCase();
-  if (!/^0x[0-9a-f]{40}$/.test(base)) throw new Error("LVMON_USD_ORACLE_PAIR_NOT_FOUND");
+  // LVMON is 1:1 with MON. If LeverUp does not publish a dedicated LVMON/USD
+  // market, value LVMON using the MON/USD oracle instead of failing the report.
+  const monPair = lvmonPair || pairs.find((item) =>
+    String(item.symbol || "").toUpperCase() === "MON" ||
+    String(item.pairName || "").toUpperCase() === "MON/USD" ||
+    String(item.pair || "").toUpperCase() === "MON/USD");
+  const base = String(monPair?.base || monPair?.pairBase || "").toLowerCase();
+  if (!/^0x[0-9a-f]{40}$/.test(base)) throw new Error("LVMON_OR_MON_USD_ORACLE_PAIR_NOT_FOUND");
   const prices = await fetchLatestOraclePrices([base], { fetchImpl });
   return prices[base];
 }
@@ -109,17 +116,30 @@ export async function buildLeverUpProfitReport({
   if (!env?.DB?.prepare) throw new Error("LEVERUP_PROFITS_D1_UNAVAILABLE");
 
   const rowsResult = await env.DB.prepare(`
-    SELECT s.position_hash, s.symbol, s.close_time, s.close_price_raw,
+    WITH canonical_settlements AS (
+      SELECT t.trade_id AS trade_id, t.position_hash, t.symbol, t.close_time,
+        t.close_price_raw, t.net_pnl_after_fees_raw, t.source_json
+      FROM leverup_trade_settlements t
+      UNION ALL
+      SELECT json_extract(r.source_json, '$.tradeId') AS trade_id,
+        r.position_hash, r.symbol, r.close_time, r.close_price_raw,
+        r.net_pnl_after_fees_raw, r.source_json
+      FROM leverup_settlement_reconciliations r
+      WHERE NOT EXISTS (
+        SELECT 1 FROM leverup_trade_settlements t
+        WHERE t.position_hash = r.position_hash AND t.close_time = r.close_time
+      )
+    )
+    SELECT s.trade_id, s.position_hash, s.symbol, s.close_time, s.close_price_raw,
       s.net_pnl_after_fees_raw, s.source_json,
       COALESCE((SELECT f.margin_token FROM leverup_position_fee_snapshots f
         WHERE f.position_hash=s.position_hash ORDER BY f.observed_at_ms DESC LIMIT 1), 'UNKNOWN') AS margin_token,
-      json_extract(s.source_json, '$.intentSignalId') AS signal_id,
+      COALESCE(json_extract(s.source_json, '$.intentSignalId'), s.trade_id) AS signal_id,
       json_extract(s.source_json, '$.closeReason') AS close_reason,
       i.payload_json AS entry_payload_json
-    FROM leverup_settlement_reconciliations s
+    FROM canonical_settlements s
     LEFT JOIN leverup_execution_intents i
-      ON i.signal_id=json_extract(s.source_json, '$.intentSignalId')
-      OR lower(json_extract(i.payload_json, '$.positionHash'))=lower(s.position_hash)
+      ON i.signal_id = COALESCE(json_extract(s.source_json, '$.intentSignalId'), s.trade_id)
     ORDER BY s.close_time DESC
   `).all();
   const settlements = rowsResult?.results || [];
@@ -170,7 +190,7 @@ export async function buildLeverUpProfitReport({
   if (!unrealizedError && openLvmon.length) {
     try {
       lvmonPriceRaw = await readLvmonUsdPrice(fetchImpl);
-      unrealizedLvmonRaw = openLvmon.reduce((sum, x) => sum + (x.unrealizedUsdRaw * PRICE_SCALE / lvmonPriceRaw), 0n);
+      unrealizedLvmonRaw = openLvmon.reduce((sum, x) => sum + (x.unrealizedUsdRaw * USD_SCALE / lvmonPriceRaw), 0n);
     } catch (error) { lvmonPriceError = String(error?.message || error).slice(0, 150); }
   } else if (!unrealizedError) unrealizedLvmonRaw = 0n;
 
@@ -221,10 +241,10 @@ export async function buildLeverUpProfitReport({
   } else {
     for (const position of open.slice(0, 10)) {
       const pnl = position.marginToken === LVMON && unrealizedLvmonRaw !== null
-        ? signedUnits(position.unrealizedUsdRaw * PRICE_SCALE / lvmonPriceRaw) + " LVMON"
+        ? signedUnits(position.unrealizedUsdRaw * USD_SCALE / lvmonPriceRaw) + " LVMON"
         : signedUnits(position.unrealizedUsdRaw) + " USD";
-      lines.push(position.side + " " + position.symbol + " | entry $" + (Number(position.entryPriceRaw) / 1e10).toFixed(6) +
-        " | mark $" + (Number(position.markPriceRaw) / 1e10).toFixed(6) + " | unrealised " + pnl);
+      lines.push(position.side + " " + position.symbol + " | entry $" + (Number(position.entryPriceRaw) / 1e18).toFixed(6) +
+        " | mark $" + (Number(position.markPriceRaw) / 1e18).toFixed(6) + " | unrealised " + pnl);
     }
   }
 
