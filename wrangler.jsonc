@@ -35,7 +35,6 @@
     "GEMINI_MODEL": "gemini-3.5-flash-lite",
     "LEVERUP_KILL_SWITCH": "false",
     "LEVERUP_LIVE_TRADING": "true",
-    "PAPER_TRADING_ENABLED": "false",
     "LEVERUP_AUTO_APPROVE": "true",
     "LEVERUP_RPC_URL": "https://rpc2.monad.xyz",
     "LEVERUP_ENTRY_PRICE_TOLERANCE_BPS": "30",
