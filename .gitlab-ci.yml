@@ -1,4 +1,4 @@
-stages: [verify, reverse-engineer]
+stages: [verify, reverse-engineer, deploy]
 
 verify-ciel-recovery:
   image: node:22-alpine
@@ -113,3 +113,21 @@ build-cloudflare-release-candidate:
   allow_failure: false
   rules:
     - if: '$CI_COMMIT_BRANCH == "feature/leverup-1ct-autotrader" || $CI_COMMIT_BRANCH == "integration/leverup-1ct-main"'
+
+# Production deployment is deliberately manual. Wrangler preserves existing
+# Cloudflare secrets; --keep-vars preserves dashboard-managed runtime toggles.
+deploy-ciel2-cloudflare:
+  image: node:22-alpine
+  stage: deploy
+  needs: [verify-ciel-recovery]
+  variables:
+    CLOUDFLARE_ACCOUNT_ID: "32ace62868f3ff7387e6a3723bd8bf68"
+  script:
+    - test -n "${CLOUDFLARE_API_TOKEN:-}" || (echo "CLOUDFLARE_API_TOKEN is not configured; refusing to deploy." && exit 1)
+    - npm install --ignore-scripts
+    - npm run build
+    - npx wrangler deploy --keep-vars --config wrangler.jsonc
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      when: manual
+  allow_failure: false
