@@ -73,12 +73,12 @@ export function appendBookFlowSnapshot(previous = {}, snapshot, now = Date.now()
   const next = { ...(previous || {}) };
   const prior = next.lastBook;
   next.lastBook = { t: Number(snapshot?.ts_ms) || now, bid, ask, bidSize, askSize };
-  next.lastUpdateAt = Number(snapshot?.ts_ms) || now;
+  next.lastBookAt = Number(snapshot?.ts_ms) || now;
   next.bookEvents = pruneEvents(next.bookEvents, now - 60000, 240);
   if (prior && now - Number(prior.t) >= 0 && now - Number(prior.t) <= 5000) {
     const bidFlow = bid > prior.bid ? bidSize : bid === prior.bid ? bidSize - prior.bidSize : -prior.bidSize;
     const askFlow = ask < prior.ask ? askSize : ask === prior.ask ? prior.askSize - askSize : -prior.askSize;
-    const ofi = bidFlow - askFlow;
+    const ofi = bidFlow + askFlow;
     const liquidity = Math.max(1e-12, (prior.bidSize + prior.askSize + bidSize + askSize) / 2);
     next.bookEvents.push({ t: Number(snapshot?.ts_ms) || now, ofi, liquidity });
   }
@@ -105,7 +105,7 @@ export function appendTradeFlowEvents(previous = {}, trades, now = Date.now()) {
     next.tradeEvents.push({ t: ts, signed, notional, key });
   }
   next.tradeEvents = pruneEvents(next.tradeEvents, now - 60000, 500);
-  next.lastUpdateAt = Math.max(Number(next.lastUpdateAt) || 0, now);
+  next.lastTradeAt = Math.max(Number(next.lastTradeAt) || 0, ...next.tradeEvents.map((event) => Number(event.t) || 0));
   return next;
 }
 
@@ -116,8 +116,8 @@ export function appendTradeFlowEvents(previous = {}, trades, now = Date.now()) {
 export function summarizePersistentOrderFlow(record = {}, now = Date.now()) {
   const book = pruneEvents(record?.bookEvents, now - 30000, 240);
   const trades = pruneEvents(record?.tradeEvents, now - 30000, 500);
-  const lastUpdateAt = Number(record?.lastUpdateAt || 0);
-  const stale = !lastUpdateAt || now - lastUpdateAt > 15000 || now < lastUpdateAt;
+  const lastBookAt = Number(record?.lastBookAt || 0);
+  const stale = !record || !lastBookAt || now - lastBookAt > 15000 || now < lastBookAt;
   const ofi = book.reduce((sum, event) => sum + Number(event.ofi || 0), 0);
   const liquidity = book.reduce((sum, event) => sum + Number(event.liquidity || 0), 0);
   const bookImbalance = liquidity > 0 ? ofi / liquidity : null;
@@ -141,9 +141,9 @@ export function summarizePersistentOrderFlow(record = {}, now = Date.now()) {
   const persistent = !stale && sufficient && Math.abs(bookImbalance || 0) >= 0.08 &&
     Math.abs(tradeImbalance || 0) >= 0.05 && persistence >= 0.67 && signsAgree;
   return {
-    status: stale ? "STALE" : !sufficient ? "INSUFFICIENT" : persistent ? "PERSISTENT" : "MIXED",
+    status: !record ? "UNAVAILABLE" : stale ? "STALE" : !sufficient ? "INSUFFICIENT" : persistent ? "PERSISTENT" : "MIXED",
     direction: persistent ? direction : null,
-    asOf: lastUpdateAt || null,
+    asOf: lastBookAt || null,
     bookEvents: book.length,
     tradeCount: trades.length,
     active10sBuckets: activeBins.length,
