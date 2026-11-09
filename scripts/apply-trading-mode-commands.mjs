@@ -79,11 +79,6 @@ const helper = `async function handleTradingModeCommand(env, command) {
     return true;
   }
   if (command === "/liveactive") {
-    const nativeFeed = await env.CIEL_STATE.get("ciel:leverup:native-feed:latest", "json").catch(() => null);
-    if (nativeFeed?.status !== "READY" || Date.now() - Number(nativeFeed?.sampledAt || 0) > 120000) {
-      await sendTelegram(env, "Live activation refused: LeverUp-native feed is not READY or its latest sample is stale. New live entries remain disabled.");
-      return true;
-    }
     const diagnostics = await env.CIEL_STATE.get("ciel:leverup:diagnostics:v1", "json").catch(() => null);
     if (diagnostics?.status !== "READ_ONLY_CHECKS_PASS" || diagnostics?.coordinator?.status !== "PASS" || Date.now() - Number(diagnostics?.checkedAt || 0) > 10 * 60 * 1000) {
       await sendTelegram(env, "Live activation refused: recent read-only LeverUp market and coordinator diagnostics have not passed. New live entries remain disabled.");
