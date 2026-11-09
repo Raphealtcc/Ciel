@@ -22,20 +22,31 @@ if (!source.includes(coordinatorImport)) source = coordinatorImport + "\n" + sou
 if (!source.includes(approvalSimulationImport)) source = approvalSimulationImport + "\n" + source;
 if (!source.includes(profitsImport)) source = profitsImport + "\n" + source;
 if (!source.includes("function compactCielSetupMessage(")) {
-  const compactHelper = `function compactCielSetupMessage(p, s, r, monUsd, forecast) {
+  const compactHelper = `function compactCielSetupMessage(p, s, r, monUsd, forecast, leverUpPlan = null) {
   const score = Math.round(Number(s?.confidence || 0) * 100);
   const mode = s?.mode === "RANGE_SCALP" ? "RANGE" : "TREND";
   const review = String(r?.verdict || "WAIT");
   const median = Number(forecast?.medianReturnPct);
   const lower = Number(forecast?.lowerReturnPct);
   const upper = Number(forecast?.upperReturnPct);
+  const actionValues = leverUpPlan?.plan?.actionValues || [];
+  const oracleEntry = Number(leverUpPlan?.plan?.preflight?.oraclePriceUsd);
+  const executionStop = Number(actionValues[7]) / 1e18;
+  const executionTarget = Number(actionValues[8]) / 1e18;
+  const hasExecutionLevels = Number.isFinite(oracleEntry) && oracleEntry > 0 &&
+    Number.isFinite(executionStop) && executionStop > 0 &&
+    Number.isFinite(executionTarget) && executionTarget > 0;
+  const displayedEntry = hasExecutionLevels ? oracleEntry : Number(p?.entry_price);
+  const displayedStop = hasExecutionLevels ? executionStop : Number(p?.stop_price);
+  const displayedTarget = hasExecutionLevels ? executionTarget : Number(p?.target_price);
+  const levelLabel = hasExecutionLevels ? "LeverUp entry/SL/TP" : "Signal reference SL/TP";
   const forecastLine = forecast?.available && [median, lower, upper].every(Number.isFinite)
     ? "Forecast 5m: " + median.toFixed(3) + "% (" + lower.toFixed(3) + " to " + upper.toFixed(3) + "%)"
     : "Forecast: unavailable";
   return [
     (review === "APPROVE" ? "📈 " : "🟡 ") + String(p?.side || "—") + " " + String(p?.symbol || "—") + " · " + mode,
     "Signal: " + String(p?.id || "—") + " · PROPOSED",
-    "Entry $" + fmt(p?.entry_price) + " · SL $" + fmt(p?.stop_price) + " · TP $" + fmt(p?.target_price),
+    levelLabel + ": Entry $" + fmt(displayedEntry) + " · SL $" + fmt(displayedStop) + " · TP $" + fmt(displayedTarget),
     "Technical: " + score + "/100 · " + String(s?.strategy || "—"),
     forecastLine,
     "Review: " + review + " · hold ≤" + Number(s?.holdMinutes || (mode === "RANGE" ? 12 : 180)) + "m"
@@ -109,7 +120,7 @@ once(
 
 once(
   '      await notify(env, setupMessage(position, candidate, reviewed, monUsdPrice, forecast, quality.market, intraday) + paperLine, [',
-  '      const leverUpLine = formatLeverUpAdvisorLine(leverUpPlan);\n      await notify(env, compactCielSetupMessage(position, candidate, reviewed, monUsdPrice, forecast) + paperLine + "\\n\\n" + leverUpLine, [',
+  '      const leverUpLine = formatLeverUpAdvisorLine(leverUpPlan);\n      await notify(env, compactCielSetupMessage(position, candidate, reviewed, monUsdPrice, forecast, leverUpPlan) + paperLine + "\\n\\n" + leverUpLine, [',
   "attach real LeverUp preflight, collateral and fee status to the CIEL trade card",
 );
 
