@@ -2,10 +2,21 @@ import assert from "node:assert/strict";
 import { buildLeverUpProfitReport } from "../src/leverup-profits.js";
 
 const db = { prepare(sql) {
-  if (sql.includes("leverup_settlement_reconciliations")) {
+  if (sql.includes("canonical_settlements")) {
+    assert.match(sql, /FROM leverup_trade_settlements t/);
+    assert.match(sql, /FROM leverup_settlement_reconciliations r/);
+    assert.match(sql, /WHERE NOT EXISTS/);
+    assert.match(sql, /ON i\\.signal_id = COALESCE/);
+    assert.doesNotMatch(sql, /OR lower\\(json_extract\\(i\\.payload_json/);
     return { async all() { return { results: [
-      { position_hash: "0x1", symbol: "BTC", close_time: 1, net_pnl_after_fees_raw: "1500000000000000000", margin_token: "0x91b81bfbe3a747230f0529aa28d8b2bc898e6d56" },
-      { position_hash: "0x2", symbol: "ETH", close_time: 2, net_pnl_after_fees_raw: "-500000000000000000", margin_token: "0x91b81bfbe3a747230f0529aa28d8b2bc898e6d56" },
+      { trade_id: "T-BTC", position_hash: "0x1", symbol: "BTC/USD", close_time: 1,
+        net_pnl_after_fees_raw: "1500000000000000000", margin_token: "0x91b81bfbe3a747230f0529aa28d8b2bc898e6d56",
+        source_json: JSON.stringify({ intentSignalId: "T-BTC", closeReason: "TEST_CLOSE" }),
+        entry_payload_json: JSON.stringify({ candidate: { side: "LONG", mode: "TREND_HOLD" }, plan: { preflight: { marginRaw: "2000000000000000000" } } }) },
+      { trade_id: "T-ETH", position_hash: "0x2", symbol: "ETH/USD", close_time: 2,
+        net_pnl_after_fees_raw: "-500000000000000000", margin_token: "0x91b81bfbe3a747230f0529aa28d8b2bc898e6d56",
+        source_json: JSON.stringify({ intentSignalId: "T-ETH", closeReason: "TEST_CLOSE" }),
+        entry_payload_json: JSON.stringify({ candidate: { side: "SHORT", mode: "RANGE_SCALP" }, plan: { preflight: { marginRaw: "2000000000000000000" } } }) },
     ] }; } };
   }
   assert.match(sql, /leverup_execution_intents/);
@@ -28,8 +39,8 @@ const publicClient = {
       isLong: true,
       marginToken: "0x91b81bfbe3a747230f0529aa28d8b2bc898e6d56",
       margin: 2n * 10n ** 18n,
-      qty: 10n ** 18n,
-      entryPrice: 190n * 10n ** 10n,
+      qty: 10n ** 10n,
+      entryPrice: 190n * 10n ** 18n,
     }];
   },
 };
@@ -44,7 +55,7 @@ const fetchImpl = async (url, init = {}) => {
     assert.equal(init.method, "POST");
     const requested = JSON.parse(init.body).pairBases;
     const prices = {};
-    for (const base of requested) prices[base] = String(base === lvmonPairBase ? 2n * 10n ** 10n : 200n * 10n ** 10n);
+    for (const base of requested) prices[base] = String(base === lvmonPairBase ? 2n * 10n ** 18n : 200n * 10n ** 18n);
     return new Response(JSON.stringify({ prices }), { status: 200 });
   }
   throw new Error("Unexpected LeverUp request: " + url);
