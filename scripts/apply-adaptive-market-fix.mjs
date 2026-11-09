@@ -292,6 +292,9 @@ function patchGeminiMultiProjectFailover() {
 patchGeminiMultiProjectFailover();
 
 await writeFile(file,source);
+const moduleBoundary=source.indexOf("var index_default");
+if(moduleBoundary<0) throw new Error("Adaptive syntax diagnostic could not find index module boundary");
+await writeFile(path.join(process.cwd(),"reconstructed","adaptive-prefix.mjs"),source.slice(0,moduleBoundary));
 const debugLines=source.split("\n");
 console.log("ADAPTIVE SYNTAX DEBUG:\n"+debugLines.slice(4160,4200).map((line,index)=>(4161+index)+": "+line).join("\n"));
 console.log("Adaptive core-market patch complete: BTC/ETH/SOL lead the scan, all other configured markets remain eligible, paper outcomes adjust ranking only after eight closed samples, and no D1 writes or risk-limit changes are introduced.");
