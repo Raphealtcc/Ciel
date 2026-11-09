@@ -74,7 +74,7 @@ function microRows(direction){
   for(let i=0;i<20;i++){
     let price=100;
     if(i>=10)price+=direction*(i-9)*0.03;
-    if(i>=15)price+=direction*(i-14)*0.05;
+    if(i>=15)price+=direction*(i-14)*0.045;
     rows.push({ts_ms:now-(20-i)*60000,mid_price:price});
   }
   return rows;
