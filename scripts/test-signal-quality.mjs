@@ -26,6 +26,10 @@ const opposingForecast = evaluateSignalQuality({ ...base, forecast: { available:
 assert.equal(opposingForecast.allowed, false);
 assert.ok(opposingForecast.vetoes.includes("FORECAST_STRONGLY_OPPOSES_ENTRY"));
 
+const weakTrendForecast = evaluateSignalQuality({ ...base, forecast: { available: true, medianReturnPct: 0.03 } });
+assert.equal(weakTrendForecast.allowed, false);
+assert.ok(weakTrendForecast.vetoes.includes("FORECAST_TOO_WEAK_FOR_TREND_ENTRY"));
+
 const crowded = evaluateSignalQuality({ ...base, market: { ...base.market, funding: 0.00008, premiumBps: 14 } });
 assert.equal(crowded.allowed, false);
 assert.ok(crowded.vetoes.includes("DIRECTIONAL_DERIVATIVES_CROWDING"));
@@ -46,7 +50,7 @@ assert.equal(duplicate.suppress, true);
 assert.equal(duplicate.reason, "SAME_SETUP_STILL_ACTIVE");
 
 const rearmed = shouldSuppressDuplicateSignal({
-  candidate: { ...base.candidate, entry: 100.3, stopPct: 0.25 },
+  candidate: { ...base.candidate, entry: 100.7, stopPct: 0.25 },
   priorSignal: { created_at_ms: 1_000_000, entry_price: 100 },
   now: 1_000_000 + 10 * 60_000,
 });
