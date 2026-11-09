@@ -107,7 +107,17 @@ __name(handleTradingModeCommand, "handleTradingModeCommand");
 `;
 const anchor = "async function handleCommand(env, text) {";
 if (source.split(anchor).length !== 2) throw new Error("Trading-mode handler anchor mismatch");
-if (!source.includes("async function handleTradingModeCommand(")) source = source.replace(anchor, geminiStatusHelper + helper + anchor);
+function replaceNamedHandler(source, name, replacement, anchor) {
+  const startMarker = "async function " + name + "(";
+  const endMarker = '__name(' + name + ', "' + name + '");';
+  const start = source.indexOf(startMarker);
+  if (start < 0) return source.replace(anchor, replacement + anchor);
+  const end = source.indexOf(endMarker, start);
+  if (end < 0) throw new Error("Existing " + name + " handler has no end marker");
+  return source.slice(0, start) + replacement + source.slice(end + endMarker.length);
+}
+source = replaceNamedHandler(source, "handleGeminiStatusCommand", geminiStatusHelper, anchor);
+source = replaceNamedHandler(source, "handleTradingModeCommand", helper, anchor);
 
 const dispatch = '  if (await handleAdvisorCommand(env, text)) return;\n  const command = (text.trim().split(/\\s+/, 1)[0] || "").split("@")[0].toLowerCase();';
 const dispatchReplacement = '  const command = (text.trim().split(/\\s+/, 1)[0] || "").split("@")[0].toLowerCase();\n  if (await handleGeminiStatusCommand(env, command)) return;\n  if (await handleTradingModeCommand(env, command)) return;\n  if (await handleAdvisorCommand(env, text)) return;';
