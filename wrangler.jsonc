@@ -5,19 +5,6 @@
   "main": "reconstructed/patched-worker.js",
   "compatibility_date": "2026-09-08",
   "compatibility_flags": ["nodejs_compat"],
-  "secrets": {
-    "required": [
-      "ALCHEMY_RPC",
-      "BLOCKVISION_API_KEY",
-      "GEMINI_API_KEY_1",
-      "GEMINI_API_KEYS",
-      "LEVERUP_AGENT_PRIVATE_KEY",
-      "LEVERUP_TRADER_PRIVATE_KEY",
-      "TELEGRAM_BOT_TOKEN",
-      "TELEGRAM_CHAT_ID",
-      "TELEGRAM_WEBHOOK_SECRET"
-    ]
-  },
   "keep_vars": true,
   "workers_dev": true,
   "preview_urls": true,
@@ -54,9 +41,9 @@
     "LEVERUP_MAX_TRADE_MARGIN_USD": "0.5477901",
     "LEVERUP_MIN_TRADE_MARGIN_USD": "0.23737571",
     "LEVERUP_MAX_CONCURRENT_POSITIONS": "2",
-    "LEVERUP_MAX_DAILY_LOSS_MON": "60",
+    "LEVERUP_MAX_DAILY_LOSS_MON": "200",
     "LEVERUP_MAX_DRAWDOWN_MON": "60",
-    "LEVERUP_MAX_AGGREGATE_STOP_RISK_MON": "60",
+    "LEVERUP_MAX_AGGREGATE_STOP_RISK_MON": "200",
     "LEVERUP_COLLATERAL_100X_USD": "0.23",
     "LEVERUP_COLLATERAL_50X_USD": "0.43"
   },
