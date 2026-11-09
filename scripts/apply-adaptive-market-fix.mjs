@@ -310,7 +310,7 @@ await writeFile(path.join(process.cwd(),"reconstructed","advisor-before-review.m
 await writeFile(path.join(process.cwd(),"reconstructed","review-only.mjs"),advisorSource.slice(reviewStart,reviewEnd));
 const afterReviewSource=advisorSource.slice(reviewEnd);
 await writeFile(path.join(process.cwd(),"reconstructed","advisor-after-review.mjs"),afterReviewSource);
-console.log("ADVISOR_AFTER_REVIEW_END_JSON "+JSON.stringify(afterReviewSource.slice(-1600)));
+console.log("ADVISOR_AFTER_REVIEW_END_JSON "+JSON.stringify(afterReviewSource.slice(-1600))); console.log("ADVISOR_AFTER_REVIEW_COUNTS "+JSON.stringify({curlyOpen:(afterReviewSource.match(/\\{/g)||[]).length,curlyClose:(afterReviewSource.match(/\\}/g)||[]).length,parenOpen:(afterReviewSource.match(/\\(/g)||[]).length,parenClose:(afterReviewSource.match(/\\)/g)||[]).length,squareOpen:(afterReviewSource.match(/\\[/g)||[]).length,squareClose:(afterReviewSource.match(/\\]/g)||[]).length}));
 console.log("ADVISOR REVIEW SEGMENTS WRITTEN "+reviewStart+" "+reviewEnd+" "+advisorSource.length);
 const prefixLines=prefixSource.split("\n");
 console.log("ADAPTIVE PREFIX TAIL:\n"+prefixLines.slice(-55).map((line,index)=>(prefixLines.length-54+index)+": "+line).join("\n"));
