@@ -49,6 +49,22 @@ assert.equal(persistent.direction, "LONG");
 assert.ok(persistent.bookEvents >= 8 && persistent.tradeCount >= 5);
 assert.ok(persistent.bucketAgreement >= 0.67);
 
+// Price-level transitions must use the signed Cont-style ask contribution.
+let askBase = appendBookFlowSnapshot({}, {
+  ts_ms: now - 1000, best_bid: 100, best_ask: 101, bid_size: 10, ask_size: 10,
+}, now - 1000);
+const askFalls = appendBookFlowSnapshot(askBase, {
+  ts_ms: now, best_bid: 100, best_ask: 100.5, bid_size: 10, ask_size: 10,
+}, now);
+assert.equal(askFalls.bookEvents.at(-1).ofi, -10);
+askBase = appendBookFlowSnapshot({}, {
+  ts_ms: now - 1000, best_bid: 100, best_ask: 101, bid_size: 10, ask_size: 10,
+}, now - 1000);
+const askRises = appendBookFlowSnapshot(askBase, {
+  ts_ms: now, best_bid: 100, best_ask: 101.5, bid_size: 10, ask_size: 10,
+}, now);
+assert.equal(askRises.bookEvents.at(-1).ofi, 10);
+
 assert.equal(summarizePersistentOrderFlow(null, now).status, "UNAVAILABLE");
 const stale = summarizePersistentOrderFlow(flow, now + 60000);
 assert.equal(stale.status, "STALE");
