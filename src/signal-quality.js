@@ -66,7 +66,7 @@ function regimeEvidence(candidate, eventIntel) {
   return { score: 5, allowed: true, reason: "TREND_REGIME_ALIGNED" };
 }
 
-export function evaluateSignalQuality({ candidate, forecast, market, eventIntel = null }) {
+export function evaluateSignalQuality({ candidate, forecast, market, eventIntel = null, strategyStats = {} }) {
   const vetoes = [];
   const components = [];
   const side = String(candidate?.side || "").toUpperCase();
@@ -176,11 +176,17 @@ export function evaluateSignalQuality({ candidate, forecast, market, eventIntel 
   if (!regime.allowed) vetoes.push(regime.reason);
 
   const score = Math.round(components.reduce((sum, item) => sum + item.score, 0));
-  const threshold = strategy.includes("SWING_REVERSAL") ? 84 :
+  let threshold = strategy.includes("SWING_REVERSAL") ? 84 :
     strategy.includes("LEVEL_SWEEP") ? 85 :
     strategy.includes("PULLBACK") ? 82 :
     strategy.includes("MICRO_MOMENTUM") ? 84 :
     strategy.includes("CONTINUATION") ? 82 : 80;
+  const learned = strategyStats?.[String(candidate?.strategy || "")];
+  if (Number(learned?.sampleCount) >= 30 && Number.isFinite(Number(learned?.expectancyR))) {
+    const expectancyR = Number(learned.expectancyR);
+    if (expectancyR <= 0.10) vetoes.push("STRATEGY_SHADOW_EXPECTANCY_NOT_POSITIVE");
+    else if (expectancyR < 0.20) threshold += 5;
+  }
   const allowed = vetoes.length === 0 && score >= threshold;
   if (score < threshold) vetoes.push("QUALITY_SCORE_BELOW_THRESHOLD");
   return {
