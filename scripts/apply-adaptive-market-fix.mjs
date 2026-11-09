@@ -146,7 +146,7 @@ const newCandidateBuild = `    const beforeCount = candidates.length;
 once(oldCandidateBuild,newCandidateBuild,"expose independent trend and scalp rejection reasons");
 
 once(
-  'const aligned = candidate.side === "LONG" ? Number(forecast.medianReturnPct) >= minimumForecastMovePct : Number(forecast.medianReturnPct) <= -minimumForecastMovePct;\n      if (!aligned && candidate.mode !== "RANGE_SCALP" && !String(candidate.strategy || "").includes("1M_SWING_REVERSAL")) {',
+  '      const aligned = candidate.side === "LONG" ? Number(forecast.medianReturnPct) >= minimumForecastMovePct : Number(forecast.medianReturnPct) <= -minimumForecastMovePct;\n      if (!aligned && candidate.mode !== "RANGE_SCALP" && !String(candidate.strategy || "").includes("1M_SWING_REVERSAL")) {',
   'if (stronglyOpposed && candidate.mode !== "RANGE_SCALP" && candidate.mode !== "CORE_PULLBACK_SCALP" && !String(candidate.strategy || "").includes("1M_SWING_REVERSAL")) {',
   "block materially opposing forecasts while exempting validated core scalps"
 );
