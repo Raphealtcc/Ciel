@@ -75,7 +75,7 @@ const swing = evaluateSignalQuality({
 assert.equal(swing.allowed, true);
 
 const worker = await readFile(new URL("../reconstructed/patched-worker.js", import.meta.url), "utf8");
-assert.ok(worker.includes("evaluateSignalQuality({candidate,forecast,market:reviewerMarket,eventIntel})"));
+assert.ok(worker.includes("evaluateSignalQuality({candidate,forecast,market:reviewerMarket,eventIntel,strategyStats:strategyShadowStats})"));
 assert.ok(worker.includes("REPEATED_SETUP_SUPPRESSED"));
 assert.ok(worker.includes("5M_REVERSAL_CONFIRMATION"));
 assert.ok(worker.includes("Signal quality "));
