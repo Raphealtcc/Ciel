@@ -146,8 +146,13 @@ const newCandidateBuild = `    const beforeCount = candidates.length;
 once(oldCandidateBuild,newCandidateBuild,"expose independent trend and scalp rejection reasons");
 
 once(
+  'const aligned = candidate.side === "LONG" ? Number(forecast.medianReturnPct) >= minimumForecastMovePct : Number(forecast.medianReturnPct) <= -minimumForecastMovePct;\\n      if (!aligned && candidate.mode !== "RANGE_SCALP" && !String(candidate.strategy || "").includes("1M_SWING_REVERSAL")) {',
+  'if (stronglyOpposed && candidate.mode !== "RANGE_SCALP" && candidate.mode !== "CORE_PULLBACK_SCALP" && !String(candidate.strategy || "").includes("1M_SWING_REVERSAL")) {',
+  "block materially opposing forecasts while exempting validated core scalps"
+);
+once(
   'const minimumForecastMovePct = Math.max(0.08, candidate.stopPct * 0.30);',
-  'const minimumForecastMovePct = Math.max(0.03, candidate.stopPct * 0.10);\n      const stronglyOpposed = candidate.side === "LONG" ? Number(forecast.medianReturnPct) <= -minimumForecastMovePct : Number(forecast.medianReturnPct) >= minimumForecastMovePct;\n      if (stronglyOpposed && candidate.mode !== "RANGE_SCALP" && candidate.mode !== "CORE_PULLBACK_SCALP" && !String(candidate.strategy || "").includes("1M_SWING_REVERSAL")) {',
+  'const minimumForecastMovePct = Math.max(0.03, candidate.stopPct * 0.10);\n      const stronglyOpposed = candidate.side === "LONG" ? Number(forecast.medianReturnPct) <= -minimumForecastMovePct : Number(forecast.medianReturnPct) >= minimumForecastMovePct;',
   "block materially opposing forecasts, not technically valid scalps with a neutral or small same-direction projection"
 );
 once(
@@ -292,18 +297,4 @@ function patchGeminiMultiProjectFailover() {
 patchGeminiMultiProjectFailover();
 
 await writeFile(file,source);
-const moduleBoundary=source.indexOf("var index_default");
-if(moduleBoundary<0) throw new Error("Adaptive syntax diagnostic could not find index module boundary");
-const advisorStart=source.indexOf("// src/advisor.ts");
-const advisorEndMarker='__name(handleAdvisorCommand, "handleAdvisorCommand");';
-const advisorEnd=source.indexOf(advisorEndMarker,advisorStart)+advisorEndMarker.length;
-if(advisorStart<0||advisorEnd<advisorStart) throw new Error("Could not isolate patched advisor module");
-const advisorSource=source.slice(advisorStart,advisorEnd);
-const reviewStart=advisorSource.indexOf("async function review(");
-const reviewEndMarker='__name(review, "review");';
-const reviewEnd=advisorSource.indexOf(reviewEndMarker,reviewStart)+reviewEndMarker.length;
-if(reviewStart<0||reviewEnd<reviewStart) throw new Error("Cannot split advisor review function for syntax diagnostics");
-const afterReviewSource=advisorSource.slice(reviewEnd);
-const count=(text,char)=>text.split(char).length-1;
-console.log("ADAPTIVE_DELIMITER_COUNTS "+JSON.stringify({source:{open:count(source,"{"),close:count(source,"}"),parenOpen:count(source,"("),parenClose:count(source,")")},advisorTail:{open:count(afterReviewSource,"{"),close:count(afterReviewSource,"}"),parenOpen:count(afterReviewSource,"("),parenClose:count(afterReviewSource,")")},tail:afterReviewSource.slice(-900)}));
 console.log("Adaptive core-market patch complete: BTC/ETH/SOL lead the scan, all other configured markets remain eligible, paper outcomes adjust ranking only after eight closed samples, and no D1 writes or risk-limit changes are introduced.");
