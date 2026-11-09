@@ -303,8 +303,13 @@ if(advisorStart<0||advisorEnd<advisorStart) throw new Error("Could not isolate p
 const advisorSource=source.slice(advisorStart,advisorEnd);
 await writeFile(path.join(process.cwd(),"reconstructed","advisor-patched.mjs"),advisorSource);
 const reviewStart=advisorSource.indexOf("async function review(");
-const reviewEnd=advisorSource.indexOf('__name(review, "review");',reviewStart)+ '__name(review, "review");'.length;
-console.log("GEMINI REVIEW PATCH DEBUG:\\n"+advisorSource.slice(reviewStart,reviewEnd).slice(-4500));
+const reviewEndMarker='__name(review, "review");';
+const reviewEnd=advisorSource.indexOf(reviewEndMarker,reviewStart)+reviewEndMarker.length;
+if(reviewStart<0||reviewEnd<reviewStart) throw new Error("Cannot split advisor review function for syntax diagnostics");
+await writeFile(path.join(process.cwd(),"reconstructed","advisor-before-review.mjs"),advisorSource.slice(0,reviewStart));
+await writeFile(path.join(process.cwd(),"reconstructed","review-only.mjs"),advisorSource.slice(reviewStart,reviewEnd));
+await writeFile(path.join(process.cwd(),"reconstructed","advisor-after-review.mjs"),advisorSource.slice(reviewEnd));
+console.log("ADVISOR REVIEW SEGMENTS WRITTEN "+reviewStart+" "+reviewEnd+" "+advisorSource.length);
 const prefixLines=prefixSource.split("\n");
 console.log("ADAPTIVE PREFIX TAIL:\n"+prefixLines.slice(-55).map((line,index)=>(prefixLines.length-54+index)+": "+line).join("\n"));
 const debugLines=source.split("\n");
