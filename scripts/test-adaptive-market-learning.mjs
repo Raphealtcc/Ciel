@@ -5,7 +5,27 @@ const source=await readFile("reconstructed/patched-worker.js","utf8");
 const helperStart=source.indexOf("function buildAdaptiveLearningProfile");
 const advisorStart=source.indexOf("async function runAdvisorCycle",helperStart);
 assert.ok(helperStart>=0&&advisorStart>helperStart);
-const context=vm.createContext({__name(){}});
+const context=vm.createContext({
+  __name(){},
+  anchoredReturn(points,minutes){
+    const last=points[points.length-1],target=last.t-minutes*60000;
+    let base=null;
+    for(let i=points.length-2;i>=0;i--)if(points[i].t<=target){base=points[i];break;}
+    return base&&base.p>0?(last.p/base.p-1)*100:null;
+  },
+  emaTimed(points,period){
+    if(points.length<period)return NaN;
+    const k=2/(period+1);let value=points[0].p;
+    for(let i=1;i<points.length;i++)value=points[i].p*k+value*(1-k);
+    return value;
+  },
+  classifyMarketRegime(points,r5,r15,r60,e20,e50){
+    const recent=points.filter(p=>p.t>=points[points.length-1].t-30*60000).slice(-40);
+    let path=0;for(let i=1;i<recent.length;i++)path+=Math.abs((recent[i].p/recent[i-1].p-1)*100);
+    const efficiency=path>0?Math.abs((recent[recent.length-1].p/recent[0].p-1)*100)/path:0;
+    return {efficiency,emaGapPct:e50>0?Math.abs(e20/e50-1)*100:0};
+  }
+});
 vm.runInContext(source.slice(helperStart,advisorStart)+"\nglobalThis.learningTests={buildAdaptiveLearningProfile,adaptiveCandidateMultiplier,analyzeCoreTrendContinuation,analyzeMicroMomentumContinuation};",context);
 const {buildAdaptiveLearningProfile,adaptiveCandidateMultiplier,analyzeCoreTrendContinuation,analyzeMicroMomentumContinuation}=context.learningTests;
 const now=1800000000000;
@@ -71,11 +91,13 @@ assert.ok(continuationLong.stopPct<=0.45&&continuationShort.stopPct<=0.45);
 assert.equal(analyzeCoreTrendContinuation("BTC",trendCandles(1).slice(0,20),now),null);
 function microRows(direction){
   const rows=[];
-  for(let i=0;i<20;i++){
-    let price=100;
-    if(i>=10)price+=direction*(i-9)*0.03;
-    if(i>=15)price+=direction*(i-14)*0.045;
-    rows.push({ts_ms:now-(20-i)*60000,mid_price:price});
+  for(let i=0;i<80;i++){
+    const base=100+direction*0.002*i;
+    const first=i>=65?(i-64)*0.01:0;
+    const second=i>=70?(i-69)*0.02:0;
+    const third=i>=75?(i-74)*0.03:0;
+    const price=base+direction*(first+second+third);
+    rows.push({ts_ms:now-(80-i)*60000,mid_price:price});
   }
   return rows;
 }
