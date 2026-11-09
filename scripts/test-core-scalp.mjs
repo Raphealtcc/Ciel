@@ -97,14 +97,19 @@ const reversalLong = Array.from({length:30},(_,i)=>{
   if(i===29){open=99.90;high=100.35;low=99.95;close=100.30;volume=220;}
   return {open_ts_ms:now-(30-i)*60e3,close_ts_ms:now-(30-i)*60e3+60e3-1,open_price:open,high_price:high,low_price:low,close_price:close,volume};
 });
-const reversalSignal=analyze("BTC",reversalLong,flatFive,now);
-assert.ok(reversalSignal,"counter-trend 1m reversal should trigger without 5m trend alignment");
+assert.equal(analyze("BTC",reversalLong,flatFive,now),null,"1m reversal without a closed 5m reversal confirmation must be rejected");
+const reversalFive = flatFive.map(c => ({...c}));
+Object.assign(reversalFive[35], {open_price:100.0,high_price:100.25,low_price:99.99,close_price:100.2});
+const reversalSignal=analyze("BTC",reversalLong,reversalFive,now);
+assert.ok(reversalSignal,"counter-trend 1m reversal with a closed 5m reversal confirmation should trigger");
 assert.equal(reversalSignal.side,"LONG");
 assert.equal(reversalSignal.strategy,"1M_SWING_REVERSAL+RECLAIM");
+assert.ok(reversalSignal.scoreComponents.includes("5M_REVERSAL_CONFIRMATION"));
 assert.ok(reversalSignal.confidence>=0.72&&reversalSignal.stopPct<=0.45);
-const reversalShort=analyze("SOL",mirror(reversalLong),flatFive,now);
-assert.ok(reversalShort,"mirrored counter-trend short reversal should trigger");
+const reversalShort=analyze("SOL",mirror(reversalLong),mirror(reversalFive),now);
+assert.ok(reversalShort,"mirrored counter-trend short reversal with 5m confirmation should trigger");
 assert.equal(reversalShort.side,"SHORT");
 assert.equal(reversalShort.strategy,"1M_SWING_REVERSAL+RECLAIM");
+assert.ok(reversalShort.scoreComponents.includes("5M_REVERSAL_CONFIRMATION"));
 
 console.log("PASS: core scalp rejects stale, incomplete, flat and no-pullback data, accepts long and short pullback/reclaims, and evaluates scalp/trend candidates independently.");
