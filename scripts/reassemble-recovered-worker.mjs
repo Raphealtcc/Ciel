@@ -49,8 +49,8 @@ if (preamble.length !== 391) {
 }
 
 const worker = preamble + recoveredModules.join("");
-if (worker.length !== 222637) {
-  throw new Error(`Integrity check failed for full Worker: expected 215891, got ${worker.length}`);
+if (worker.length !== 222995) {
+  throw new Error(`Integrity check failed for full Worker: expected 222995, got ${worker.length}`);
 }
 
 const sha256 = createHash("sha256").update(worker, "utf8").digest("hex");
