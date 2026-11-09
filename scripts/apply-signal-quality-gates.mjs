@@ -30,7 +30,7 @@ patchFunction("analyzeMicroMomentumContinuation", "__name(analyzeMicroMomentumCo
   if (next === segment) throw new Error("micro-momentum history window was not found");
   const anchor = "  if(!side)return null;\n  const swing=";
   const replacement = `  if(!side)return null;
-  const r5=anchoredReturn(points,5),r15=anchoredReturn(points,15);
+  const r15=anchoredReturn(points,15);
   const e20=emaTimed(points.slice(-120),20),e50=emaTimed(points,50);
   const regimeData=classifyMarketRegime(points,r5,r15,anchoredReturn(points,60),e20,e50);
   const trendUp=regimeData.efficiency>=0.24&&regimeData.emaGapPct>=0.035&&e20>e50&&r15>0.06&&r5>0.025;
