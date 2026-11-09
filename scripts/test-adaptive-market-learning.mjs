@@ -105,6 +105,7 @@ const microLong=analyzeMicroMomentumContinuation("BTC",microRows(1),now);
 const microShort=analyzeMicroMomentumContinuation("ETH",microRows(-1),now);
 assert.equal(microLong?.side,"LONG");
 assert.equal(microShort?.side,"SHORT");
+assert.equal(analyzeMicroMomentumContinuation("BNB",microRows(1),now),null,"1m micro-momentum is reserved for the three core markets with full 1m/60m context");
 assert.equal(microLong?.mode,"TREND_HOLD");
 assert.ok(microLong.stopPct<=0.45&&microShort.stopPct<=0.45);
 assert.equal(analyzeMicroMomentumContinuation("BTC",microRows(1).slice(0,8),now),null);
