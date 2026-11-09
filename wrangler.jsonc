@@ -78,6 +78,7 @@
       "ALERT_COOLDOWN_MINUTES": "15",
       "ALERT_WINDOW_MINUTES": "5",
       "GEMINI_MODEL": "gemini-3.5-flash-lite",
+      "PAPER_TRADING_ENABLED": "false",
       "LEVERUP_AUTO_APPROVE": "true",
       "LEVERUP_RPC_URL": "https://rpc2.monad.xyz",
       "LEVERUP_ENTRY_PRICE_TOLERANCE_BPS": "30",
