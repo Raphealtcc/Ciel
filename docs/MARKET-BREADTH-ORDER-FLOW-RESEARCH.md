@@ -57,3 +57,4 @@ This is a top-quote OFI proxy, not full-depth queue reconstruction, L4 order tra
 - Order flow and cryptocurrency returns: https://doi.org/10.1016/j.finmar.2026.101047
 - Community discussion of short OFI half-life and fee drag: https://www.reddit.com/r/mltraders/comments/1xbgirf/i_tested_order_book_imbalance_on_8_bybit_perps/
 - Community discussion of OFI persistence and execution constraints: https://www.reddit.com/r/algotrading/comments/1pgsphr/algo_only_based_on_orderbook_imbalance_could_it/
+Implementation status: the measurements are shadow-only until a chronological, cost-adjusted holdout supports changing the entry policy.
