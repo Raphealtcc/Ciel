@@ -79,6 +79,7 @@ assert.ok(worker.includes("evaluateSignalQuality({candidate,forecast,market:revi
 assert.ok(worker.includes("REPEATED_SETUP_SUPPRESSED"));
 assert.ok(worker.includes("5M_REVERSAL_CONFIRMATION"));
 assert.ok(worker.includes("Signal quality "));
+assert.ok(worker.includes('"Signal quality: " + Number(s?.signalQualityScore || 0) + "/100 · evidence score, not win probability"'));
 assert.ok(worker.includes("updateAdvisorShadowOutcomes"));
 assert.ok(worker.includes("SHADOW_TARGET_FIRST"));
 assert.ok(worker.includes("strategyStats:strategyShadowStats"));
