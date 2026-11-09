@@ -24,6 +24,10 @@ const hardStopStillCloses = evaluateLeverUpPositionAction({
 });
 assert.equal(hardStopStillCloses.action, "MARKET_CLOSE");
 assert.equal(hardStopStillCloses.reason, "STOP_LOSS_TRIGGERED");
+assert.equal(evaluateLeverUpPositionAction({
+  position: {...holdTestPosition, earliestCloseTime: String(Math.floor(afterThreeHours / 1000) + 3600)},
+  currentPriceRaw: "89", now: afterThreeHours, maxHoldMinutes: 180,
+}).reason, "STOP_LOSS_TRIGGERED", "hard stop must bypass minimum-hold restrictions");
 const WMON = "0x3bd359C1119dA7Da1D913D1C4D2B7c461115433A";
 const LVMON = "0x91b81bfbe3A747230F0529Aa28d8b2Bc898E6D56";
 const LV = "0x1001ff13bf368aa4fa85f21043648079f00e1001";

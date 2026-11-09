@@ -97,6 +97,22 @@ async function findExistingIntent(db, signalId, idempotencyKey) {
   return db.prepare("SELECT * FROM leverup_execution_intents WHERE idempotency_key = ?").bind(idempotencyKey).first();
 }
 
+async function nextStopLossIntentId(db, tradeId) {
+  const base = "position-" + tradeId + "-market_close";
+  const rows = await db.prepare(
+    "SELECT signal_id,status,created_at_ms FROM leverup_execution_intents WHERE signal_id = ? OR signal_id LIKE ? ORDER BY created_at_ms DESC",
+  ).bind(base, base + "-retry-%").all();
+  const attempts = (rows.results || []).sort((a, b) => Number(a.created_at_ms || 0) - Number(b.created_at_ms || 0));
+  if (!attempts.length) return base;
+  const latest = attempts[attempts.length - 1];
+  // Only a definitive pre-broadcast rejection is safe to retry. SUBMITTED,
+  // PENDING, UNCERTAIN and executed intents remain idempotently blocked.
+  if (latest.status !== "REJECTED") return latest.signal_id;
+  const match = String(latest.signal_id).match(/-retry-(\\d+)$/);
+  const next = match ? Number(match[1]) + 1 : 1;
+  return base + "-retry-" + next;
+}
+
 async function claimIntent(db, { signalId, action, pairBase, leverage, marginMon, notionalUsd, payload, now, executionPath = "1ct", maxConcurrentPositions = 2 }) {
   if (!db?.prepare) throw new Error("LEVERUP_D1_LEDGER_UNAVAILABLE");
   const idempotencyKey = "ciel:leverup:" + executionPath + ":" + signalId;
@@ -1245,12 +1261,17 @@ export async function runLeverUpPositionManager({ env, db, now = Date.now(), dep
       maxHoldMinutes: saved ? Number(candidate.holdMinutes || 180) : 0,
       partialTakeProfits: partials, completedPartialLevels: completed,
     });
-    const adaptiveKey = "ciel:leverup:adaptive-exit:v2:" + tradeId;
-    let adaptiveState = null;
-    try { adaptiveState = await env?.CIEL_STATE?.get(adaptiveKey, "json"); } catch {}
-    const adaptive = evaluateAdaptiveLeverUpExit({ position, currentPriceRaw: latestPrice, state: adaptiveState || {}, pairView, now });
-    if (adaptive?.state && env?.CIEL_STATE?.put) {
-      await env.CIEL_STATE.put(adaptiveKey, JSON.stringify(adaptive.state), { expirationTtl: 7 * 24 * 3600 }).catch(() => void 0);
+    // A crossed hard stop is the highest-priority risk action. Do not wait for
+    // adaptive history, state storage, Gemini, or any nonessential exit analysis.
+    let adaptive = { action: "HOLD", reason: "SKIPPED_HARD_STOP_PRIORITY" };
+    if (fixedAction.action !== "MARKET_CLOSE" && fixedAction.action !== "PARTIAL_CLOSE" && fixedAction.action !== "WAIT") {
+      const adaptiveKey = "ciel:leverup:adaptive-exit:v2:" + tradeId;
+      let adaptiveState = null;
+      try { adaptiveState = await env?.CIEL_STATE?.get(adaptiveKey, "json"); } catch {}
+      adaptive = evaluateAdaptiveLeverUpExit({ position, currentPriceRaw: latestPrice, state: adaptiveState || {}, pairView, now });
+      if (adaptive?.state && env?.CIEL_STATE?.put) {
+        await env.CIEL_STATE.put(adaptiveKey, JSON.stringify(adaptive.state), { expirationTtl: 7 * 24 * 3600 }).catch(() => void 0);
+      }
     }
     // Live risk exits are deterministic and never wait for a Gemini API request.
     // Gemini remains available to the signal/research pipeline, not position-close authorization.
@@ -1302,9 +1323,11 @@ export async function runLeverUpPositionManager({ env, db, now = Date.now(), dep
         : [position.positionHash, slippage];
     const fee = selectFeeToken(oneClickAction, antiDdos.config, balances, [], { requireAllowance: false });
     const nonce = await (dependencies.readNonce || readLastAgentNonce)(traderAddress, agentAddress, { publicClient: client });
-    const signalId = "position-" + tradeId + "-" + action.action.toLowerCase() +
-      (action.levelIndex == null ? "" : "-" + action.levelIndex) +
-      (action.action === "UPDATE_TP_SL" ? "-" + String(action.stopLossRaw) : "");
+    const signalId = action.reason === "STOP_LOSS_TRIGGERED"
+      ? await nextStopLossIntentId(db, tradeId)
+      : "position-" + tradeId + "-" + action.action.toLowerCase() +
+        (action.levelIndex == null ? "" : "-" + action.levelIndex) +
+        (action.action === "UPDATE_TP_SL" ? "-" + String(action.stopLossRaw) : "");
     const result = await submitLeverUpIntent({
       env, db, signalId, action: oneClickAction, actionValues, traderAddress, agentAddress,
       agentAuthorization: auth, nonce: (BigInt(nonce) + 1n).toString(), deadline: Math.floor(now / 1000) + 300,
