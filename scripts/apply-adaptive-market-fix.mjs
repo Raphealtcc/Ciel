@@ -308,7 +308,9 @@ const reviewEnd=advisorSource.indexOf(reviewEndMarker,reviewStart)+reviewEndMark
 if(reviewStart<0||reviewEnd<reviewStart) throw new Error("Cannot split advisor review function for syntax diagnostics");
 await writeFile(path.join(process.cwd(),"reconstructed","advisor-before-review.mjs"),advisorSource.slice(0,reviewStart));
 await writeFile(path.join(process.cwd(),"reconstructed","review-only.mjs"),advisorSource.slice(reviewStart,reviewEnd));
-await writeFile(path.join(process.cwd(),"reconstructed","advisor-after-review.mjs"),advisorSource.slice(reviewEnd));
+const afterReviewSource=advisorSource.slice(reviewEnd);
+await writeFile(path.join(process.cwd(),"reconstructed","advisor-after-review.mjs"),afterReviewSource);
+console.log("ADVISOR AFTER REVIEW TAIL:\\n"+afterReviewSource.split("\\n").slice(-35).map((line,index)=>((afterReviewSource.split("\\n").length-34+index)+": "+line)).join("\\n"));
 console.log("ADVISOR REVIEW SEGMENTS WRITTEN "+reviewStart+" "+reviewEnd+" "+advisorSource.length);
 const prefixLines=prefixSource.split("\n");
 console.log("ADAPTIVE PREFIX TAIL:\n"+prefixLines.slice(-55).map((line,index)=>(prefixLines.length-54+index)+": "+line).join("\n"));
