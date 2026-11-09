@@ -36,7 +36,7 @@ assert.ok(worker.includes('ciel:leverup:position-manager:last-run'));
 assert.ok(worker.includes('Configured API keys: '));
 assert.ok(worker.includes('Last result: '));
 assert.ok(worker.includes("This command will not bypass it"));
-assert.ok(worker.includes("LeverUp-native feed is not READY or its latest sample is stale"));
+assert.ok(!worker.includes("LeverUp-native feed is not READY or its latest sample is stale"), "live activation must not depend on LeverUp-native market feed readiness");
 assert.ok(worker.includes("recent read-only LeverUp market and coordinator diagnostics have not passed"));
 assert.ok(worker.includes("position manager is stale or blocked"));
 console.log("PASS: independent Telegram mode controls and multi-signal live activation safety gates.");
