@@ -54,7 +54,7 @@ assert.equal(analyze("BTC",one,five,now),null,"monotonic trend without a pullbac
 assert.equal(analyze("BTC",one,five,now+10*60_000),null,"stale candles must never trigger");
 assert.equal(analyze("BTC",one.slice(-10),five,now),null,"insufficient 1m history must never trigger");
 
-const flatFive = candles(36,0.0001,300_000,100);
+const flatFive = candles(36,0,300_000,100);
 assert.equal(analyze("ETH",one,flatFive,now),null,"flat 5m regime must not trigger");
 
 // Positive fixture: rising 5m regime, several red 1m pullback candles near EMA9,
