@@ -292,4 +292,6 @@ function patchGeminiMultiProjectFailover() {
 patchGeminiMultiProjectFailover();
 
 await writeFile(file,source);
+const debugLines=source.split("\n");
+console.log("ADAPTIVE SYNTAX DEBUG:\n"+debugLines.slice(4160,4200).map((line,index)=>(4161+index)+": "+line).join("\n"));
 console.log("Adaptive core-market patch complete: BTC/ETH/SOL lead the scan, all other configured markets remain eligible, paper outcomes adjust ranking only after eight closed samples, and no D1 writes or risk-limit changes are introduced.");
