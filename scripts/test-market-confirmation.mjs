@@ -49,6 +49,7 @@ assert.equal(persistent.direction, "LONG");
 assert.ok(persistent.bookEvents >= 8 && persistent.tradeCount >= 5);
 assert.ok(persistent.bucketAgreement >= 0.67);
 
+assert.equal(summarizePersistentOrderFlow(null, now).status, "UNAVAILABLE");
 const stale = summarizePersistentOrderFlow(flow, now + 60000);
 assert.equal(stale.status, "STALE");
 

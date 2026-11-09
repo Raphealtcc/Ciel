@@ -113,7 +113,7 @@ export function appendTradeFlowEvents(previous = {}, trades, now = Date.now()) {
  * Requires sustained agreement across multiple 10-second buckets, book OFI,
  * and signed trade notional. Missing/stale observations remain unavailable.
  */
-export function summarizePersistentOrderFlow(record = {}, now = Date.now()) {
+export function summarizePersistentOrderFlow(record = null, now = Date.now()) {
   const book = pruneEvents(record?.bookEvents, now - 30000, 240);
   const trades = pruneEvents(record?.tradeEvents, now - 30000, 500);
   const lastBookAt = Number(record?.lastBookAt || 0);
