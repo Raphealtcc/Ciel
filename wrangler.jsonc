@@ -5,6 +5,19 @@
   "main": "reconstructed/patched-worker.js",
   "compatibility_date": "2026-09-08",
   "compatibility_flags": ["nodejs_compat"],
+  "secrets": {
+    "required": [
+      "ALCHEMY_RPC",
+      "BLOCKVISION_API_KEY",
+      "GEMINI_API_KEY_1",
+      "GEMINI_API_KEYS",
+      "LEVERUP_AGENT_PRIVATE_KEY",
+      "LEVERUP_TRADER_PRIVATE_KEY",
+      "TELEGRAM_BOT_TOKEN",
+      "TELEGRAM_CHAT_ID",
+      "TELEGRAM_WEBHOOK_SECRET"
+    ]
+  },
   "keep_vars": true,
   "workers_dev": true,
   "preview_urls": true,
