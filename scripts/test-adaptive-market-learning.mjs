@@ -87,7 +87,15 @@ assert.equal(microLong?.mode,"TREND_HOLD");
 assert.ok(microLong.stopPct<=0.45&&microShort.stopPct<=0.45);
 assert.equal(analyzeMicroMomentumContinuation("BTC",microRows(1).slice(0,8),now),null);
 
-assert.ok(source.includes("cooldown.allKeysFailed === true"));\nassert.ok(source.includes("for (let i = 0; i < keys.length; i++)"));\nassert.ok(source.includes("keyIndexUsed: ix + 1"));\nassert.ok(source.includes("ALL_KEYS_RATE_LIMITED"));\nassert.ok(!source.includes("stopped key rotation because quota may be project-wide"));\nassert.ok(source.includes("function analyzeCoreTrendContinuation"));\nassert.ok(source.includes("function analyzeMicroMomentumContinuation"));\nassert.ok(source.includes("NO_CONFIRMED_3M_5M_10M_RANGE_BREAKOUT"));\nassert.ok(source.includes("1M_MICRO_MOMENTUM_BREAKOUT"));
+assert.ok(source.includes("cooldown.allKeysFailed === true"));
+assert.ok(source.includes("for (let i = 0; i < keys.length; i++)"));
+assert.ok(source.includes("keyIndexUsed: ix + 1"));
+assert.ok(source.includes("ALL_KEYS_RATE_LIMITED"));
+assert.ok(!source.includes("stopped key rotation because quota may be project-wide"));
+assert.ok(source.includes("function analyzeCoreTrendContinuation"));
+assert.ok(source.includes("function analyzeMicroMomentumContinuation"));
+assert.ok(source.includes("NO_CONFIRMED_3M_5M_10M_RANGE_BREAKOUT"));
+assert.ok(source.includes("1M_MICRO_MOMENTUM_BREAKOUT"));
 assert.ok(source.includes("CORE_TREND_CONTINUATION"));
 assert.ok(source.includes("5M_STRUCTURE+EMA+MACD+RSI+BREAKOUT_RETEST"));
 assert.ok(source.includes("corePullbackScalp: modeStats(\"CORE_PULLBACK_SCALP\")"));
