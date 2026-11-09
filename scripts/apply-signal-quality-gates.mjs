@@ -91,11 +91,5 @@ once(
   "persist the evidence score and component breakdown in the existing audit row"
 );
 
-once(
-  'const rationale = candidate.reason + " " + forecastSummary + " " + reviewSummary + timingSummary + " Strategy " + candidate.mode + "; technical strength model v3: " + (candidate.confidence * 100).toFixed(0) + "/100 across " + (candidate.scoreComponents || []).join("+") + "; not a win probability."',
-  'const rationale = candidate.reason + " " + forecastSummary + " " + reviewSummary + timingSummary + " Signal quality " + signalQuality.score + "/100; technical strength model v3: " + (candidate.confidence * 100).toFixed(0) + "/100 across " + (candidate.scoreComponents || []).join("+") + "; neither score is a win probability."',
-  "show the quality score separately from technical strength and win probability"
-);
-
 await writeFile(file, source);
 console.log("Wrote signal-quality-gated Worker candidate: " + file);
