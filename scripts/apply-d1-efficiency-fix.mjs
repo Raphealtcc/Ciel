@@ -273,7 +273,7 @@ source = source.slice(0,marketEvidenceStart) + marketEvidence + source.slice(mar
 
 // Replace the unindexed D1 AI-audit cooldown lookup with a per-symbol KV timestamp.
 replaceOnceInSource(
-  '    const priorReview = await env.DB.prepare("SELECT created_at_ms FROM advisor_ai_audit WHERE symbol=? AND model!=\\'CIEL Statistical Ensemble v1\\' AND model!=\\'CIEL deterministic range guard\\' ORDER BY created_at_ms DESC LIMIT 1").bind(candidate.symbol).first();\n    if (priorReview && now - Number(priorReview.created_at_ms) < cooldownMs) continue;',
+  '    const priorReview = await env.DB.prepare("SELECT created_at_ms FROM advisor_ai_audit WHERE symbol=? AND model!=\'CIEL Statistical Ensemble v1\' AND model!=\'CIEL deterministic range guard\' ORDER BY created_at_ms DESC LIMIT 1").bind(candidate.symbol).first();\n    if (priorReview && now - Number(priorReview.created_at_ms) < cooldownMs) continue;',
   '    const reviewCooldownKey = "ciel:advisor:review:last:" + candidate.symbol;\n    const priorReviewAt = Number(await env.CIEL_STATE.get(reviewCooldownKey)) || 0;\n    if (priorReviewAt && now - priorReviewAt < cooldownMs) continue;',
   "replace repeated unindexed D1 AI-audit reads with KV cooldowns"
 );
@@ -281,11 +281,6 @@ replaceOnceInSource(
   '    const quality = await getMarketEvidence(env, candidate.symbol, now, liveEvidence?.[candidate.symbol]);',
   '    const quality = await getMarketEvidence(env, candidate.symbol, now, liveEvidence?.[candidate.symbol]);\n    await env.CIEL_STATE.put(reviewCooldownKey, String(now), { expirationTtl: 86400 }).catch(() => void 0);',
   "persist a cooldown for stale market evidence without D1 writes"
-);
-replaceOnceInSource(
-  '    const intraday = await getIntradayPattern(env,candidate.symbol,now,candidate.entry);',
-  '    await env.CIEL_STATE.put(reviewCooldownKey, String(now), { expirationTtl: 86400 }).catch(() => void 0);\n    const intraday = await getIntradayPattern(env,candidate.symbol,now,candidate.entry);',
-  "write the AI-review cooldown timestamp to KV"
 );
 
 // Warm the persisted DO price history once daily, not every ten minutes.
