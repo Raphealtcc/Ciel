@@ -3,7 +3,7 @@ import path from "node:path";
 
 const workerPath = path.join(process.cwd(), "reconstructed", "patched-worker.js");
 let worker = await readFile(workerPath, "utf8");
-const universeImport = 'import { isTemporaryMarketAllowed, restrictTemporaryMarketUniverse } from "../src/market-universe.js";';
+const universeImport = 'import { restrictTemporaryMarketUniverse } from "../src/market-universe.js";';
 if (!worker.includes(universeImport)) worker = universeImport + "\n" + worker;
 
 function once(source, before, after, label) {
@@ -24,7 +24,7 @@ worker = once(worker,
 
 worker = once(worker,
   'async function openPaperTrade(storage, params) {\n  if (!storage) return { opened: false, reason: "Durable Object paper storage is unavailable." };',
-  'async function openPaperTrade(storage, params) {\n  if (!isTemporaryMarketAllowed(params?.symbol)) return { opened: false, reason: "Temporarily restricted market universe: only BTC, ETH, SOL and BNB may receive new paper entries." };\n  if (!storage) return { opened: false, reason: "Durable Object paper storage is unavailable." };',
+  'async function openPaperTrade(storage, params) {\n  if (!["BTC","ETH","SOL","BNB"].includes(String(params?.symbol || "").trim().toUpperCase())) return { opened: false, reason: "Temporarily restricted market universe: only BTC, ETH, SOL and BNB may receive new paper entries." };\n  if (!storage) return { opened: false, reason: "Durable Object paper storage is unavailable." };',
   "hard-block non-core paper entries");
 
 await writeFile(workerPath, worker);

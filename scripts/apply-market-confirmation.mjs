@@ -30,15 +30,15 @@ once(
 );
 once(
   '          // Temporary isolation: keep one allMids stream while diagnosing upstream 1006 closes.\n          // REST order-book fallback remains enabled independently.',
-  '          // Keep order-flow subscriptions restricted to the three core markets.\n          for (const symbol of ["BTC", "ETH", "SOL"]) {\n            socket.send(JSON.stringify({ method: "subscribe", subscription: { type: "l2Book", coin: symbol } }));\n            socket.send(JSON.stringify({ method: "subscribe", subscription: { type: "trades", coin: symbol } }));\n          }',
-  "subscribe to L2 and trades for BTC, ETH and SOL only"
+  '          // Keep order-flow subscriptions restricted to the four active markets.\n          for (const symbol of ["BTC", "ETH", "SOL", "BNB"]) {\n            socket.send(JSON.stringify({ method: "subscribe", subscription: { type: "l2Book", coin: symbol } }));\n            socket.send(JSON.stringify({ method: "subscribe", subscription: { type: "trades", coin: symbol } }));\n          }',
+  "subscribe to L2 and trades for BTC, ETH, SOL and BNB only"
 );
 
 const tradeAnchor = "    const data = packet.data;\n    if (packet.channel === \"candle\") {";
 const tradeHandler = `    const data = packet.data;
     if (packet.channel === "trades") {
       const updates = Array.isArray(data) ? data : [data];
-      const symbols = new Set(["BTC", "ETH", "SOL"]);
+      const symbols = new Set(["BTC", "ETH", "SOL", "BNB"]);
       for (const trade of updates) {
         const symbol = String(trade?.coin || "").trim().toUpperCase();
         if (!symbols.has(symbol)) continue;

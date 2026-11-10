@@ -80,7 +80,7 @@ assert.ok(worker.includes("appendBookFlowSnapshot"));
 assert.ok(worker.includes("appendTradeFlowEvents"));
 assert.ok(worker.includes("summarizePersistentOrderFlow"));
 assert.ok(worker.includes('subscription: { type: "l2Book", coin: symbol }'));
-assert.ok(worker.includes('subscription: { type: "trades", coin: symbol }'));
+assert.ok(worker.includes('subscription: { type: "trades", coin: symbol }'));\nassert.ok(worker.includes('["BTC", "ETH", "SOL", "BNB"]'), "persistent order-flow capture must include all four active markets");
 assert.ok(worker.includes("marketBreadth"));
 assert.ok(worker.includes("orderFlow"));
 assert.ok(worker.includes("research only"));
