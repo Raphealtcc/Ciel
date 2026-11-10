@@ -288,8 +288,8 @@ const kvCooldown = [
 ].join("\n");
 source = source.slice(0, priorReviewStart) + kvCooldown + source.slice(qualityReadAt);
 replaceOnceInSource(
-  '    const reviewed = await review(env,candidate,forecast,reviewerMarket,intraday,eventIntel,candleStructure);',
-  '    await env.CIEL_STATE.put(reviewCooldownKey, String(now), { expirationTtl: 86400 }).catch(() => void 0);\n    const reviewed = await review(env,candidate,forecast,reviewerMarket,intraday,eventIntel,candleStructure);',
+  '    const reviewed = candidate.mode === "CORE_PULLBACK_SCALP"',
+  '    await env.CIEL_STATE.put(reviewCooldownKey, String(now), { expirationTtl: 86400 }).catch(() => void 0);\n    const reviewed = candidate.mode === "CORE_PULLBACK_SCALP"',
   "persist the per-symbol cooldown only when a candidate reaches review"
 );
 
