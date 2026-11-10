@@ -56,7 +56,7 @@ once(tradeAnchor, tradeHandler, "collect signed trade notional for independent o
 
 once(
   "      this.latestBooks[symbol] = snapshot;\n      this.bookLastWrite[symbol] = now;",
-  "      this.latestBooks[symbol] = snapshot;\n      if ([\"BTC\",\"ETH\",\"SOL\"].includes(symbol)) {\n        this.orderFlow[symbol] = appendBookFlowSnapshot(this.orderFlow[symbol], snapshot, now);\n        if (now - Number(this.orderFlowLastPersistAt || 0) >= 10000) {\n          this.orderFlowLastPersistAt = now;\n          await this.state.storage.put(\"orderFlow\", this.orderFlow).catch(() => void 0);\n        }\n      }\n      this.bookLastWrite[symbol] = now;",
+  "      this.latestBooks[symbol] = snapshot;\n      if ([\"BTC\",\"ETH\",\"SOL\",\"BNB\"].includes(symbol)) {\n        this.orderFlow[symbol] = appendBookFlowSnapshot(this.orderFlow[symbol], snapshot, now);\n        if (now - Number(this.orderFlowLastPersistAt || 0) >= 10000) {\n          this.orderFlowLastPersistAt = now;\n          await this.state.storage.put(\"orderFlow\", this.orderFlow).catch(() => void 0);\n        }\n      }\n      this.bookLastWrite[symbol] = now;",
   "calculate best-quote OFI from consecutive L2 snapshots and persist at most every 10 seconds"
 );
 
