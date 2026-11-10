@@ -13,6 +13,10 @@ function once(source, before, after, label) {
 }
 
 worker = once(worker,
+  "  for (const candidate of candidates) {",
+  "  for (const candidate of candidates) {\n    if (!isTemporaryMarketAllowed(candidate.symbol)) continue;",
+  "restrict Gemini candidate reviews to the four temporary markets");
+worker = once(worker,
   "  return [...new Set(parsed)].slice(0, 100);",
   "  return [...restrictTemporaryMarketUniverse([...new Set(parsed)]), \"MON\"]; ",
   "restrict the Hyperliquid watchlist to BTC, ETH, SOL and BNB");

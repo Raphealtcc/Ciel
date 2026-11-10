@@ -234,8 +234,8 @@ once(
     const isScalpMode = candidate.mode === "RANGE_SCALP" || candidate.mode === "CORE_PULLBACK_SCALP";
     const isMicroMomentum = candidate.strategy === "1M_MICRO_MOMENTUM_BREAKOUT";
     if (isScalpMode && eventIntel?.marketImpact === "BROAD_RISK_OFF") continue;
-    const cooldownMs = isScalpMode ? 3 * 6e4 : isMicroMomentum ? 5 * 6e4 : trendCooldownMs;`,
-  "evaluate scalp and trend candidates independently and re-review micro momentum after five minutes",
+    const cooldownMs = isScalpMode ? 3 * 6e4 : isMicroMomentum ? 30 * 6e4 : trendCooldownMs;`,
+  "evaluate scalp and trend candidates independently and cap micro-momentum Gemini reviews at one per symbol per 30 minutes",
 );
 
 
