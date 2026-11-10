@@ -3,7 +3,7 @@ import path from "node:path";
 
 const workerPath = path.join(process.cwd(), "reconstructed", "patched-worker.js");
 let worker = await readFile(workerPath, "utf8");
-const universeImport = 'import { restrictTemporaryMarketUniverse } from "../src/market-universe.js";';
+const universeImport = 'import { isTemporaryMarketAllowed, restrictTemporaryMarketUniverse } from "../src/market-universe.js";';
 if (!worker.includes(universeImport)) worker = universeImport + "\n" + worker;
 
 function once(source, before, after, label) {
@@ -26,6 +26,21 @@ worker = once(worker,
   'async function openPaperTrade(storage, params) {\n  if (!storage) return { opened: false, reason: "Durable Object paper storage is unavailable." };',
   'async function openPaperTrade(storage, params) {\n  if (!["BTC","ETH","SOL","BNB"].includes(String(params?.symbol || "").trim().toUpperCase())) return { opened: false, reason: "Temporarily restricted market universe: only BTC, ETH, SOL and BNB may receive new paper entries." };\n  if (!storage) return { opened: false, reason: "Durable Object paper storage is unavailable." };',
   "hard-block non-core paper entries");
+
+worker = once(worker,
+  'const rows = await env.DB.prepare("SELECT * FROM advisor_positions WHERE status IN (\'PROPOSED\',\'OPEN\',\'EXIT_ALERTED\',\'CLOSING\') ORDER BY created_at_ms DESC LIMIT 20").all();',
+  'const rows = await env.DB.prepare("SELECT * FROM advisor_positions WHERE status IN (\'PROPOSED\',\'OPEN\',\'EXIT_ALERTED\',\'CLOSING\') ORDER BY created_at_ms DESC LIMIT 20").all();\n  if (cmd === "/signals") rows.results = (rows.results || []).filter((position) => isTemporaryMarketAllowed(position.symbol));',
+  "hide old non-core proposals from Telegram /signals while preserving /positions");
+
+worker = once(worker,
+  'const filtered = url.pathname === "/api/signals" ? positions.filter((p) => p.status === "PROPOSED" || p.status === "OPEN" || p.status === "EXIT_ALERTED") : positions;',
+  'const filtered = url.pathname === "/api/signals" ? positions.filter((p) => isTemporaryMarketAllowed(p.symbol) && (p.status === "PROPOSED" || p.status === "OPEN" || p.status === "EXIT_ALERTED")) : positions;',
+  "hide old non-core recommendations from the signals API while preserving position management");
+
+worker = once(worker,
+  '    if (!proposal) return { handled: true, removeButtons: true, reply: "This proposal has expired or is no longer pending." };',
+  '    if (!proposal) return { handled: true, removeButtons: true, reply: "This proposal has expired or is no longer pending." };\n    if (!isTemporaryMarketAllowed(proposal.symbol)) return { handled: true, removeButtons: true, reply: "This proposal is outside the temporary four-market universe. Only BTC, ETH, SOL and BNB can be newly tracked." };',
+  "reject stale non-core Telegram proposal buttons");
 
 await writeFile(workerPath, worker);
 

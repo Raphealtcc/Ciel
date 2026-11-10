@@ -25,6 +25,9 @@ assert.ok(native.includes("restrictTemporaryMarketUniverse(watchValues.map(upper
 const worker = await readFile("reconstructed/patched-worker.js", "utf8");
 assert.ok(worker.includes("restrictTemporaryMarketUniverse([...new Set(parsed)])"));
 assert.ok(worker.includes("Temporarily restricted market universe"));
+assert.ok(worker.includes("rows.results = (rows.results || []).filter((position) => isTemporaryMarketAllowed(position.symbol))"));
+assert.ok(worker.includes("isTemporaryMarketAllowed(p.symbol)"));
+assert.ok(worker.includes("outside the temporary four-market universe"));
 assert.ok(worker.includes('new Set(["BTC", "ETH", "SOL", "BNB"])'));
 
 console.log("PASS: temporary allowlist covers advisor scans, paper entries, native LeverUp sampling and manual/live LeverUp preflight.");
