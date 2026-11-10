@@ -24,7 +24,7 @@ worker = once(worker,
 
 worker = once(worker,
   'async function openPaperTrade(storage, params) {\n  if (!storage) return { opened: false, reason: "Durable Object paper storage is unavailable." };',
-  'async function openPaperTrade(storage, params) {\n  if (!["BTC","ETH","SOL","BNB"].includes(String(params?.symbol || "").trim().toUpperCase())) return { opened: false, reason: "Temporarily restricted market universe: only BTC, ETH, SOL and BNB may receive new paper entries." };\n  if (!storage) return { opened: false, reason: "Durable Object paper storage is unavailable." };',
+  'async function openPaperTrade(storage, params) {\n  if (!["BTC","ETH","SOL","BNB"].includes(String(params?.symbol || "").trim().toUpperCase())) return { opened: false, reason: "Temporarily restricted market universe: unsupported symbol; only BTC, ETH, SOL and BNB may receive new paper entries." };\n  if (!storage) return { opened: false, reason: "Durable Object paper storage is unavailable." };',
   "hard-block non-core paper entries");
 
 worker = once(worker,
