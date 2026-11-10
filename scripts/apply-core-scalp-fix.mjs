@@ -232,10 +232,9 @@ once(
     const cooldownMs = candidate.mode === "RANGE_SCALP" ? 10 * 6e4 : trendCooldownMs;`,
   `  for (const candidate of candidates) {
     const isScalpMode = candidate.mode === "RANGE_SCALP" || candidate.mode === "CORE_PULLBACK_SCALP";
-    const isMicroMomentum = candidate.strategy === "1M_MICRO_MOMENTUM_BREAKOUT";
     if (isScalpMode && eventIntel?.marketImpact === "BROAD_RISK_OFF") continue;
-    const cooldownMs = isScalpMode ? 3 * 6e4 : isMicroMomentum ? 30 * 6e4 : trendCooldownMs;`,
-  "evaluate scalp and trend candidates independently and cap micro-momentum Gemini reviews at one per symbol per 30 minutes",
+    const cooldownMs = candidate.mode === "CORE_PULLBACK_SCALP" ? 3 * 6e4 : trendCooldownMs;`,
+  "evaluate scalp and trend candidates independently and cap Gemini reviews at one per symbol per 30 minutes; core pullback scalps use deterministic local review",
 );
 
 
