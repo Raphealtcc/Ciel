@@ -13,8 +13,8 @@ function once(source, before, after, label) {
 }
 
 worker = once(worker,
-  "  for (const candidate of candidates) {",
-  "  for (const candidate of candidates) {\n    if (!isTemporaryMarketAllowed(candidate.symbol)) continue;",
+  '    const isScalpMode = candidate.mode === "RANGE_SCALP" || candidate.mode === "CORE_PULLBACK_SCALP";',
+  '    if (!isTemporaryMarketAllowed(candidate.symbol)) continue;\n    const isScalpMode = candidate.mode === "RANGE_SCALP" || candidate.mode === "CORE_PULLBACK_SCALP";',
   "restrict Gemini candidate reviews to the four temporary markets");
 worker = once(worker,
   "  return [...new Set(parsed)].slice(0, 100);",
