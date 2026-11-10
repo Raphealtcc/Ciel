@@ -276,12 +276,17 @@ marketEvidence = marketEvidence.slice(0,fallbackStart) +
   marketEvidence.slice(fallbackEnd);
 source = source.slice(0,marketEvidenceStart) + marketEvidence + source.slice(marketEvidenceEnd);
 
-// Replace the unindexed D1 AI-audit cooldown lookup with a per-symbol KV timestamp.
-replaceOnceInSource(
-  '    const priorReview = await env.DB.prepare("SELECT created_at_ms FROM advisor_ai_audit WHERE symbol=? AND model!=\'CIEL Statistical Ensemble v1\' AND model!=\'CIEL deterministic range guard\' ORDER BY created_at_ms DESC LIMIT 1").bind(candidate.symbol).first();\n    if (priorReview && now - Number(priorReview.created_at_ms) < cooldownMs) continue;',
-  '    const reviewCooldownKey = "ciel:advisor:review:last:" + candidate.symbol;\n    const priorReviewAt = Number(await env.CIEL_STATE.get(reviewCooldownKey)) || 0;\n    if (priorReviewAt && now - priorReviewAt < cooldownMs) continue;',
-  "replace repeated unindexed D1 AI-audit reads with KV cooldowns"
-);
+// Replace the mode-specific unindexed D1 AI-audit cooldown lookup with KV.
+const priorReviewStart = source.indexOf("    const priorReviewSql = candidate.mode === \"CORE_PULLBACK_SCALP\"");
+const qualityReadAt = source.indexOf("    const quality = await getMarketEvidence(env, candidate.symbol, now, liveEvidence?.[candidate.symbol]);", priorReviewStart);
+if (priorReviewStart < 0 || qualityReadAt <= priorReviewStart) throw new Error("Could not locate the mode-specific advisor cooldown query.");
+const kvCooldown = [
+  '    const reviewCooldownKey = candidate.mode === "CORE_PULLBACK_SCALP" ? "ciel:advisor:review:core:" + candidate.symbol : "ciel:advisor:review:ai:" + candidate.symbol;',
+  '    const priorReviewAt = Number(await env.CIEL_STATE.get(reviewCooldownKey)) || 0;',
+  '    if (priorReviewAt && now - priorReviewAt < cooldownMs) { console.info("CIEL_ADVISOR_REJECT " + JSON.stringify({symbol:candidate.symbol,reason:"SYMBOL_REVIEW_COOLDOWN",remainingMs:cooldownMs-(now-priorReviewAt)})); continue; }',
+  ''
+].join("\n");
+source = source.slice(0, priorReviewStart) + kvCooldown + source.slice(qualityReadAt);
 replaceOnceInSource(
   '    const reviewed = await review(env,candidate,forecast,reviewerMarket,intraday,eventIntel,candleStructure);',
   '    await env.CIEL_STATE.put(reviewCooldownKey, String(now), { expirationTtl: 86400 }).catch(() => void 0);\n    const reviewed = await review(env,candidate,forecast,reviewerMarket,intraday,eventIntel,candleStructure);',
@@ -294,14 +299,9 @@ replaceOnceInSource(
   "record scan health, candidate counts, no-setup symbols and structured diagnostics"
 );
 replaceOnceInSource(
-  '    if (candidate.mode === "RANGE_SCALP" && eventIntel?.marketImpact === "BROAD_RISK_OFF") continue;',
-  '    if (candidate.mode === "RANGE_SCALP" && eventIntel?.marketImpact === "BROAD_RISK_OFF") { console.info("CIEL_ADVISOR_REJECT " + JSON.stringify({symbol:candidate.symbol,reason:"BROAD_RISK_OFF_RANGE_SCALP"})); continue; }',
+  '    if (isScalpMode && eventIntel?.marketImpact === "BROAD_RISK_OFF") continue;',
+  '    if (isScalpMode && eventIntel?.marketImpact === "BROAD_RISK_OFF") { console.info("CIEL_ADVISOR_REJECT " + JSON.stringify({symbol:candidate.symbol,reason:"BROAD_RISK_OFF_RANGE_SCALP"})); continue; }',
   "log explicit broad-risk-off candidate rejections"
-);
-replaceOnceInSource(
-  '    if (priorReviewAt && now - priorReviewAt < cooldownMs) continue;',
-  '    if (priorReviewAt && now - priorReviewAt < cooldownMs) { console.info("CIEL_ADVISOR_REJECT " + JSON.stringify({symbol:candidate.symbol,reason:"SYMBOL_REVIEW_COOLDOWN",remainingMs:cooldownMs-(now-priorReviewAt)})); continue; }',
-  "log per-symbol cooldown rejections"
 );
 source = source.replaceAll(
   'console.log("Ciel skipped " + candidate.symbol + ": " + reason);',
