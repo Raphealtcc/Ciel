@@ -14,7 +14,7 @@ function once(source, before, after, label) {
 
 worker = once(worker,
   "  return [...new Set(parsed)].slice(0, 100);",
-  "  return restrictTemporaryMarketUniverse([...new Set(parsed)]);",
+  "  return [...restrictTemporaryMarketUniverse([...new Set(parsed)]), \"MON\"]; ",
   "restrict the Hyperliquid watchlist to BTC, ETH, SOL and BNB");
 
 worker = once(worker,
