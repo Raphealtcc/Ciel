@@ -303,6 +303,10 @@ replaceOnceInSource(
   '    if (priorReviewAt && now - priorReviewAt < cooldownMs) { console.info("CIEL_ADVISOR_REJECT " + JSON.stringify({symbol:candidate.symbol,reason:"SYMBOL_REVIEW_COOLDOWN",remainingMs:cooldownMs-(now-priorReviewAt)})); continue; }',
   "log per-symbol cooldown rejections"
 );
+source = source.replaceAll(
+  'console.log("Ciel skipped " + candidate.symbol + ": " + reason);',
+  'console.info("CIEL_ADVISOR_REJECT " + JSON.stringify({symbol:candidate.symbol,reason})); console.log("Ciel skipped " + candidate.symbol + ": " + reason);'
+);
 // Warm the persisted DO price history once daily, not every ten minutes.
 replaceOnceInSource(
   'now - this.lastHistoryHydrationAt < 10 * 60 * 1e3',
