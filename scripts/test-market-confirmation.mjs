@@ -84,6 +84,6 @@ assert.ok(worker.includes('subscription: { type: "trades", coin: symbol }'));
 assert.ok(worker.includes('["BTC", "ETH", "SOL", "BNB"]'), "persistent order-flow capture must include all four active markets");
 assert.ok(worker.includes("marketBreadth"));
 assert.ok(worker.includes("orderFlow"));
-assert.ok(worker.includes('if ([\\"BTC\\",\\"ETH\\",\\"SOL\\",\\"BNB\\"].includes(symbol))'), "book-flow capture must include BNB alongside BTC, ETH and SOL");
+assert.ok(worker.includes('if (["BTC","ETH","SOL","BNB"].includes(symbol))'), "book-flow capture must include BNB alongside BTC, ETH and SOL");
 assert.ok(worker.includes("research only"));
 console.log("PASS: cross-asset breadth and persistent OFI/trade-flow are computed independently, shown as research-only context, and do not gate entries.");
