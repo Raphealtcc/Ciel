@@ -176,11 +176,7 @@ replaceOnceInSource(
   'now - 24 * 60 * 60 * 1e3',
   "bootstrap a full 24-hour 5m candle window"
 );
-replaceOnceInSource(
-  '["BTC","ETH","SOL"].includes(symbol)',
-  '["BTC","ETH","SOL","BNB"].includes(symbol)',
-  "include BNB in the 5m structure cache"
-);
+source = source.replaceAll('["BTC","ETH","SOL"].includes(symbol)', '["BTC","ETH","SOL","BNB"].includes(symbol));
 replaceOnceInSource(
   'async function runAdvisorCycle(env, prices, now, lastTickAt, priceHistory, liveEvidence, paperStorage, coreScalpCandles = {}, coreTrendCandles = {}) {',
   'async function runAdvisorCycle(env, prices, now, lastTickAt, priceHistory, liveEvidence, paperStorage, coreScalpCandles = {}, coreTrendCandles = {}) {',
@@ -283,13 +279,8 @@ replaceOnceInSource(
 );
 replaceOnceInSource(
   '    const quality = await getMarketEvidence(env, candidate.symbol, now, liveEvidence?.[candidate.symbol]);',
-  '    const quality = await getMarketEvidence(env, candidate.symbol, now, liveEvidence?.[candidate.symbol]);\n    if (!quality.market || quality.reason) { await env.CIEL_STATE.put(reviewCooldownKey, String(now), { expirationTtl: 86400 }).catch(() => void 0);',
+  '    const quality = await getMarketEvidence(env, candidate.symbol, now, liveEvidence?.[candidate.symbol]);\n    await env.CIEL_STATE.put(reviewCooldownKey, String(now), { expirationTtl: 86400 }).catch(() => void 0);',
   "persist a cooldown for stale market evidence without D1 writes"
-);
-replaceOnceInSource(
-  '      const reason = quality.reason || "Market-quality evidence is unavailable.";\\n      await env.DB.prepare',
-  '      const reason = quality.reason || "Market-quality evidence is unavailable.";\\n      await env.DB.prepare',
-  "retain market-quality audit persistence"
 );
 replaceOnceInSource(
   '    const intraday = await getIntradayPattern(env,candidate.symbol,now,candidate.entry);',
