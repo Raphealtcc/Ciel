@@ -158,5 +158,151 @@ onceInMethod('          if (!latestClosed) return;',
 onceInMethod('    }\n  }\n', '    }\n    if (coreTrendUpdated) await this.state.storage.put("coreTrendCandles", this.coreTrendCandles).catch((error) => console.error("Core trend candle state persistence failed: " + String(error).slice(0,160)));\n  }\n', "persist the 5m cache once per snapshot batch");
 source = source.slice(0, trendCandleMethodStart) + trendCandleMethod + source.slice(trendCandleMethodEnd);
 
+
+// Keep the 24-hour 5m structure cache in the Hyperliquid Durable Object.
+// Advisor scans must not repeatedly read D1 hourly aggregates.
+function replaceOnceInSource(before, after, label) {
+  const count = source.split(before).length - 1;
+  if (count !== 1) throw new Error(label + ": expected exactly one match, found " + count);
+  source = source.replace(before, after);
+}
+replaceOnceInSource(
+  'this.coreTrendCandles[symbol] = [...merged.values()].sort((left, right) => left.open_ts_ms - right.open_ts_ms).slice(-60);',
+  'this.coreTrendCandles[symbol] = [...merged.values()].sort((left, right) => left.open_ts_ms - right.open_ts_ms).slice(-288);',
+  "retain 24 hours of native 5m candles in the DO cache"
+);
+replaceOnceInSource(
+  'now - 5 * 60 * 60 * 1e3',
+  'now - 24 * 60 * 60 * 1e3',
+  "bootstrap a full 24-hour 5m candle window"
+);
+replaceOnceInSource(
+  '["BTC","ETH","SOL"].includes(symbol)',
+  '["BTC","ETH","SOL","BNB"].includes(symbol)',
+  "include BNB in the 5m structure cache"
+);
+replaceOnceInSource(
+  'async function runAdvisorCycle(env, prices, now, lastTickAt, priceHistory, liveEvidence, paperStorage, coreScalpCandles = {}, coreTrendCandles = {}) {',
+  'async function runAdvisorCycle(env, prices, now, lastTickAt, priceHistory, liveEvidence, paperStorage, coreScalpCandles = {}, coreTrendCandles = {}) {',
+  "retain the explicit DO cache advisor signature"
+);
+
+// Replace the D1 hourly aggregate reader with a pure in-memory aggregation.
+const levelStart = source.indexOf("async function getCandleStructureMap(env,symbols,now){");
+const levelEnd = source.indexOf("function analyzeCandleLevelReversal", levelStart);
+if (levelStart < 0 || levelEnd <= levelStart) throw new Error("Could not locate candle structure map.");
+const levelHelper = [
+  "function aggregateCachedCandleLevels(candles, now) {",
+  "  const rows = (Array.isArray(candles) ? candles : []).filter((c) => Number(c?.close_ts_ms) <= now && Number(c?.open_ts_ms) > 0 && Number(c?.low_price) > 0 && Number(c?.high_price) >= Number(c?.low_price));",
+  "  if (!rows.length) return null;",
+  "  const byHour = new Map();",
+  "  for (const c of rows) {",
+  "    const bucket = Math.floor(Number(c.open_ts_ms) / 36e5) * 36e5;",
+  "    const current = byHour.get(bucket) || { bucket_ms: bucket, low_price: Infinity, high_price: -Infinity };",
+  "    current.low_price = Math.min(current.low_price, Number(c.low_price));",
+  "    current.high_price = Math.max(current.high_price, Number(c.high_price));",
+  "    byHour.set(bucket, current);",
+  "  }",
+  "  const hours = [...byHour.values()].sort((a,b) => a.bucket_ms-b.bucket_ms);",
+  "  if (!hours.length) return null;",
+  "  const hour = Math.floor(now / 36e5) * 36e5;",
+  "  const current = hours.find((x) => x.bucket_ms === hour);",
+  "  const prior = hours.find((x) => x.bucket_ms === hour - 36e5);",
+  "  return { dayLow: Math.min(...rows.map((x) => Number(x.low_price))), dayHigh: Math.max(...rows.map((x) => Number(x.high_price))),",
+  "    currentHourLow: current?.low_price ?? null, currentHourHigh: current?.high_price ?? null,",
+  "    priorHourLow: prior?.low_price ?? null, priorHourHigh: prior?.high_price ?? null,",
+  "    latestBucket: hours[hours.length-1].bucket_ms, buckets: hours.length };",
+  "}",
+  "function getCandleStructureMap(env,symbols,now,coreTrendCandles={}) {",
+  "  const output = new Map();",
+  "  for (const symbol of [...new Set(symbols)].filter(Boolean)) {",
+  "    const levels = aggregateCachedCandleLevels(coreTrendCandles?.[symbol], now);",
+  "    if (levels) output.set(String(symbol).toUpperCase(), levels);",
+  "  }",
+  "  return output;",
+  "}",
+  "__name(getCandleStructureMap,\"getCandleStructureMap\");",
+  ""
+].join("\n");
+source = source.slice(0, levelStart) + levelHelper + source.slice(levelEnd);
+
+// Replace per-candidate D1 hourly query with the same cached candle aggregation.
+const evidenceStart = source.indexOf("async function getCandleStructureEvidence(env,symbol,now,currentPrice){");
+const evidenceEnd = source.indexOf("async function review(", evidenceStart);
+if (evidenceStart < 0 || evidenceEnd <= evidenceStart) throw new Error("Could not locate candle structure evidence reader.");
+const evidence = [
+  "function getCandleStructureEvidence(env,symbol,now,currentPrice,coreTrendCandles=[]) {",
+  "  const empty={available:false,symbol,reason:\"Hourly candle levels are not yet available.\"};",
+  "  const row=aggregateCachedCandleLevels(coreTrendCandles,now), price=Number(currentPrice);",
+  "  const dayLow=Number(row?.dayLow),dayHigh=Number(row?.dayHigh),latestBucket=Number(row?.latestBucket);",
+  "  if (!(dayLow>0&&dayHigh>dayLow&&price>0&&latestBucket>0)||now-latestBucket>2*36e5||Number(row?.buckets)<12) return {...empty,reason:\"24h hourly-candle coverage is incomplete or stale.\"};",
+  "  const currentHourLow=Number(row.currentHourLow),currentHourHigh=Number(row.currentHourHigh),priorHourLow=Number(row.priorHourLow),priorHourHigh=Number(row.priorHourHigh);",
+  "  const pctAway=(level)=>Number.isFinite(level)&&level>0?(price/level-1)*100:null;",
+  "  const highDistance=pctAway(dayHigh),lowDistance=pctAway(dayLow),rangePositionPct=(price-dayLow)/(dayHigh-dayLow)*100,proximity=(v)=>v!==null&&Math.abs(v)<=0.15;",
+  "  return {available:true,symbol,source:\"Hyperliquid 5m candles aggregated in HyperliquidFeed Durable Object memory\",asOfBucketMs:latestBucket,coverageHours:Number(row.buckets),",
+  "    day24h:{high:dayHigh,low:dayLow,positionPct:Math.max(0,Math.min(100,rangePositionPct)),distanceToHighPct:highDistance,distanceToLowPct:lowDistance,nearHigh:proximity(highDistance),nearLow:proximity(lowDistance)},",
+  "    currentHour:{high:Number.isFinite(currentHourHigh)?currentHourHigh:null,low:Number.isFinite(currentHourLow)?currentHourLow:null},",
+  "    previousHour:{high:Number.isFinite(priorHourHigh)?priorHourHigh:null,low:Number.isFinite(priorHourLow)?priorHourLow:null,distanceToHighPct:pctAway(priorHourHigh),distanceToLowPct:pctAway(priorHourLow)},",
+  "    interpretation:\"Use prior-hour and 24h extremes as support/resistance, breakout, liquidity-sweep and reclaim context. Levels are sampled 5m-candle aggregates, not tick-perfect exchange marks.\"};",
+  "}",
+  "__name(getCandleStructureEvidence,\"getCandleStructureEvidence\");",
+  ""
+].join("\n");
+source = source.slice(0, evidenceStart) + evidence + source.slice(evidenceEnd);
+
+replaceOnceInSource(
+  "const candleStructureRows = await getCandleStructureMap(env,symbols,now);",
+  "const candleStructureRows = getCandleStructureMap(env,symbols,now,coreTrendCandles);",
+  "derive market-wide hourly levels from DO cache"
+);
+replaceOnceInSource(
+  "const candleStructure = await getCandleStructureEvidence(env,candidate.symbol,now,candidate.entry);",
+  "const candleStructure = getCandleStructureEvidence(env,candidate.symbol,now,candidate.entry,coreTrendCandles?.[candidate.symbol]);",
+  "derive candidate hourly levels from DO cache"
+);
+
+// Live order-book and derivatives evidence is already held in the DO.
+// If it is stale, fail closed instead of querying D1 on every candidate.
+const marketEvidenceStart = source.indexOf("async function getMarketEvidence(env, symbol, now, live) {");
+const marketEvidenceEnd = source.indexOf("__name(getMarketEvidence", marketEvidenceStart);
+if (marketEvidenceStart < 0 || marketEvidenceEnd <= marketEvidenceStart) throw new Error("Could not locate market evidence reader.");
+let marketEvidence = source.slice(marketEvidenceStart, marketEvidenceEnd);
+const fallbackStart = marketEvidence.indexOf("  } else {");
+const fallbackEnd = marketEvidence.indexOf("\n  }\n  if (!Object.values(market).every(Number.isFinite))", fallbackStart);
+if (fallbackStart < 0 || fallbackEnd <= fallbackStart) throw new Error("Could not locate D1 market evidence fallback.");
+marketEvidence = marketEvidence.slice(0,fallbackStart) +
+  '  } else { return { market: null, reason: "Fresh Durable Object derivatives and order-book evidence is missing." };' +
+  marketEvidence.slice(fallbackEnd);
+source = source.slice(0,marketEvidenceStart) + marketEvidence + source.slice(marketEvidenceEnd);
+
+// Replace the unindexed D1 AI-audit cooldown lookup with a per-symbol KV timestamp.
+replaceOnceInSource(
+  '    const priorReview = await env.DB.prepare("SELECT created_at_ms FROM advisor_ai_audit WHERE symbol=? AND model!=\\'CIEL Statistical Ensemble v1\\' AND model!=\\'CIEL deterministic range guard\\' ORDER BY created_at_ms DESC LIMIT 1").bind(candidate.symbol).first();\n    if (priorReview && now - Number(priorReview.created_at_ms) < cooldownMs) continue;',
+  '    const reviewCooldownKey = "ciel:advisor:review:last:" + candidate.symbol;\n    const priorReviewAt = Number(await env.CIEL_STATE.get(reviewCooldownKey)) || 0;\n    if (priorReviewAt && now - priorReviewAt < cooldownMs) continue;',
+  "replace repeated unindexed D1 AI-audit reads with KV cooldowns"
+);
+replaceOnceInSource(
+  '    const quality = await getMarketEvidence(env, candidate.symbol, now, liveEvidence?.[candidate.symbol]);',
+  '    const quality = await getMarketEvidence(env, candidate.symbol, now, liveEvidence?.[candidate.symbol]);\n    if (!quality.market || quality.reason) { await env.CIEL_STATE.put(reviewCooldownKey, String(now), { expirationTtl: 86400 }).catch(() => void 0);',
+  "persist a cooldown for stale market evidence without D1 writes"
+);
+replaceOnceInSource(
+  '      const reason = quality.reason || "Market-quality evidence is unavailable.";\\n      await env.DB.prepare',
+  '      const reason = quality.reason || "Market-quality evidence is unavailable.";\\n      await env.DB.prepare',
+  "retain market-quality audit persistence"
+);
+replaceOnceInSource(
+  '    const intraday = await getIntradayPattern(env,candidate.symbol,now,candidate.entry);',
+  '    await env.CIEL_STATE.put(reviewCooldownKey, String(now), { expirationTtl: 86400 }).catch(() => void 0);\n    const intraday = await getIntradayPattern(env,candidate.symbol,now,candidate.entry);',
+  "write the AI-review cooldown timestamp to KV"
+);
+
+// Warm the persisted DO price history once daily, not every ten minutes.
+replaceOnceInSource(
+  'now - this.lastHistoryHydrationAt < 10 * 60 * 1e3',
+  'now - this.lastHistoryHydrationAt < 24 * 60 * 60 * 1e3',
+  "reduce D1 history warm-up reads to once daily"
+);
+
 await writeFile(file, source);
 console.log("D1 efficiency patch complete: the core scalp still receives fresh closed 1m candles every minute; its candle cache is Durable Object-persistent, and D1 retains 5m history and all other market history.");
