@@ -19,7 +19,7 @@ worker = once(worker,
 
 worker = once(worker,
   'var CANDLE_HISTORY_SYMBOLS = /* @__PURE__ */ new Set(["BTC", "ETH", "MON", "SOL"]);',
-  'var CANDLE_HISTORY_SYMBOLS = /* @__PURE__ */ new Set(["BTC", "ETH", "SOL", "BNB"]);',
+  'var CANDLE_HISTORY_SYMBOLS = /* @__PURE__ */ new Set(["BTC", "ETH", "MON", "SOL", "BNB"]);',
   "retain native 5m candle history for the four active markets");
 
 worker = once(worker,
