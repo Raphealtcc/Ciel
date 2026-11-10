@@ -40,7 +40,7 @@ export function calculateCrossAssetBreadth({ history = {}, symbols = [], exclude
     returns15.push((latest.price / base15.price - 1) * 100);
   }
   const n5 = returns5.length, n15 = returns15.length;
-  const ready = n5 >= 8 && n15 >= 8;
+  const minimumPeers = Math.min(2, unique.length);\n  const ready = minimumPeers >= 2 && n5 >= minimumPeers && n15 >= minimumPeers;
   const up5Pct = n5 ? returns5.filter((r) => r > 0).length / n5 * 100 : null;
   const up15Pct = n15 ? returns15.filter((r) => r > 0).length / n15 * 100 : null;
   return {
@@ -54,7 +54,7 @@ export function calculateCrossAssetBreadth({ history = {}, symbols = [], exclude
     medianReturn15mPct: median(returns15),
     universeSize: unique.length,
     excludedSymbol: excluded || null,
-    methodology: "equal-weight advance/decline breadth; candidate excluded; 5m and 15m sampled returns",
+    methodology: "equal-weight core-peer advance/decline breadth; candidate excluded; 5m and 15m sampled returns; at least two valid peers required",
   };
 }
 

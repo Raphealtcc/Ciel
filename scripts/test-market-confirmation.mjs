@@ -26,7 +26,7 @@ assert.equal(breadth.n5, 11);
 assert.ok(breadth.up5Pct > 60 && breadth.up15Pct > 60);
 assert.equal(breadth.excludedSymbol, "BTC");
 
-const insufficient = calculateCrossAssetBreadth({ history, symbols: symbols.slice(0, 5), excludeSymbol: "BTC", now });
+const coreBreadth = calculateCrossAssetBreadth({ history, symbols: ["BTC","ETH","SOL","BNB"], excludeSymbol: "BTC", volumeBySymbol, now });\nassert.equal(coreBreadth.status, "READY");\nassert.equal(coreBreadth.n5, 3);\nassert.equal(coreBreadth.n15, 3);\nconst insufficient = calculateCrossAssetBreadth({ history, symbols: symbols.slice(0, 2), excludeSymbol: "BTC", now });
 assert.equal(insufficient.status, "INSUFFICIENT_COVERAGE");
 const staleHistory = Object.fromEntries(symbols.map((s) => [s, [{t:now-30*60000,p:100},{t:now-20*60000,p:101},{t:now-10*60000,p:102}]]));
 assert.equal(calculateCrossAssetBreadth({ history: staleHistory, symbols, now }).status, "INSUFFICIENT_COVERAGE");
