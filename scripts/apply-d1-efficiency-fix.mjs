@@ -294,11 +294,6 @@ replaceOnceInSource(
 );
 
 replaceOnceInSource(
-  '  await env.CIEL_STATE.put("ciel:advisor:last-scan", JSON.stringify({ at:now, watchCount:symbols.length, historySymbols:hist.size, candleLevelSymbols:candleStructureRows.size, candidates:candidates.map((x)=>({symbol:x.symbol,side:x.side,strategy:x.strategy,mode:x.mode,regime:x.regime,score:x.confidence,rsi:x.rsi,cci:x.cci})) }), { expirationTtl:86400 }).catch(()=>void 0);',
-  '  const candidateSymbols = new Set(candidates.map((x) => x.symbol));\n  const noSetupSymbols = symbols.filter((symbol) => symbol !== "MON" && !candidateSymbols.has(symbol));\n  const scanSnapshot = { at:now, scanStatus:candidates.length ? "CANDIDATES_FOUND" : "NO_TECHNICAL_SETUP", watchCount:symbols.length, scannedSymbols:symbols.filter((symbol) => symbol !== "MON"), historySymbols:hist.size, candleLevelSymbols:candleStructureRows.size, candidateCount:candidates.length, candidates:candidates.map((x)=>({symbol:x.symbol,side:x.side,strategy:x.strategy,mode:x.mode,regime:x.regime,score:x.confidence,rsi:x.rsi,cci:x.cci})), noSetupSymbols, rejectionReasons:candidates.length ? [] : ["NO_TECHNICAL_SETUP"] };\n  await env.CIEL_STATE.put("ciel:advisor:last-scan", JSON.stringify(scanSnapshot), { expirationTtl:86400 }).catch(()=>void 0);\n  console.info("CIEL_ADVISOR_SCAN " + JSON.stringify(scanSnapshot));',
-  "record scan health, candidate counts, no-setup symbols and structured diagnostics"
-);
-replaceOnceInSource(
   '    if (isScalpMode && eventIntel?.marketImpact === "BROAD_RISK_OFF") continue;',
   '    if (isScalpMode && eventIntel?.marketImpact === "BROAD_RISK_OFF") { console.info("CIEL_ADVISOR_REJECT " + JSON.stringify({symbol:candidate.symbol,reason:"BROAD_RISK_OFF_RANGE_SCALP"})); continue; }',
   "log explicit broad-risk-off candidate rejections"
