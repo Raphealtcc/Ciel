@@ -283,11 +283,26 @@ replaceOnceInSource(
   "replace repeated unindexed D1 AI-audit reads with KV cooldowns"
 );
 replaceOnceInSource(
-  '    const quality = await getMarketEvidence(env, candidate.symbol, now, liveEvidence?.[candidate.symbol]);',
-  '    const quality = await getMarketEvidence(env, candidate.symbol, now, liveEvidence?.[candidate.symbol]);\n    await env.CIEL_STATE.put(reviewCooldownKey, String(now), { expirationTtl: 86400 }).catch(() => void 0);',
-  "persist a cooldown for stale market evidence without D1 writes"
+  '    const reviewed = await review(env,candidate,forecast,reviewerMarket,intraday,eventIntel,candleStructure);',
+  '    await env.CIEL_STATE.put(reviewCooldownKey, String(now), { expirationTtl: 86400 }).catch(() => void 0);\n    const reviewed = await review(env,candidate,forecast,reviewerMarket,intraday,eventIntel,candleStructure);',
+  "persist the per-symbol cooldown only when a candidate reaches review"
 );
 
+replaceOnceInSource(
+  '  await env.CIEL_STATE.put("ciel:advisor:last-scan", JSON.stringify({ at:now, watchCount:symbols.length, historySymbols:hist.size, candleLevelSymbols:candleStructureRows.size, candidates:candidates.map((x)=>({symbol:x.symbol,side:x.side,strategy:x.strategy,mode:x.mode,regime:x.regime,score:x.confidence,rsi:x.rsi,cci:x.cci})) }), { expirationTtl:86400 }).catch(()=>void 0);',
+  '  const candidateSymbols = new Set(candidates.map((x) => x.symbol));\n  const noSetupSymbols = symbols.filter((symbol) => symbol !== "MON" && !candidateSymbols.has(symbol));\n  const scanSnapshot = { at:now, scanStatus:candidates.length ? "CANDIDATES_FOUND" : "NO_TECHNICAL_SETUP", watchCount:symbols.length, scannedSymbols:symbols.filter((symbol) => symbol !== "MON"), historySymbols:hist.size, candleLevelSymbols:candleStructureRows.size, candidateCount:candidates.length, candidates:candidates.map((x)=>({symbol:x.symbol,side:x.side,strategy:x.strategy,mode:x.mode,regime:x.regime,score:x.confidence,rsi:x.rsi,cci:x.cci})), noSetupSymbols, rejectionReasons:candidates.length ? [] : ["NO_TECHNICAL_SETUP"] };\n  await env.CIEL_STATE.put("ciel:advisor:last-scan", JSON.stringify(scanSnapshot), { expirationTtl:86400 }).catch(()=>void 0);\n  console.info("CIEL_ADVISOR_SCAN " + JSON.stringify(scanSnapshot));',
+  "record scan health, candidate counts, no-setup symbols and structured diagnostics"
+);
+replaceOnceInSource(
+  '    if (candidate.mode === "RANGE_SCALP" && eventIntel?.marketImpact === "BROAD_RISK_OFF") continue;',
+  '    if (candidate.mode === "RANGE_SCALP" && eventIntel?.marketImpact === "BROAD_RISK_OFF") { console.info("CIEL_ADVISOR_REJECT " + JSON.stringify({symbol:candidate.symbol,reason:"BROAD_RISK_OFF_RANGE_SCALP"})); continue; }',
+  "log explicit broad-risk-off candidate rejections"
+);
+replaceOnceInSource(
+  '    if (priorReviewAt && now - priorReviewAt < cooldownMs) continue;',
+  '    if (priorReviewAt && now - priorReviewAt < cooldownMs) { console.info("CIEL_ADVISOR_REJECT " + JSON.stringify({symbol:candidate.symbol,reason:"SYMBOL_REVIEW_COOLDOWN",remainingMs:cooldownMs-(now-priorReviewAt)})); continue; }',
+  "log per-symbol cooldown rejections"
+);
 // Warm the persisted DO price history once daily, not every ten minutes.
 replaceOnceInSource(
   'now - this.lastHistoryHydrationAt < 10 * 60 * 1e3',
