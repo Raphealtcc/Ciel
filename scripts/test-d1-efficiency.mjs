@@ -61,6 +61,7 @@ assert.ok(trendWriter.includes("this.coreTrendCandles[symbol]"), "native 5m core
 assert.ok(trendWriter.includes("now - 24 * 60 * 60 * 1e3"), "cold-start cache must bootstrap 24 hours of 5m candles once");
 assert.ok(trendWriter.includes(".slice(-288)"), "the DO must retain 24 hours of 5m candles");
 assert.ok(trendWriter.includes('["BTC","ETH","SOL","BNB"].includes(symbol)'), "the 5m structure cache must include all four enabled markets");
+assert.ok(source.includes('new Set(["BTC", "ETH", "MON", "SOL", "BNB"])'), "native 5m candle snapshots must include BNB");
 assert.ok(trendWriter.includes('this.state.storage.put("coreTrendCandles", this.coreTrendCandles)'), "native 5m cache must persist across DO restarts");
 assert.ok(trendWriter.includes("INSERT OR REPLACE INTO market_candles"), "native 5m history must remain archived in D1");
 
