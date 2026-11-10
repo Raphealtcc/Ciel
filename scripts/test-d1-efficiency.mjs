@@ -49,6 +49,10 @@ assert.ok(!source.includes("FROM market_candle_hourly_stats WHERE symbol IN"), "
 assert.ok(!source.includes("FROM market_candle_hourly_stats WHERE symbol=?"), "candidate evidence must not issue per-symbol hourly D1 reads");
 assert.ok(!source.includes("SELECT created_at_ms FROM advisor_ai_audit WHERE symbol=?"), "advisor review cooldown must not scan the D1 audit table");
 assert.ok(source.includes("ciel:advisor:review:last:"), "per-symbol review cooldown must use KV");
+assert.ok(source.includes("candidateCount:candidates.length"), "scan diagnostics must count discovered candidates");
+assert.ok(source.includes("noSetupSymbols"), "scan diagnostics must identify markets with no technical setup");
+assert.ok(source.includes("CIEL_ADVISOR_SCAN"), "successful scans must emit structured scan-health logs");
+assert.ok(source.includes("CIEL_ADVISOR_REJECT"), "rejected candidates must emit structured rejection reasons");
 assert.ok(!source.includes("FROM market_context_snapshots WHERE symbol=? AND ts_ms>=?"), "stale market evidence must fail closed without repeated D1 context reads");
 assert.ok(source.includes("now - this.lastHistoryHydrationAt < 24 * 60 * 60 * 1e3"), "D1 history warm-up must run at most once daily");
 console.log("PASS: CIEL keeps full one-minute core scalp candles in persistent DO state, retains the public candle endpoint, 5m candles, live context, alerts and market-sample history, while avoiding unconditional D1 5m reads and duplicate D1 1m candle writes.");
