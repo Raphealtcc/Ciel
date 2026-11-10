@@ -40,7 +40,8 @@ export function calculateCrossAssetBreadth({ history = {}, symbols = [], exclude
     returns15.push((latest.price / base15.price - 1) * 100);
   }
   const n5 = returns5.length, n15 = returns15.length;
-  const minimumPeers = Math.min(2, unique.length);\n  const ready = minimumPeers >= 2 && n5 >= minimumPeers && n15 >= minimumPeers;
+  const minimumPeers = Math.min(2, unique.length);
+  const ready = minimumPeers >= 2 && n5 >= minimumPeers && n15 >= minimumPeers;
   const up5Pct = n5 ? returns5.filter((r) => r > 0).length / n5 * 100 : null;
   const up15Pct = n15 ? returns15.filter((r) => r > 0).length / n15 * 100 : null;
   return {
