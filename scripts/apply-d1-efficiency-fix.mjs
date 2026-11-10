@@ -178,6 +178,11 @@ replaceOnceInSource(
 );
 source = source.replaceAll('["BTC","ETH","SOL"].includes(symbol)', '["BTC","ETH","SOL","BNB"].includes(symbol));
 replaceOnceInSource(
+  'var CANDLE_HISTORY_SYMBOLS = /* @__PURE__ */ new Set(["BTC", "ETH", "MON", "SOL"]);',
+  'var CANDLE_HISTORY_SYMBOLS = /* @__PURE__ */ new Set(["BTC", "ETH", "MON", "SOL", "BNB"]);',
+  "retain native 5m candle history for BNB"
+);
+replaceOnceInSource(
   'async function runAdvisorCycle(env, prices, now, lastTickAt, priceHistory, liveEvidence, paperStorage, coreScalpCandles = {}, coreTrendCandles = {}) {',
   'async function runAdvisorCycle(env, prices, now, lastTickAt, priceHistory, liveEvidence, paperStorage, coreScalpCandles = {}, coreTrendCandles = {}) {',
   "retain the explicit DO cache advisor signature"
