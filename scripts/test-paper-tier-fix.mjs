@@ -136,7 +136,7 @@ assert.equal(overPortfolioCap.opened, false);
 assert.match(overPortfolioCap.reason, /10% combined portfolio cap/i);
 
 const hundred = makeStorage();
-const opened100 = await openPaperTrade(hundred, params("XRP", "test-100"));
+const opened100 = await openPaperTrade(hundred, params("BTC", "test-100"));
 assert.equal(opened100.opened, true);
 assert.equal(opened100.trade.marginMon, 11);
 assert.equal(opened100.trade.leverage, 100);
