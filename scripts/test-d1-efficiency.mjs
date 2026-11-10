@@ -52,7 +52,9 @@ const trendWriterEnd = source.indexOf("  async hydrateHistoryFromD1(now) {", tre
 assert.ok(trendWriterStart >= 0 && trendWriterEnd > trendWriterStart, "native 5m snapshot writer must exist");
 const trendWriter = source.slice(trendWriterStart, trendWriterEnd);
 assert.ok(trendWriter.includes("this.coreTrendCandles[symbol]"), "native 5m core candles must be merged into DO state");
-assert.ok(trendWriter.includes("now - 5 * 60 * 60 * 1e3"), "cold-start cache must bootstrap five hours of 5m candles once");
+assert.ok(trendWriter.includes("now - 24 * 60 * 60 * 1e3"), "cold-start cache must bootstrap 24 hours of 5m candles once");
+assert.ok(trendWriter.includes(".slice(-288)"), "the DO must retain 24 hours of 5m candles");
+assert.ok(trendWriter.includes('["BTC","ETH","SOL","BNB"].includes(symbol)'), "the 5m structure cache must include all four enabled markets");
 assert.ok(trendWriter.includes('this.state.storage.put("coreTrendCandles", this.coreTrendCandles)'), "native 5m cache must persist across DO restarts");
 assert.ok(trendWriter.includes("INSERT OR REPLACE INTO market_candles"), "native 5m history must remain archived in D1");
 
