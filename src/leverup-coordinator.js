@@ -784,7 +784,7 @@ export function evaluateLeverUpPositionAction({ position, currentPriceRaw, now =
 
 async function readEntryMetadata(db) {
   if (!db?.prepare) return [];
-  const result = await db.prepare("SELECT i.signal_id,i.pair_base,i.payload_json,i.status,i.created_at_ms FROM leverup_execution_intents i WHERE i.action = 0 AND i.status IN ('EXECUTED','RECONCILED','CLOSED','SUBMITTED','PENDING','UNCERTAIN') AND NOT EXISTS (SELECT 1 FROM leverup_trade_settlements s WHERE s.trade_id = i.signal_id) AND NOT EXISTS (SELECT 1 FROM leverup_trade_settlements s WHERE s.position_hash = lower(json_extract(i.payload_json, '$.positionHash')))").all();
+  const result = await db.prepare("SELECT i.signal_id,i.pair_base,i.payload_json,i.status,i.created_at_ms FROM leverup_execution_intents i WHERE i.action = 0 AND i.status IN ('EXECUTED','RECONCILED','CLOSED','SUBMITTED','PENDING','UNCERTAIN') AND NOT (json_extract(i.payload_json, '$.settlement.status') = 'CLOSED' AND EXISTS (SELECT 1 FROM leverup_trade_settlements s WHERE s.trade_id = i.signal_id))").all();
   return (result.results || []).map((row) => {
     try { return { signalId: row.signal_id, tradeId: row.signal_id, pairBase: row.pair_base || null, intentStatus: row.status, createdAt: Number(row.created_at_ms || 0), ...JSON.parse(row.payload_json || "{}") }; }
     catch { return { signalId: row.signal_id, tradeId: row.signal_id, pairBase: row.pair_base || null, intentStatus: row.status, createdAt: Number(row.created_at_ms || 0) }; }
@@ -943,7 +943,7 @@ export async function notifyLeverUpClosedTrade(env, closed, settlement, entry) {
 
 async function reconcileClosedSettlements({ env, db, now, dependencies = {} }) {
   if (!db?.prepare) return { checked: 0, reconciled: 0 };
-  const unsettled = await db.prepare("SELECT COUNT(*) AS count FROM leverup_execution_intents i WHERE i.action = 0 AND i.status IN ('EXECUTED','RECONCILED','CLOSED','SUBMITTED','PENDING') AND NOT EXISTS (SELECT 1 FROM leverup_trade_settlements s WHERE s.trade_id = i.signal_id) AND NOT EXISTS (SELECT 1 FROM leverup_trade_settlements s WHERE s.position_hash = lower(json_extract(i.payload_json, '$.positionHash')))").first();
+  const unsettled = await db.prepare("SELECT COUNT(*) AS count FROM leverup_execution_intents i WHERE i.action = 0 AND i.status IN ('EXECUTED','RECONCILED','CLOSED','SUBMITTED','PENDING') AND NOT (json_extract(i.payload_json, '$.settlement.status') = 'CLOSED' AND EXISTS (SELECT 1 FROM leverup_trade_settlements s WHERE s.trade_id = i.signal_id))").first();
   if (!Number(unsettled?.count || 0)) return { checked: 0, reconciled: 0, noUnsettledEntries: true };
   const throttleKey = "ciel:leverup:settlement:last-check:v1";
   const lastCheck = Number(await env?.CIEL_STATE?.get(throttleKey).catch(() => "0") || 0);
@@ -959,36 +959,41 @@ async function reconcileClosedSettlements({ env, db, now, dependencies = {} }) {
   let reconciled = 0;
   for (const closed of history.filter((p) => p?.status === "CLOSED" && p?.closeInfo && p?.positionHash)) {
     const positionHash = String(closed.positionHash).toLowerCase();
-    const settledByPosition = await db.prepare("SELECT trade_id FROM leverup_trade_settlements WHERE position_hash = ? ORDER BY close_time DESC LIMIT 1").bind(positionHash).first().catch(() => null);
+    const closeTimeMs = Number(closed.closeInfo.closeTime || closed.closeInfo.closedAt || closed.closeInfo.timestamp || 0) * (Number(closed.closeInfo.closeTime || 0) < 10_000_000_000 ? 1000 : 1);
+    const closeTimeSeconds = closeTimeMs ? Math.floor(closeTimeMs / 1000) : 0;
+    const settledByPosition = closeTimeSeconds ? await db.prepare("SELECT trade_id FROM leverup_trade_settlements WHERE position_hash = ? AND close_time = ? LIMIT 1").bind(positionHash, closeTimeSeconds).first().catch(() => null) : null;
     if (settledByPosition?.trade_id) {
       const notified = await env?.CIEL_STATE?.get("ciel:leverup:close-notified:v2:" + settledByPosition.trade_id).catch(() => null);
       if (notified) continue;
     }
-    const closeTimeMs = Number(closed.closeInfo.closeTime || closed.closeInfo.closedAt || closed.closeInfo.timestamp || 0) * (Number(closed.closeInfo.closeTime || 0) < 10_000_000_000 ? 1000 : 1);
+    const exchangeTradeId = String(closed.closeInfo?.tradeId || closed.tradeId || "");
     const matchingEntries = entries.filter((x) => String(x.positionHash || "").toLowerCase() === positionHash)
+      .filter((x) => { const embeddedCloseTime = Number(x.settlement?.closeTime || 0); return !embeddedCloseTime || !closeTimeSeconds || embeddedCloseTime === closeTimeSeconds; })
       .filter((x) => !Number(x.executedAt || x.createdAt) || !closeTimeMs || Number(x.executedAt || x.createdAt) <= closeTimeMs)
+      .filter((x) => !exchangeTradeId || leverUpTradeInstanceId(x) === exchangeTradeId)
       .sort((a,b) => Number(b.executedAt || b.createdAt || 0) - Number(a.executedAt || a.createdAt || 0));
-    let entry = closeTimeMs
-      ? (matchingEntries[0] || null)
-      : (matchingEntries.length === 1 ? matchingEntries[0] : null);
+    let entry = exchangeTradeId ? (matchingEntries[0] || null) : (matchingEntries.length === 1 ? matchingEntries[0] : null);
     // If the exchange omits close time and this hash has multiple entry instances,
     // leave the settlement unlinked rather than attributing it to the wrong trade.
     if (!entry && matchingEntries.length === 0) {
-      const closedEntry = await db.prepare(`SELECT signal_id,pair_base,payload_json,status,created_at_ms
+      const closedEntries = await db.prepare(`SELECT signal_id,pair_base,payload_json,status,created_at_ms
         FROM leverup_execution_intents
         WHERE action = 0 AND lower(json_extract(payload_json, '$.positionHash')) = ?
-        ORDER BY created_at_ms DESC LIMIT 1`).bind(positionHash).first();
-      if (closedEntry) {
+          AND COALESCE(json_extract(payload_json, '$.settlement.status'), '') != 'CLOSED'
+        ORDER BY created_at_ms DESC LIMIT 2`).bind(positionHash).all();
+      const candidates = closedEntries?.results || [];
+      if (candidates.length === 1) {
+        const closedEntry = candidates[0];
         entry = { signalId: closedEntry.signal_id, tradeId: closedEntry.signal_id, pairBase: closedEntry.pair_base || null,
           createdAt: Number(closedEntry.created_at_ms || 0), intentStatus: closedEntry.status,
           ...serializable(JSON.parse(closedEntry.payload_json || "{}")) };
       }
     }
-    const tradeId = leverUpTradeInstanceId(entry) || ("legacy:" + positionHash + ":" + String(closed.closeInfo.closeTime || closed.closeInfo.timestamp || "unknown"));
+    const tradeId = exchangeTradeId || leverUpTradeInstanceId(entry) || ("legacy:" + positionHash + ":" + String(closed.closeInfo.closeTime || closed.closeInfo.timestamp || "unknown"));
     let existing = await db.prepare("SELECT trade_id,source_json FROM leverup_trade_settlements WHERE trade_id = ?")
       .bind(tradeId).first();
-    if (!existing) existing = await db.prepare("SELECT trade_id,source_json FROM leverup_trade_settlements WHERE position_hash = ? ORDER BY close_time DESC LIMIT 1")
-      .bind(positionHash).first();
+    if (!existing && closeTimeSeconds) existing = await db.prepare("SELECT trade_id,source_json FROM leverup_trade_settlements WHERE position_hash = ? AND close_time = ? LIMIT 1")
+      .bind(positionHash, closeTimeSeconds).first();
     let existingMetadata = {};
     try { existingMetadata = JSON.parse(existing?.source_json || "{}"); } catch {}
     const latest = await db.prepare("SELECT * FROM leverup_position_fee_snapshots WHERE position_hash = ? AND observed_at_ms >= ? ORDER BY observed_at_ms DESC LIMIT 1")
@@ -1068,7 +1073,7 @@ async function reconcileClosedSettlements({ env, db, now, dependencies = {} }) {
 export function collectLeverUpPairBases(apiPositions = [], entries = []) {
   return [...new Set([
     ...apiPositions.map((p) => String(p?.pairBase || p?.pair?.base || "").toLowerCase()),
-    ...entries.map((entry) => String(entry?.pairBase || entry?.plan?.preflight?.pairBase || entry?.plan?.pairBase || "").toLowerCase()),
+    ...entries.filter((entry) => String(entry?.settlement?.status || "").toUpperCase() !== "CLOSED").map((entry) => String(entry?.pairBase || entry?.plan?.preflight?.pairBase || entry?.plan?.pairBase || "").toLowerCase()),
   ].filter((base) => /^0x[0-9a-f]{40}$/.test(base)))];
 }
 
