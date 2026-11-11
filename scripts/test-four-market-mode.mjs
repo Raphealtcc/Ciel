@@ -15,7 +15,7 @@ assert.ok(native.includes("restrictTemporaryMarketUniverse(watchValues.map(upper
 const worker=await readFile("reconstructed/patched-worker.js","utf8");
 assert.ok(worker.includes("restrictTemporaryMarketUniverse([...new Set"));
 assert.ok(worker.includes('return [...restrictTemporaryMarketUniverse([...new Set(["BTC","ETH","SOL","BNB","HYPE","ZEC", ...parsed])]), "MON"];'));
-assert.ok(worker.includes("Market is outside the enabled six-market universe."));
+assert.ok(worker.includes("Market is outside the enabled six-market universe. Unsupported symbol."));
 assert.ok(worker.includes("rows.results = (rows.results || []).filter((position) => isTemporaryMarketAllowed(position.symbol))"));
 assert.ok(worker.includes("isTemporaryMarketAllowed(p.symbol)"));
 assert.ok(worker.includes("outside the enabled six-market universe"));

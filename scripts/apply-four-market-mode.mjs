@@ -23,7 +23,7 @@ worker = once(worker,
 
 worker = once(worker,
   'async function openPaperTrade(storage, params) {\n  if (!storage) return { opened: false, reason: "Durable Object paper storage is unavailable." };',
-  'async function openPaperTrade(storage, params) {\n  if (!["BTC","ETH","SOL","BNB","HYPE","ZEC"].includes(String(params?.symbol || "").trim().toUpperCase())) return { opened: false, reason: "Market is outside the enabled six-market universe." };\n  if (!storage) return { opened: false, reason: "Durable Object paper storage is unavailable." };',
+  'async function openPaperTrade(storage, params) {\n  if (!["BTC","ETH","SOL","BNB","HYPE","ZEC"].includes(String(params?.symbol || "").trim().toUpperCase())) return { opened: false, reason: "Market is outside the enabled six-market universe. Unsupported symbol." };\n  if (!storage) return { opened: false, reason: "Durable Object paper storage is unavailable." };',
   "hard-block non-core paper entries");
 
 worker = once(worker,
