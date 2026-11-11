@@ -299,7 +299,7 @@ once(
 
 once(
   'holdMinutes:candidate.holdMinutes || (candidate.mode === "RANGE_SCALP" ? 12 : 180), mode:candidate.mode',
-  'holdMinutes:candidate.holdMinutes || (180), mode:candidate.mode',
+  'holdMinutes:candidate.holdMinutes || 180, mode:candidate.mode',
   "set dedicated 15-minute paper hold for core scalps",
 );
 
@@ -335,7 +335,7 @@ once(
 
 once(
   '"Execution mode: " + (s.mode === "RANGE_SCALP" ? "RANGE SCALP" : "TREND HOLD") + " | maximum paper hold " + String(s.holdMinutes || (s.mode === "RANGE_SCALP" ? 12 : 180)) + "m",',
-  '"Execution mode: " + (s.mode === "TREND_PULLBACK_ENTRY" ? "CORE PULLBACK SCALP" : s.mode === "RANGE_SCALP" ? "RANGE SCALP" : "TREND HOLD") + " | maximum paper hold " + String(s.holdMinutes || (s.mode === "TREND_PULLBACK_ENTRY" ? 15 : s.mode === "RANGE_SCALP" ? 12 : 180)) + "m",',
+  '"Execution mode: TREND HOLD | maximum paper hold " + String(s.holdMinutes || 180) + "m",',
   "label new scalp mode in Telegram setup card",
 );
 
@@ -345,11 +345,6 @@ once(
   "record deterministic core scalp review in proposal rationale",
 );
 
-once(
-  'candidate.mode === "TREND_PULLBACK_ENTRY" ? 15 : candidate.mode === "RANGE_SCALP" ? 12 : 180',
-  '180',
-  "retain correct hold duration in all fallback paths",
-);
 
 
 const legacyModeLabel = 'trade.mode === "RANGE_SCALP" ? "RANGE SCALP" : trade.mode === "TREND_HOLD" ? "TREND HOLD" : "LEGACY"';
