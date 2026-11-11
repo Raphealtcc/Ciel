@@ -10,12 +10,12 @@ const writer = source.slice(methodStart, methodEnd);
 assert.ok(writer.includes('interval: "1m"'), "the one-minute Hyperliquid candle feed must remain active");
 assert.ok(writer.includes("this.coreScalpCandles[symbol]"), "one-minute candles must be merged into the in-memory DO cache");
 assert.ok(writer.includes('this.state.storage.put("coreScalpCandles", this.coreScalpCandles)'), "one-minute candle history must persist across DO restarts");
-assert.ok(writer.includes("candles.slice(-90)"), "the rolling one-minute candle cache must retain sufficient history");
+assert.ok(writer.includes(".slice(-240)"), "the rolling one-minute candle cache must retain sufficient history");
 assert.ok(!writer.includes("this.env.DB"), "one-minute scalp candles must not be duplicated in D1");
 
 const restore = source.slice(source.indexOf("async restore()"), source.indexOf("async fetch(request)"));
 assert.ok(restore.includes('this.state.storage.get("coreScalpCandles")'), "the DO must restore candle history");
-assert.ok(restore.includes("this.coreScalpCandles = values[22] || {};"), "restored candle history must be hydrated");
+assert.ok(restore.includes("this.coreScalpCandles = values[23] || {};"), "restored candle history must be hydrated");
 
 const advisorStart = source.indexOf("async function runAdvisorCycle");
 const advisorEnd = source.indexOf("async function manageOpenPositions", advisorStart);
@@ -50,8 +50,8 @@ const candlesRoute = source.slice(apiStart, apiEnd);
 assert.ok(candlesRoute.includes('if (interval === "1m")'), "the public 1m candle endpoint must remain");
 assert.ok(candlesRoute.includes("FROM market_samples WHERE symbol=?"), "the public 1m endpoint must continue using its existing sample history");
 
-assert.ok(source.includes("const persistAllSamples = Math.floor(now / (6 * 60 * 1e3))"), "watchlist D1 samples must retain their current six-minute persistence cadence");
-assert.ok(source.includes("BENCHMARK_PRICE_SYMBOLS.has(row.symbol) || persistAllSamples"), "one-minute benchmark samples and wider-watchlist samples must both remain");
+assert.ok(source.includes("const wideSampleSlot = Math.floor(now / (10 * 60 * 1e3))"), "watchlist D1 samples must retain their current six-minute persistence cadence");
+assert.ok(source.includes("this.lastWideSampleSlot !== wideSampleSlot"), "one-minute benchmark samples and wider-watchlist samples must both remain");
 const candleMapStart = source.indexOf("function getCandleStructureMap(");
 const candleMapEnd = source.indexOf("function analyzeCandleLevelReversal(", candleMapStart);
 const candleMapSource = source.slice(candleMapStart, candleMapEnd);
@@ -95,3 +95,9 @@ const outcomeUpdater = source.slice(outcomeStart, outcomeEnd);
 assert.ok(outcomeUpdater.includes("lastAlertOutcomeUpdateAt"), "alert analytics must be throttled durably in DO storage");
 assert.ok(outcomeUpdater.includes("now - lastUpdate < 15 * 60 * 1e3"), "alert analytics D1 reads must be at most once every fifteen minutes");
 assert.ok(outcomeUpdater.includes("LIMIT 20"), "alert analytics batches must be bounded to 20 rows");
+
+assert.ok(source.includes("this.lastWideSampleSlot !== wideSampleSlot"), "wider-watchlist sampling must be bounded to one write per ten-minute slot");
+assert.ok(source.includes("new Set([\"BTC\", \"ETH\", \"SOL\", \"MON\"])"), "SOL must retain benchmark sampling priority");
+assert.ok(source.includes("now - Number(nextSampleAtBySymbol[row.symbol] || 0) < SAMPLE_INTERVAL_MS"), "benchmark samples must be throttled to one per minute");
+assert.ok(source.includes("put(\"lastSampleAtBySymbol\""), "sample throttle state must survive DO restarts");
+assert.ok(source.includes("put(\"lastWideSampleSlot\""), "wide-watchlist sample slots must survive DO restarts");

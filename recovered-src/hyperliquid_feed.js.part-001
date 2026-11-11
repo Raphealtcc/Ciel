@@ -1,5 +1,5 @@
 // src/hyperliquid_feed.ts
-var BENCHMARK_PRICE_SYMBOLS = /* @__PURE__ */ new Set(["BTC", "ETH", "MON"]);
+var BENCHMARK_PRICE_SYMBOLS = /* @__PURE__ */ new Set(["BTC", "ETH", "SOL", "MON"]);
 var CANDLE_HISTORY_SYMBOLS = /* @__PURE__ */ new Set(["BTC", "ETH", "MON"]);
 var HYPERLIQUID_WS = "wss://api.hyperliquid.xyz/ws";
 var HYPERLIQUID_INFO = "https://api.hyperliquid.xyz/info";

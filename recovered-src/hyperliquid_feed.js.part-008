@@ -2,22 +2,49 @@ ep price-move observations in D1 for diagnostics; Telegram is reserved for actio
   }
   async writeHistory(rows, alerts, now) {
     try {
+      if (!this.marketSampleStateLoaded) {
+        const [sampleTimes, wideSlot] = await Promise.all([this.state.storage.get("lastSampleAtBySymbol"), this.state.storage.get("lastWideSampleSlot")]);
+        this.lastSampleAtBySymbol = sampleTimes && typeof sampleTimes === "object" ? sampleTimes : {};
+        this.lastWideSampleSlot = Number(wideSlot) || 0;
+        this.marketSampleStateLoaded = true;
+      }
       const persist = new Set(this.persistedSymbols(now));
-      // Keep 1-minute analysis in Durable Object storage. D1 stores 1-minute
-      // benchmark history for recovery and a 6-minute sample for the wider watchlist.
-      // This preserves the live signal cadence without writing every watched price to D1.
-      const persistAllSamples = Math.floor(now / (6 * 60 * 1e3)) !== Math.floor((now - SAMPLE_INTERVAL_MS) / (6 * 60 * 1e3));
-      const statements = rows.filter((row) => persist.has(row.symbol) && (BENCHMARK_PRICE_SYMBOLS.has(row.symbol) || persistAllSamples)).map(
-        (row) => this.env.DB.prepare(
-          "INSERT OR REPLACE INTO market_samples (ts_ms, symbol, mid_price) VALUES (?, ?, ?)"
-        ).bind(row.t, row.symbol, row.price)
-      );
+      // Keep 1m signal candles in DO memory. Persist benchmark samples once per minute
+      // and the wider watchlist once per 10-minute slot.
+      const wideSampleSlot = Math.floor(now / (10 * 60 * 1e3));
+      const persistAllSamples = this.lastWideSampleSlot !== wideSampleSlot;
+      const nextSampleAtBySymbol = { ...(this.lastSampleAtBySymbol || {}) };
+      const sampledWideSymbols = new Set();
+      let wideSamplesWritten = false;
+      const sampleRows = rows.filter((row) => {
+        if (!persist.has(row.symbol)) return false;
+        if (BENCHMARK_PRICE_SYMBOLS.has(row.symbol)) {
+          if (now - Number(nextSampleAtBySymbol[row.symbol] || 0) < SAMPLE_INTERVAL_MS) return false;
+          nextSampleAtBySymbol[row.symbol] = now;
+          return true;
+        }
+        if (!persistAllSamples || sampledWideSymbols.has(row.symbol)) return false;
+        sampledWideSymbols.add(row.symbol);
+        wideSamplesWritten = true;
+        return true;
+      });
+      const statements = sampleRows.map((row) => this.env.DB.prepare(
+        "INSERT OR REPLACE INTO market_samples (ts_ms, symbol, mid_price) VALUES (?, ?, ?)"
+      ).bind(row.t, row.symbol, row.price));
       for (const alert of alerts) {
         statements.push(this.env.DB.prepare(
           "INSERT INTO market_alerts (created_at_ms, symbol, mid_price, window_minutes, change_pct) VALUES (?, ?, ?, ?, ?)"
         ).bind(alert.createdAt, alert.symbol, alert.price, alert.windowMinutes, alert.changePct));
       }
       if (statements.length) await this.env.DB.batch(statements);
+      if (sampleRows.some((row) => BENCHMARK_PRICE_SYMBOLS.has(row.symbol))) {
+        this.lastSampleAtBySymbol = nextSampleAtBySymbol;
+        await this.state.storage.put("lastSampleAtBySymbol", nextSampleAtBySymbol).catch(() => void 0);
+      }
+      if (wideSamplesWritten) {
+        this.lastWideSampleSlot = wideSampleSlot;
+        await this.state.storage.put("lastWideSampleSlot", wideSampleSlot).catch(() => void 0);
+      }
       await this.updateAlertOutcomes(now);
       if (now - this.lastCleanupAt > 6 * 60 * 60 * 1e3) {
         this.lastCleanupAt = now;
