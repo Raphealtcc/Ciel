@@ -12,23 +12,25 @@ assert.ok(source.includes('this.lastXyzQntRefreshAt = Number(values[25]) || 0;')
 assert.ok(source.includes('this.historyBootstrapDone = values[26] === true;'), "history bootstrap completion flag must restore from its own slot");
 assert.ok(source.includes('this.lastHistoryBootstrapAt = Number(values[27]) || 0;'), "history bootstrap timestamp must restore from its own slot");
 assert.ok(!source.includes("processedCandidateSymbols"), "trend candidates must not reserve a symbol before scalp evaluation");
-assert.ok(source.includes('candidate.mode === "TREND_PULLBACK_ENTRY" || candidate.mode === "TREND_BREAKOUT_RETEST" ? "ciel:advisor:review:core:"'), "local core strategies use a separate KV cooldown");
-assert.ok(source.includes('"ciel:advisor:review:ai:" + candidate.symbol'), "Gemini-reviewed strategies use a separate KV cooldown");
-assert.ok(source.includes('const isScalpMode = false;'), "5m continuation shares the local scalp review path");
-assert.ok(source.includes("if (!isScalpMode) { if(forecastChecks>=6) continue;"), "trend review budget must not starve deterministic scalp candidates");
-assert.ok(source.includes('const cooldownMs = candidate.mode === "TREND_PULLBACK_ENTRY" || candidate.mode === "TREND_BREAKOUT_RETEST" ? 3 * 6e4 : trendCooldownMs;'), "deterministic core pullback scalps and 5m continuation use the short local cooldown; Gemini-reviewed modes retain the configured trend cooldown");
+assert.ok(source.includes('const reviewCooldownKey = "ciel:advisor:review:trend:" + candidate.symbol;'), "trend strategies share one bounded KV cooldown");
+assert.ok(!source.includes('"ciel:advisor:review:ai:" + candidate.symbol'), "trend-only execution does not create a separate scalp/AI cooldown path");
+assert.ok(source.includes('const isScalpMode = false;'), "trend entries use the standard trend review path");
+assert.ok(source.includes("if (!isScalpMode) { if(forecastChecks>=6) continue;"), "trend review budget remains bounded");
+assert.ok(source.includes("const cooldownMs = trendCooldownMs;"), "trend entries use the configured trend cooldown");
 assert.ok(source.includes("1M_SWING_REVERSAL+RECLAIM"), "counter-trend reversal detector must be present");
 const blockedReview = source.match(/if \(reviewed\.verdict === "REJECT" \|\| reviewed\.verdict === "WAIT" && !waitFallback\) \{([\s\S]*?)\n    \}/);
 assert.ok(blockedReview && /continue;/.test(blockedReview[1]) && !/return;/.test(blockedReview[1]), "a blocked candidate must not abort the whole advisor cycle");
 assert.ok(source.includes('interval: "1m"'));
 assert.ok(source.includes('mode:"TREND_HOLD",holdMinutes:180'));
+assert.ok(!source.includes('mode:"RANGE_SCALP"'), "range strategy cannot generate new entries");
+assert.ok(!source.includes("function analyzeMicroMomentumContinuation"), "micro-momentum breakout strategy is removed");
 assert.ok(source.includes('"5M_TREND_FILTER","1M_PULLBACK","1M_RECLAIM","VOLUME_CONFIRMATION"'));
 assert.ok(source.includes('requiredPaperMargin === null'));
 assert.ok(source.includes('candidate.strategy === "5M_TREND+1M_PULLBACK+RECLAIM"'));
 
 const start = source.indexOf("function analyzeTrendPullbackEntry");
 const end = source.indexOf("async function runAdvisorCycle", start);
-assert.ok(start >= 0 && end > start, "Core scalp analyzer must be present before the advisor cycle");
+assert.ok(start >= 0 && end > start, "Trend pullback analyzer must be present before the advisor cycle");
 const context = vm.createContext({ __name() {} });
 vm.runInContext(source.slice(start, end) + "\nglobalThis.analyze = analyzeTrendPullbackEntry;", context);
 const analyze = context.analyze;
@@ -37,7 +39,7 @@ const coreScalpCall = 'if (now - this.lastCoreScalpCandleAt >= 55e3) background.
 const sampleMethodAt = source.indexOf("async samplePrices(now)");
 const backgroundDeclarationAt = source.indexOf("const background = [];", sampleMethodAt);
 const coreScalpCallAt = source.indexOf(coreScalpCall, sampleMethodAt);
-assert.equal(source.split(coreScalpCall).length - 1, 1, "core candle background task must be scheduled exactly once");
+assert.equal(source.split(coreScalpCall).length - 1, 1, "trend-entry candle background task must be scheduled exactly once");
 assert.ok(backgroundDeclarationAt >= 0 && coreScalpCallAt > backgroundDeclarationAt,
   "core candle background task must be queued after initialization; prevents the deployed background TDZ ReferenceError");
 
