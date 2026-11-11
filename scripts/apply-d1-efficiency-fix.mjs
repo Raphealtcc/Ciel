@@ -44,7 +44,7 @@ const method = [
   "          const response = await fetch(HYPERLIQUID_INFO, {",
   '            method: "POST",',
   '            headers: { "content-type": "application/json" },',
-  '            body: JSON.stringify({ type: "candleSnapshot", req: { coin: symbol, interval: "1m", startTime: now - 45 * 60e3, endTime: now } }),',
+  '            body: JSON.stringify({ type: "candleSnapshot", req: { coin: symbol, interval: "1m", startTime: now - 75 * 60e3, endTime: now } }),',
   '            signal: AbortSignal.timeout(8e3)',
   "          });",
   '          if (!response.ok) throw new Error("candleSnapshot HTTP " + response.status);',
@@ -57,7 +57,7 @@ const method = [
   "          }).sort((a,b) => Number(a.t)-Number(b.t));",
   "          const merged = new Map((Array.isArray(this.coreScalpCandles[symbol]) ? this.coreScalpCandles[symbol] : [])",
   "            .map((row) => [Number(row.open_ts_ms), row]));",
-  "          for (const candle of candles.slice(-60)) {",
+  "          for (const candle of candles.slice(-90)) {",
   "            const row = {",
   "              symbol,",
   '              interval: "1m",',
@@ -74,7 +74,7 @@ const method = [
   "          }",
   "          this.coreScalpCandles[symbol] = [...merged.values()]",
   "            .sort((a,b) => a.open_ts_ms-b.open_ts_ms)",
-  "            .slice(-60);",
+  "            .slice(-90);",
   "          updated = true;",
   "        } catch (error) {",
   '          console.error("Core scalp 1m candle refresh failed for " + symbol + ": " + String(error).slice(0,160));',
@@ -108,7 +108,7 @@ const oldCandleReads = [
 ].join("\n");
 const newCandleReads = [
   "  const coreCandleResults = coreScalpSymbols.map((symbol) => {",
-  "    const one = Array.isArray(coreScalpCandles?.[symbol]) ? coreScalpCandles[symbol].slice(-60) : [];",
+  "    const one = Array.isArray(coreScalpCandles?.[symbol]) ? coreScalpCandles[symbol].slice(-90) : [];",
   "    const five = Array.isArray(coreTrendCandles?.[symbol]) ? coreTrendCandles[symbol].filter((row) => Number(row.close_ts_ms) <= now).slice(-60) : [];",
   "    return [symbol,one,five];",
   "  });"
@@ -184,8 +184,19 @@ const historyFallbackBefore = `  if (priceHistory) {
     }
   }`;
 const historyFallbackAfter = `  for (const symbol of symbols) {
+    const byTime = new Map();
+    const candleRows = Array.isArray(coreScalpCandles?.[symbol]) ? coreScalpCandles[symbol] : [];
+    for (const candle of candleRows) {
+      const ts = Number(candle.close_ts_ms), price = Number(candle.close_price);
+      if (ts > 0 && ts <= now && price > 0) byTime.set(ts, { symbol, mid_price: price, ts_ms: ts });
+    }
     const points = Array.isArray(priceHistory?.[symbol]) ? priceHistory[symbol] : [];
-    if (points.length) hist.set(symbol, points.map((point) => ({ symbol, mid_price: Number(point.p), ts_ms: Number(point.t) })));
+    for (const point of points) {
+      const ts = Number(point.t), price = Number(point.p);
+      if (ts > 0 && ts <= now && price > 0) byTime.set(ts, { symbol, mid_price: price, ts_ms: ts });
+    }
+    const rows = [...byTime.values()].sort((a, b) => a.ts_ms - b.ts_ms);
+    if (rows.length) hist.set(symbol, rows);
   }`;
 replaceOnceInSource(historyFallbackBefore, historyFallbackAfter, "use Durable Object price history instead of per-cycle D1 sample reads");
 

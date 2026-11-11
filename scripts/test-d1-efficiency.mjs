@@ -10,7 +10,7 @@ const writer = source.slice(methodStart, methodEnd);
 assert.ok(writer.includes('interval: "1m"'), "the one-minute Hyperliquid candle feed must remain active");
 assert.ok(writer.includes("this.coreScalpCandles[symbol]"), "one-minute candles must be merged into the in-memory DO cache");
 assert.ok(writer.includes('this.state.storage.put("coreScalpCandles", this.coreScalpCandles)'), "one-minute candle history must persist across DO restarts");
-assert.ok(writer.includes("candles.slice(-60)"), "the rolling one-minute candle cache must retain sufficient history");
+assert.ok(writer.includes("candles.slice(-90)"), "the rolling one-minute candle cache must retain sufficient history");
 assert.ok(!writer.includes("this.env.DB"), "one-minute scalp candles must not be duplicated in D1");
 
 const restore = source.slice(source.indexOf("async restore()"), source.indexOf("async fetch(request)"));
@@ -22,6 +22,7 @@ const advisorEnd = source.indexOf("async function manageOpenPositions", advisorS
 const advisor = source.slice(advisorStart, advisorEnd);
 assert.ok(advisor.includes("coreScalpCandles = {}"), "advisor cycle must accept the DO candle cache");
 assert.ok(advisor.includes("coreScalpCandles?.[symbol]"), "core scalp must use the same 1m candle rows");
+assert.ok(advisor.includes("close_ts_ms") && advisor.includes("close_price"), "closed 1m candles must be merged into statistical forecast history for 5/15/60m anchors");
 assert.ok(!advisor.includes("interval=\'1m\'"), "core scalp must not read the duplicated 1m candle table from D1");
 assert.ok(advisor.includes("coreTrendCandles?.[symbol]"), "native 5m confirmation candles must come from the persistent DO cache");
 const d1FallbackGuard = advisor.indexOf("if (missingTrendSymbols.length)");
