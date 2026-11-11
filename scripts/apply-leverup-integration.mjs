@@ -101,7 +101,43 @@ const oldLiveMon = 'async function liveMon(env) {\n  const x = await env.DB.prep
 const newLiveMon = 'async function liveMon(env) {\n  const x = await env.DB.prepare("SELECT mid_price,ts_ms FROM market_samples WHERE symbol=\'MON\' ORDER BY ts_ms DESC LIMIT 1").first();\n  const sampled = x && Date.now() - Number(x.ts_ms) <= MAX_AGE ? Number(x.mid_price) || 0 : 0;\n  return sampled > 0 ? sampled : await getCachedLeverUpMonUsd(env, Date.now());\n}';
 once(oldLiveMon, newLiveMon, "use the LeverUp MON/USD quote for /signals, /positions and /entered when no Hyperliquid MON sample exists");
 const oldCandle = "  for (const [symbol,one,five] of coreCandleResults) coreScalpData.set(symbol,{one,five});";
-const newCandle = "  for (const [symbol, one, five] of coreCandleResults) coreScalpData.set(symbol, { one, five });\n  const missingTrendSymbols = coreScalpSymbols.filter((symbol) => {\n    const rows = coreScalpData.get(symbol)?.five || [];\n    const latest = Number(rows[rows.length - 1]?.close_ts_ms || 0);\n    return rows.length < 40 || now - latest > 7 * 60 * 1000;\n  });\n  if (missingTrendSymbols.length) {\n    try {\n      const placeholders = missingTrendSymbols.map(() => \"?\").join(\",\");\n      const candleRows = await env.DB.prepare(\n        \"WITH ranked AS (SELECT symbol,open_ts_ms,close_ts_ms,open_price,high_price,low_price,close_price,volume,ROW_NUMBER() OVER (PARTITION BY symbol ORDER BY close_ts_ms DESC) AS rn FROM market_candles WHERE symbol IN (\" + placeholders + \") AND interval=? AND close_ts_ms<=?) SELECT symbol,open_ts_ms,close_ts_ms,open_price,high_price,low_price,close_price,volume FROM ranked WHERE rn<=60 ORDER BY symbol,close_ts_ms ASC\"\n      ).bind(...missingTrendSymbols, \"5m\", now).all();\n      const bySymbol = new Map();\n      for (const row of candleRows.results || []) {\n        const rows = bySymbol.get(row.symbol) || [];\n        rows.push(row);\n        bySymbol.set(row.symbol, rows);\n      }\n      for (const symbol of missingTrendSymbols) {\n        const existing = coreScalpData.get(symbol) || { one: [], five: [] };\n        const fallback = bySymbol.get(symbol) || [];\n        if (fallback.length >= 40) existing.five = fallback;\n        coreScalpData.set(symbol, existing);\n      }\n    } catch (candleError) {\n      console.error(\"Core 5m candle D1 fallback failed: \" + String(candleError?.message || candleError).slice(0, 200));\n    }\n  }";
+const newCandle = `  for (const [symbol, one, five] of coreCandleResults) coreScalpData.set(symbol, { one, five });
+  const missingTrendSymbols = coreScalpSymbols.filter((symbol) => {
+    const rows = coreScalpData.get(symbol)?.five || [];
+    const latest = Number(rows[rows.length - 1]?.close_ts_ms || 0);
+    return rows.length < 40 || now - latest > 7 * 60 * 1000;
+  });
+  if (missingTrendSymbols.length) {
+    try {
+      const fallbackEligible = [];
+      for (const symbol of missingTrendSymbols) {
+        const key = "ciel:d1:fallback:5m:" + symbol;
+        const last = Number(await env.CIEL_STATE.get(key).catch(() => 0));
+        if (now - last >= 30 * 60e3) fallbackEligible.push(symbol);
+      }
+      if (fallbackEligible.length) {
+        await Promise.all(fallbackEligible.map((symbol) => env.CIEL_STATE.put("ciel:d1:fallback:5m:" + symbol, String(now), { expirationTtl: 3600 }).catch(() => void 0)));
+        const placeholders = fallbackEligible.map(() => "?").join(",");
+        const candleRows = await env.DB.prepare(
+          "WITH ranked AS (SELECT symbol,open_ts_ms,close_ts_ms,open_price,high_price,low_price,close_price,volume,ROW_NUMBER() OVER (PARTITION BY symbol ORDER BY close_ts_ms DESC) AS rn FROM market_candles WHERE symbol IN (" + placeholders + ") AND interval=? AND close_ts_ms<=?) SELECT symbol,open_ts_ms,close_ts_ms,open_price,high_price,low_price,close_price,volume FROM ranked WHERE rn<=60 ORDER BY symbol,close_ts_ms ASC"
+        ).bind(...fallbackEligible, "5m", now).all();
+        const bySymbol = new Map();
+        for (const row of candleRows.results || []) {
+          const rows = bySymbol.get(row.symbol) || [];
+          rows.push(row);
+          bySymbol.set(row.symbol, rows);
+        }
+        for (const symbol of fallbackEligible) {
+          const existing = coreScalpData.get(symbol) || { one: [], five: [] };
+          const fallback = bySymbol.get(symbol) || [];
+          if (fallback.length >= 40) existing.five = fallback;
+          coreScalpData.set(symbol, existing);
+        }
+      }
+    } catch (candleError) {
+      console.error("Core 5m candle D1 fallback failed: " + String(candleError?.message || candleError).slice(0, 200));
+    }
+  }`;
 once(oldCandle, newCandle, "load fresh closed 5m candles from D1 when Durable Object buffers are empty or stale");
 
 
