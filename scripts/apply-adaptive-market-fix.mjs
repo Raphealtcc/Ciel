@@ -99,7 +99,6 @@ const newCandidateBuild = `    const beforeCount = candidates.length;
     const isTrendEligible = trendEntryMarketSet.has(sym);
     if (signal && signal.confidence >= confidenceFloor && (!isCore || signal.mode === "TREND_HOLD")) candidates.push(signal);
     else if (isCore) scanDiagnostics.push({symbol:sym,strategy:"TREND_HOLD",reason:signal ? "BELOW_CONFIDENCE_THRESHOLD" : "NO_VALID_TREND_SIGNAL"});
-    if (!signal) scanDiagnostics.push({symbol:sym,strategy:"1M_MICRO_MOMENTUM_BREAKOUT",reason:"NO_CONFIRMED_3M_5M_10M_RANGE_BREAKOUT"});
     if (isTrendEligible) {
       const candles = coreScalpData.get(sym);
       if (!candles || candles.one.length < 25 || candles.five.length < 40) {

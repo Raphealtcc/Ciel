@@ -2,7 +2,6 @@ const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const finite = (value) => Number.isFinite(Number(value)) ? Number(value) : null;
 
 const REQUIRED_COMPONENTS = Object.freeze({
-  "1M_MICRO_MOMENTUM_BREAKOUT": ["1M_MOMENTUM","3M_CONFIRMATION","5M_CONFIRMATION","10M_RANGE_BREAKOUT","MICRO_EMA_CONFIRMATION"],
   "MULTI_MARKET_LEVEL_SWEEP_RECLAIM": ["LEVEL_RECLAIM","3M_REVERSAL","5M_CONFIRMATION"],
   "1M_SWING_REVERSAL+RECLAIM": ["1M_SWING_EXHAUSTION","1M_PIVOT_RECLAIM","1M_RSI_TURN","1M_VOLUME_CONFIRMATION","5M_REVERSAL_CONFIRMATION"],
   "5M_TREND+1M_PULLBACK+RECLAIM": ["5M_TREND_FILTER","1M_PULLBACK","1M_RECLAIM","VOLUME_CONFIRMATION"],
@@ -101,14 +100,13 @@ export function evaluateSignalQuality({ candidate, forecast, market, eventIntel 
     const f5 = r5 === null ? null : r5 * direction;
     const f15 = r15 === null ? null : r15 * direction;
     const f60 = r60 === null ? null : r60 * direction;
-    const micro = strategy.includes("MICRO_MOMENTUM");
     const continuation = strategy.includes("CONTINUATION") || strategy.includes("PULLBACK") || candidate?.mode === "TREND_HOLD";
     const reversal = strategy.includes("LEVEL_SWEEP") || strategy.includes("SWING_REVERSAL");
-    if ((micro || continuation || reversal) && (f5 === null || f15 === null)) {
+    if ((continuation || reversal) && (f5 === null || f15 === null)) {
       vetoes.push("MULTI_HORIZON_FORECAST_INCOMPLETE");
-    } else if ((micro || continuation) && f60 === null) {
+    } else if (continuation && f60 === null) {
       vetoes.push("60M_TREND_CONFIRMATION_MISSING");
-    } else if ((micro || continuation) && (f5 <= 0 || f15 <= 0 || f60 <= (micro ? 0.08 : -0.10))) {
+    } else if (continuation && (f5 <= 0 || f15 <= 0 || f60 <= -0.10)) {
       vetoes.push("HIGHER_TIMEFRAME_FORECAST_DISAGREEMENT");
     } else if (reversal && (f5 <= 0 || f15 <= 0 || f60 !== null && f60 < -0.75)) {
       vetoes.push("REVERSAL_LACKS_MULTI_HORIZON_CONFIRMATION");
@@ -178,7 +176,6 @@ export function evaluateSignalQuality({ candidate, forecast, market, eventIntel 
   let threshold = strategy.includes("SWING_REVERSAL") ? 84 :
     strategy.includes("LEVEL_SWEEP") ? 85 :
     strategy.includes("PULLBACK") ? 82 :
-    strategy.includes("MICRO_MOMENTUM") ? 84 :
     strategy.includes("CONTINUATION") ? 82 : 80;
   const learned = strategyStats?.[String(candidate?.strategy || "")];
   if (Number(learned?.sampleCount) >= 30 && Number.isFinite(Number(learned?.expectancyR))) {
