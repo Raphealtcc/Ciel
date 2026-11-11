@@ -190,8 +190,13 @@ const historyFallbackAfter = `  for (const symbol of symbols) {
 replaceOnceInSource(historyFallbackBefore, historyFallbackAfter, "use Durable Object price history instead of per-cycle D1 sample reads");
 
 replaceOnceInSource(
-  '  await env.DB.prepare("UPDATE advisor_positions SET status=\\'EXPIRED\\',updated_at_ms=? WHERE status=\\'PROPOSED\\' AND expires_at_ms<=?").bind(now, now).run();',
-  '  const expirySweepKey = "ciel:advisor:proposal-expiry:last-run";\\n  const expirySweepAt = Number(await env.CIEL_STATE.get(expirySweepKey).catch(() => 0));\\n  if (now - expirySweepAt >= 5 * 60e3) {\\n    await env.CIEL_STATE.put(expirySweepKey, String(now), { expirationTtl: 86400 }).catch(() => void 0);\\n    await env.DB.prepare("UPDATE advisor_positions SET status=\\'EXPIRED\\',updated_at_ms=? WHERE status=\\'PROPOSED\\' AND expires_at_ms<=?").bind(now, now).run();\\n  }',
+  `  await env.DB.prepare("UPDATE advisor_positions SET status='EXPIRED',updated_at_ms=? WHERE status='PROPOSED' AND expires_at_ms<=?").bind(now, now).run();`,
+  `  const expirySweepKey = "ciel:advisor:proposal-expiry:last-run";
+  const expirySweepAt = Number(await env.CIEL_STATE.get(expirySweepKey).catch(() => 0));
+  if (now - expirySweepAt >= 5 * 60e3) {
+    await env.CIEL_STATE.put(expirySweepKey, String(now), { expirationTtl: 86400 }).catch(() => void 0);
+    await env.DB.prepare("UPDATE advisor_positions SET status='EXPIRED',updated_at_ms=? WHERE status='PROPOSED' AND expires_at_ms<=?").bind(now, now).run();
+  }`,
   "throttle proposal expiry sweep to every five minutes"
 );
 
