@@ -4,7 +4,7 @@ import {
 } from "./leverup-readonly.js";
 import { OneClickAction, signIntentDryRun } from "./leverup-1ct.js";
 import { prepareLeverUpExecution, executeLeverUpEntry, verifyLeverUpCoordinatorDryRun } from "./leverup-coordinator.js";
-export function buildBudgetedLeverUpPlan({ buildPlan, planArgs, maxEntryBudgetMon, minimumMarginMon, feeTokenAddress = WMON }) {
+export function buildBudgetedLeverUpPlan({ buildPlan, planArgs, maxEntryBudgetMon, minimumMarginMon, feeTokenAddress = LVMON }) {
   if (typeof buildPlan !== "function" || !planArgs || !(Number(maxEntryBudgetMon) > 0)) throw new Error("LEVERUP_ENTRY_BUDGET_INPUT_INVALID");
   const budgetRaw = BigInt(Math.floor(Number(maxEntryBudgetMon) * 1e8)) * 10n ** 10n;
   const feeToken = String(feeTokenAddress).toLowerCase();
