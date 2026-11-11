@@ -10,7 +10,8 @@ function replaceOnce(text, before, after, label) {
 }
 
 function replaceRegexOnce(text, pattern, replacement, label) {
-  const matches = [...text.matchAll(pattern)];
+  const globalPattern = pattern.global ? pattern : new RegExp(pattern.source, pattern.flags + "g");
+  const matches = [...text.matchAll(globalPattern)];
   if (matches.length !== 1) throw new Error(label + ": expected exactly one match, found " + matches.length);
   return text.replace(pattern, replacement);
 }
