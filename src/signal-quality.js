@@ -202,10 +202,12 @@ export function evaluateSignalQuality({ candidate, forecast, market, eventIntel 
   // mid-price result to veto a 180m TREND_HOLD candidate.
   const shadowHorizonMinutes = strategy.includes("MICRO_MOMENTUM") ? 45 :
     strategy.includes("CONTINUATION") ? 60 :
-    strategy.includes("SWING_REVERSAL") || strategy.includes("LEVEL_SWEEP") ? 12 :
+    strategy.includes("SWING_REVERSAL") ? 12 :
+    strategy.includes("LEVEL_SWEEP") ? 180 :
     strategy.includes("PULLBACK") ? 15 : 180;
   const candidateHorizonMinutes = finite(candidate?.holdMinutes) ?? 180;
-  const shadowHorizonMatches = Math.abs(candidateHorizonMinutes - shadowHorizonMinutes) <= 1;
+  const shadowHorizonMatches = Math.abs(candidateHorizonMinutes - shadowHorizonMinutes) <= 1 &&
+    Number(learned?.horizonMinutes) === shadowHorizonMinutes;
   if (shadowHorizonMatches && Number(learned?.sampleCount) >= 30 && Number.isFinite(Number(learned?.expectancyR))) {
     const expectancyR = Number(learned.expectancyR);
     if (expectancyR <= 0.10) vetoes.push("STRATEGY_SHADOW_EXPECTANCY_NOT_POSITIVE");

@@ -29,7 +29,7 @@ assert.ok(opposingForecast.vetoes.includes("FORECAST_STRONGLY_OPPOSES_ENTRY"));
 const losingStrategyHistory = evaluateSignalQuality({
   ...base,
   candidate: { ...base.candidate, holdMinutes: 60 },
-  strategyStats: { "5M_TREND_CONTINUATION+BREAKOUT_RETEST": { sampleCount: 30, expectancyR: 0.04, winRate: 0.31 } },
+  strategyStats: { "5M_TREND_CONTINUATION+BREAKOUT_RETEST": { sampleCount: 30, expectancyR: 0.04, winRate: 0.31, horizonMinutes: 60 } },
 });
 assert.equal(losingStrategyHistory.allowed, false);
 assert.ok(losingStrategyHistory.vetoes.includes("STRATEGY_SHADOW_EXPECTANCY_NOT_POSITIVE"));
@@ -41,10 +41,19 @@ const shortHorizonShadowDoesNotVetoTrendHold = evaluateSignalQuality({
     strategy: "MULTI_MARKET_LEVEL_SWEEP_RECLAIM",
     scoreComponents: ["LEVEL_RECLAIM","3M_REVERSAL","5M_CONFIRMATION"],
   },
-  strategyStats: { "MULTI_MARKET_LEVEL_SWEEP_RECLAIM": { sampleCount: 625, expectancyR: 0.061, winRate: 0.5248 } },
+  strategyStats: { "MULTI_MARKET_LEVEL_SWEEP_RECLAIM": { sampleCount: 625, expectancyR: 0.061, winRate: 0.5248, horizonMinutes: 12 } },
 });
 assert.equal(shortHorizonShadowDoesNotVetoTrendHold.allowed, true);
 assert.ok(!shortHorizonShadowDoesNotVetoTrendHold.vetoes.includes("STRATEGY_SHADOW_EXPECTANCY_NOT_POSITIVE"));
+const matching180mWeakShadow = evaluateSignalQuality({
+  ...base,
+  candidate: { ...base.candidate, holdMinutes: 180, regime: "LEVEL_REVERSAL",
+    strategy: "MULTI_MARKET_LEVEL_SWEEP_RECLAIM",
+    scoreComponents: ["LEVEL_RECLAIM","3M_REVERSAL","5M_CONFIRMATION"] },
+  strategyStats: { "MULTI_MARKET_LEVEL_SWEEP_RECLAIM": { sampleCount: 625, expectancyR: 0.061, winRate: 0.5248, horizonMinutes: 180 } },
+});
+assert.equal(matching180mWeakShadow.allowed, false);
+assert.ok(matching180mWeakShadow.vetoes.includes("STRATEGY_SHADOW_EXPECTANCY_NOT_POSITIVE"));
 
 const weakTrendForecast = evaluateSignalQuality({ ...base, forecast: { available: true, medianReturnPct: 0.03 } });
 assert.equal(weakTrendForecast.allowed, false);
@@ -132,6 +141,10 @@ assert.ok(worker.includes("5M_REVERSAL_CONFIRMATION"));
 assert.ok(worker.includes("Signal quality "));
 assert.ok(worker.includes('"Signal quality: " + Number(s?.signalQualityScore || 0) + "/100 evidence score, not win probability"'));
 assert.ok(worker.includes("updateAdvisorShadowOutcomes"));
+assert.ok(worker.includes("WHEN strategy LIKE '%LEVEL_SWEEP%' THEN 180*60000"));
+assert.ok(worker.includes("horizonMinutes: Number(row.horizon_minutes || 0)"));
+assert.ok(worker.includes("created_at_ms >= 1794397468000"));
+assert.ok(worker.includes("ciel:advisor:shadow-stats:v2"));
 assert.ok(worker.includes("if (now - lastRun < 30 * 60e3) return cached;"), "shadow outcome D1 updates must be throttled to 30 minutes");
 assert.ok(worker.includes("statsLastRefreshKey") && worker.includes("6 * 60 * 60e3"), "shadow aggregation must be throttled to six hours");
 assert.ok(worker.includes("WHERE status='EXPIRED' AND exit_reason IN"), "shadow aggregation should use the indexed status/created window");
