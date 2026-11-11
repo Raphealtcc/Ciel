@@ -43,12 +43,8 @@ replaceBootstrapOnce(sampleInsert, "", "remove duplicate historical market_sampl
 source = source.slice(0, bootstrapStart) + bootstrap + source.slice(bootstrapEnd);
 console.log("Applied runtime budget fix: bounded bootstrap and no duplicate sample writes");
 
-// Keep six samples/hour for wider symbols; do not write the full watchlist every minute.
-once(
-  "const persistAllSamples = Math.floor(now / (6 * 60 * 1e3)) !== Math.floor((now - SAMPLE_INTERVAL_MS) / (6 * 60 * 1e3));",
-  "const persistAllSamples = Math.floor(now / (10 * 60 * 1e3)) !== Math.floor((now - SAMPLE_INTERVAL_MS) / (10 * 60 * 1e3));",
-  "reduce wider-watchlist sample persistence from every 6m to every 10m",
-);
+// The recovered feed already persists wider-watchlist samples once per 10-minute slot.
+// Do not re-patch this cadence here; it is owned by the recovered feed implementation.
 
 // Cache empty intraday history for an hour; otherwise a missing symbol can repeat the
 // same 7,200-row D1 scan on every advisor cycle.
