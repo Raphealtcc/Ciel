@@ -1,12 +1,21 @@
 import assert from "node:assert/strict";
 import { decodeAbiParameters } from "viem";
 import { buildActionData, OneClickAction } from "../src/leverup-1ct.js";
-import { calculateLeverUpEntryBudget, evaluateLeverUpPortfolioRisk, LEVERUP_RISK_DEFAULTS, MIN_LEVERUP_RISK_LIMIT_MON } from "../src/leverup-risk.js";
+import { calculateLeverUpEntryBudget, calculateLeverUpRollingDrawdown, evaluateLeverUpPortfolioRisk, LEVERUP_RISK_DEFAULTS, MIN_LEVERUP_RISK_LIMIT_MON } from "../src/leverup-risk.js";
 assert.equal(MIN_LEVERUP_RISK_LIMIT_MON, 20);
 assert.equal(LEVERUP_RISK_DEFAULTS.maxDailyRealizedLossMon, 20);
+const rollingNow = 1_800_000_000_000;
+const rollingDrawdown = calculateLeverUpRollingDrawdown([
+  { close_time: rollingNow / 1000 - 72 * 3600, net_pnl_after_fees_raw: "50000000000000000000" },
+  { close_time: rollingNow / 1000 - 71 * 3600, net_pnl_after_fees_raw: "-100000000000000000000" },
+  { close_time: rollingNow / 1000 - 24 * 3600, net_pnl_after_fees_raw: "10000000000000000000" },
+  { close_time: rollingNow / 1000 - 23 * 3600, net_pnl_after_fees_raw: "-35000000000000000000" },
+  { close_time: rollingNow / 1000 - 22 * 3600, net_pnl_after_fees_raw: "5000000000000000000" },
+], rollingNow, 48);
+assert.equal(rollingDrawdown, 25, "older losses must age out of the 48-hour drawdown window");
 assert.equal(LEVERUP_RISK_DEFAULTS.maxRollingDrawdownMon, 20);
 assert.equal(LEVERUP_RISK_DEFAULTS.maxAggregateStopRiskMon, 20);
-import { prepareLeverUpExecution, reconcileLeverUpIntent, collectLeverUpPairBases, refreshLeverUpMarketOpenPlan, validateLeverUpTransferBalances, submitLeverUpNativeOnchainEntry, notifyLeverUpClosedTrade, evaluateLeverUpPositionAction } from "../src/leverup-coordinator.js";
+import { prepareLeverUpExecution, reconcileLeverUpIntent, collectLeverUpPairBases, refreshLeverUpMarketOpenPlan, validateLeverUpTransferBalances, submitLeverUpNativeOnchainEntry, notifyLeverUpClosedTrade, evaluateLeverUpPositionAction, selectLeverUpPositionAction } from "../src/leverup-coordinator.js";
 import { privateKeyToAccount } from "viem/accounts";
 const holdTestPosition = {
   positionHash: "0x" + "ab".repeat(32), qtyRaw: "1000", entryPriceRaw: "100",
@@ -24,6 +33,15 @@ const hardStopStillCloses = evaluateLeverUpPositionAction({
 });
 assert.equal(hardStopStillCloses.action, "MARKET_CLOSE");
 assert.equal(hardStopStillCloses.reason, "STOP_LOSS_TRIGGERED");
+const earlyProfitClose = selectLeverUpPositionAction({
+  fixedAction: { action: "WAIT", reason: "MINIMUM_HOLD_NOT_REACHED" },
+  adaptive: { action: "MARKET_CLOSE", reason: "TAKE_PROFIT_APPROACH_REVERSAL" },
+});
+assert.equal(earlyProfitClose.action, "MARKET_CLOSE", "confirmed near-target reversal must bypass ordinary minimum-hold review");
+assert.equal(selectLeverUpPositionAction({
+  fixedAction: { action: "WAIT", reason: "MINIMUM_HOLD_NOT_REACHED" },
+  adaptive: { action: "UPDATE_TP_SL", reason: "ADAPTIVE_TRAILING_STOP_TIGHTEN" },
+}).action, "WAIT", "ordinary trailing updates must still respect minimum hold");
 assert.equal(evaluateLeverUpPositionAction({
   position: {...holdTestPosition, earliestCloseTime: String(Math.floor(afterThreeHours / 1000) + 3600)},
   currentPriceRaw: "89", now: afterThreeHours, maxHoldMinutes: 180,

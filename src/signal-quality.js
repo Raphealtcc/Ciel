@@ -77,6 +77,10 @@ export function evaluateSignalQuality({ candidate, forecast, market, eventIntel 
   const funding = finite(market?.funding);
   const premiumBps = finite(market?.premiumBps);
   const oiChangePct = finite(market?.oiChangePct);
+  const orderFlow = market?.orderFlow || {};
+  const flowStatus = String(orderFlow.status || "").toUpperCase();
+  const tradeCount = finite(orderFlow.tradeCount);
+  const tradeImbalance = finite(orderFlow.tradeImbalance);
   const medianReturnPct = finite(forecast?.medianReturnPct);
 
   if (!["LONG","SHORT"].includes(side)) vetoes.push("INVALID_DIRECTION");
@@ -100,6 +104,8 @@ export function evaluateSignalQuality({ candidate, forecast, market, eventIntel 
     const f5 = r5 === null ? null : r5 * direction;
     const f15 = r15 === null ? null : r15 * direction;
     const f60 = r60 === null ? null : r60 * direction;
+    const trendProjection = finite(forecastParts.trendProjection5mPct);
+    const fTrend = trendProjection === null ? null : trendProjection * direction;
     const continuation = strategy.includes("CONTINUATION") || strategy.includes("PULLBACK") || candidate?.mode === "TREND_HOLD";
     const reversal = strategy.includes("LEVEL_SWEEP") || strategy.includes("SWING_REVERSAL");
     if ((continuation || reversal) && (f5 === null || f15 === null)) {
@@ -110,6 +116,12 @@ export function evaluateSignalQuality({ candidate, forecast, market, eventIntel 
       vetoes.push("HIGHER_TIMEFRAME_FORECAST_DISAGREEMENT");
     } else if (reversal && (f5 <= 0 || f15 <= 0 || f60 !== null && f60 < -0.75)) {
       vetoes.push("REVERSAL_LACKS_MULTI_HORIZON_CONFIRMATION");
+    }
+    // A level sweep against both the 60m move and the 30m fitted slope is
+    // usually a pullback, not a confirmed reversal. Require both horizons
+    // to oppose the proposed side before vetoing the countertrend setup.
+    if (reversal && f60 !== null && fTrend !== null && f60 <= -0.025 && fTrend <= -0.05) {
+      vetoes.push("COUNTERTREND_REVERSAL_LACKS_60M_TREND_BREAK");
     }
     if (!aligned && opposedMagnitude >= minimumMovePct) {
       vetoes.push("FORECAST_STRONGLY_OPPOSES_ENTRY");
@@ -122,8 +134,16 @@ export function evaluateSignalQuality({ candidate, forecast, market, eventIntel 
       forecastScore = 0;
     }
   }
+  const flowUsable = !["STALE", "UNAVAILABLE"].includes(flowStatus);
+  const flowOpposes = tradeImbalance !== null &&
+    (side === "LONG" ? tradeImbalance <= -0.65 : tradeImbalance >= 0.65);
+  // Use signed trades as a conflict warning even when book OFI is missing,
+  // but only with >=30 trades and a strongly one-sided imbalance.
+  if (flowUsable && tradeCount !== null && tradeCount >= 30 && flowOpposes) {
+    vetoes.push("SIGNED_TRADE_FLOW_STRONGLY_OPPOSES_ENTRY");
+  }
   components.push({ key: "STATISTICAL_FORECAST", score: forecastScore, max: 25,
-    detail: medianReturnPct === null ? "unavailable" : medianReturnPct.toFixed(3) + "% median; 5m/15m/60m components checked" });
+    detail: medianReturnPct === null ? "unavailable" : medianReturnPct.toFixed(3) + "% median; 5m/15m/60m and 30m slope checked" });
 
   let spreadScore = 0, depthScore = 0, volumeScore = 0;
   if (spreadBps !== null) {

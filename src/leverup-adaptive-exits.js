@@ -21,7 +21,7 @@ export function evaluateAdaptiveLeverUpExit({ position, currentPriceRaw, state =
   const highWater = previousHigh > price ? previousHigh : price;
   const lowWater = previousLow > 0n && previousLow < price ? previousLow : price;
   const nextState = { version: 1, positionHash: position.positionHash, history, highWaterRaw: highWater.toString(), lowWaterRaw: lowWater.toString(), updatedAt: now };
-  if (history.length < 8) return { action: "HOLD", reason: "ADAPTIVE_WARMUP", samples: history.length, state: nextState };
+  if (history.length < 3) return { action: "HOLD", reason: "ADAPTIVE_WARMUP", samples: history.length, state: nextState };
 
   const values = history.map((x) => toBig(x.price));
   const recent = values.slice(-8);
@@ -71,7 +71,7 @@ export function evaluateAdaptiveLeverUpExit({ position, currentPriceRaw, state =
   );
   const targetApproachGiveback = nearTarget && recentAgainstSide &&
     givebackPct >= Math.max(0.025, Math.min(targetDistancePct * 0.10, atrProxyPct * 0.5 || 0.025));
-  const profitGivebackTriggered = profitProtectionArmed &&
+  const profitGivebackTriggered = history.length >= 8 && profitProtectionArmed &&
     givebackPct >= peakFavourablePct * 0.30 &&
     (adverseTrend || adverseMomentum) &&
     (closeScore >= 1 || recentAgainstSide);
@@ -104,7 +104,7 @@ export function evaluateAdaptiveLeverUpExit({ position, currentPriceRaw, state =
   if (closeScore >= 3 && history.length >= 10 && favourablePct > 0) {
     return { action: "MARKET_CLOSE", reason: "ADAPTIVE_MULTI_FACTOR_REVERSAL", closeScore, trendPct, momentumPct, atrProxyPct, favourablePct, peakFavourablePct, givebackPct, state: nextState };
   }
-  if (proposedStop !== stop) {
+  if (history.length >= 8 && proposedStop !== stop) {
     return { action: "UPDATE_TP_SL", reason: "ADAPTIVE_TRAILING_STOP_TIGHTEN", stopLossRaw: proposedStop.toString(), takeProfitRaw: toBig(position.takeProfitRaw).toString(), trendPct, momentumPct, atrProxyPct, closeScore, state: nextState };
   }
   return { action: "HOLD", reason: "ADAPTIVE_NO_CHANGE", trendPct, momentumPct, atrProxyPct, closeScore, state: nextState };

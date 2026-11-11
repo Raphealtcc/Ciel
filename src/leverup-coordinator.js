@@ -1,7 +1,7 @@
 import { createWalletClient, defineChain, http } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 // Durable, idempotent LeverUp 1CT execution and position lifecycle.
-import { evaluateLeverUpPortfolioRisk } from "./leverup-risk.js";
+import { calculateLeverUpRollingDrawdown, evaluateLeverUpPortfolioRisk } from "./leverup-risk.js";
 import {
   LEVERUP_1CT, OneClickAction, getIntentStatusOnce, selectFeeToken, signAndSubmitIntent,
 } from "./leverup-1ct.js";
@@ -458,22 +458,19 @@ export async function verifyLeverUpCoordinatorDryRun({ env, db, now = Date.now()
 async function readPortfolioRiskFromLedger(db, now) {
   if (!db?.prepare) throw new Error("LEVERUP_RISK_LEDGER_UNAVAILABLE");
   const dayStartSeconds = Math.floor(Date.UTC(new Date(now).getUTCFullYear(), new Date(now).getUTCMonth(), new Date(now).getUTCDate()) / 1000);
+  const rollingWindowStartSeconds = Math.floor(now / 1000) - 48 * 60 * 60;
   const [daily, history] = await Promise.all([
     db.prepare("SELECT l.net_pnl_after_fees_raw, l.close_time FROM leverup_settlement_reconciliations l WHERE l.close_time >= ? AND NOT EXISTS (SELECT 1 FROM leverup_trade_settlements t WHERE t.position_hash = l.position_hash AND t.close_time = l.close_time) UNION ALL SELECT net_pnl_after_fees_raw, close_time FROM leverup_trade_settlements WHERE close_time >= ? ORDER BY close_time ASC")
       .bind(dayStartSeconds, dayStartSeconds).all(),
-    db.prepare("SELECT net_pnl_after_fees_raw, close_time FROM (SELECT l.net_pnl_after_fees_raw, l.close_time FROM leverup_settlement_reconciliations l WHERE NOT EXISTS (SELECT 1 FROM leverup_trade_settlements t WHERE t.position_hash = l.position_hash AND t.close_time = l.close_time) UNION ALL SELECT net_pnl_after_fees_raw, close_time FROM leverup_trade_settlements) ORDER BY close_time DESC LIMIT 300").all(),
+    db.prepare("SELECT net_pnl_after_fees_raw, close_time FROM (SELECT l.net_pnl_after_fees_raw, l.close_time FROM leverup_settlement_reconciliations l WHERE l.close_time >= ? AND NOT EXISTS (SELECT 1 FROM leverup_trade_settlements t WHERE t.position_hash = l.position_hash AND t.close_time = l.close_time) UNION ALL SELECT net_pnl_after_fees_raw, close_time FROM leverup_trade_settlements WHERE close_time >= ?) ORDER BY close_time DESC LIMIT 300")
+      .bind(rollingWindowStartSeconds, rollingWindowStartSeconds).all(),
   ]);
   const [activeEntries] = await Promise.all([
     db.prepare("SELECT payload_json FROM leverup_execution_intents WHERE action = 0 AND status IN ('EXECUTED','RECONCILED','SUBMITTED','PENDING','UNCERTAIN') AND (status != 'RECONCILED' OR json_extract(payload_json,'$.closedAt') IS NULL)").all(),
   ]);
   const toMon = (raw) => Number(BigInt(raw || "0")) / 1e18;
   const dailyRealizedLossMon = (daily.results || []).reduce((sum, row) => sum + Math.max(0, -toMon(row.net_pnl_after_fees_raw)), 0);
-  let equity = 0, peak = 0, rollingDrawdownMon = 0;
-  for (const row of [...(history.results || [])].reverse()) {
-    equity += toMon(row.net_pnl_after_fees_raw);
-    peak = Math.max(peak, equity);
-    rollingDrawdownMon = Math.max(rollingDrawdownMon, peak - equity);
-  }
+  const rollingDrawdownMon = calculateLeverUpRollingDrawdown(history.results || [], now, 48);
   // Reserve stop-risk for every open or not-yet-reconciled entry. If the intent
   // is still pending/uncertain, keep its risk reserved rather than treating it as zero.
   const aggregateStopRiskMon = (activeEntries.results || []).reduce((sum, row) => {
@@ -483,7 +480,7 @@ async function readPortfolioRiskFromLedger(db, now) {
       return sum + (Number.isFinite(risk) && risk > 0 ? risk : 0);
     } catch { return sum; }
   }, 0);
-  return { dailyRealizedLossMon, rollingDrawdownMon, aggregateStopRiskMon, source: "leverup_settlement_reconciliations+active_execution_intents" };
+  return { dailyRealizedLossMon, rollingDrawdownMon, rollingDrawdownWindowHours: 48, aggregateStopRiskMon, source: "leverup_settlement_reconciliations+active_execution_intents" };
 }
 
 async function fetchLeverUpOnchainOracleUpdate(pairBase, fetchImpl = fetch) {
@@ -780,6 +777,18 @@ export function evaluateLeverUpPositionAction({ position, currentPriceRaw, now =
   if (targetHit) return { action: "MARKET_CLOSE", reason: "TAKE_PROFIT_TRIGGERED" };
   if (expired) return { action: "HOLD", reason: "MAX_HOLD_TIME_REACHED_REVIEW_REQUIRED", maxHoldReached: true };
   return { action: "HOLD", reason: "NO_EXIT_TRIGGER" };
+}
+
+export function selectLeverUpPositionAction({ fixedAction = { action: "HOLD" }, adaptive = { action: "HOLD" }, protectionRepair = null } = {}) {
+  if (fixedAction.action === "MARKET_CLOSE" || fixedAction.action === "PARTIAL_CLOSE") return fixedAction;
+  if (protectionRepair?.action === "MARKET_CLOSE") return protectionRepair;
+  // A confirmed profit-protection reversal is risk-reducing and must not be
+  // suppressed by the ordinary venue minimum-hold review timer.
+  if (adaptive?.action === "MARKET_CLOSE") return adaptive;
+  if (fixedAction.action === "WAIT") return fixedAction;
+  if (protectionRepair) return protectionRepair;
+  if (adaptive?.action === "UPDATE_TP_SL") return adaptive;
+  return fixedAction;
 }
 
 async function readEntryMetadata(db) {
@@ -1310,7 +1319,7 @@ export async function runLeverUpPositionManager({ env, db, now = Date.now(), dep
     // A crossed hard stop is the highest-priority risk action. Do not wait for
     // adaptive history, state storage, Gemini, or any nonessential exit analysis.
     let adaptive = { action: "HOLD", reason: "SKIPPED_HARD_STOP_PRIORITY" };
-    if (fixedAction.action !== "MARKET_CLOSE" && fixedAction.action !== "PARTIAL_CLOSE" && fixedAction.action !== "WAIT") {
+    if (fixedAction.action !== "MARKET_CLOSE" && fixedAction.action !== "PARTIAL_CLOSE") {
       const adaptiveKey = "ciel:leverup:adaptive-exit:v2:" + tradeId;
       let adaptiveState = null;
       try { adaptiveState = await env?.CIEL_STATE?.get(adaptiveKey, "json"); } catch {}
@@ -1344,13 +1353,7 @@ export async function runLeverUpPositionManager({ env, db, now = Date.now(), dep
         : { action: "UPDATE_TP_SL", reason: "ENTRY_PROTECTION_MISMATCH", stopLossRaw: expectedStop.toString(), takeProfitRaw: expectedTarget.toString() };
     }
     // Hard SL/TP triggers outrank repair, adaptive exits and every other review.
-    const action = fixedAction.action === "MARKET_CLOSE" || fixedAction.action === "PARTIAL_CLOSE"
-      ? fixedAction
-      : protectionRepair
-        ? protectionRepair
-        : adaptive.action === "MARKET_CLOSE" || adaptive.action === "UPDATE_TP_SL"
-          ? adaptive
-          : fixedAction;
+    const action = selectLeverUpPositionAction({ fixedAction, adaptive, protectionRepair });
     if (db?.prepare) {
       const stored = await (dependencies.persistFeeSnapshot || persistPositionFeeSnapshot)(db, position, null, 300_000);
       if (stored?.stored) snapshots++;

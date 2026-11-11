@@ -6,6 +6,29 @@ export const LEVERUP_RISK_DEFAULTS = Object.freeze({
   maxRollingDrawdownMon: 20, maxAggregateStopRiskMon: 20,
   feeBufferPct: 25, slippageBufferPct: 25,
 });
+
+// Realized peak-to-trough drawdown is measured over a time window, not the
+// last N trades indefinitely. Older losses age out without raising the cap.
+export function calculateLeverUpRollingDrawdown(rows, now = Date.now(), windowHours = 48) {
+  const hours = Number(windowHours);
+  if (!Number.isFinite(hours) || hours <= 0) throw new Error("LEVERUP_ROLLING_DRAWDOWN_WINDOW_INVALID");
+  const cutoffSeconds = Math.floor(Number(now) / 1000) - hours * 3600;
+  const ordered = (Array.isArray(rows) ? rows : [])
+    .filter((row) => Number(row?.close_time) >= cutoffSeconds)
+    .sort((a, b) => Number(a.close_time) - Number(b.close_time));
+  let equity = 0, peak = 0, drawdown = 0;
+  for (const row of ordered) {
+    let pnl;
+    try { pnl = Number(BigInt(row?.net_pnl_after_fees_raw || "0")) / 1e18; }
+    catch { continue; }
+    if (!Number.isFinite(pnl)) continue;
+    equity += pnl;
+    peak = Math.max(peak, equity);
+    drawdown = Math.max(drawdown, peak - equity);
+  }
+  return drawdown;
+}
+
 const finitePositive = (v) => Number.isFinite(Number(v)) && Number(v) > 0;
 export function calculateLeverUpEntryBudget({ minimumCollateralUsd, minimumNotionalUsd, leverage, monUsdPrice, collateralRatio, openFeeUsd = 0, closeFeeUsd = 0, feeBufferPct = 25, slippageBufferPct = 25 }) {
   if (!finitePositive(leverage) || leverage < 50) throw new Error("LEVERUP_MINIMUM_50X_NOT_MET");

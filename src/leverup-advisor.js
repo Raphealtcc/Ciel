@@ -330,8 +330,9 @@ export function formatLeverUpAdvisorLine(record) {
   const execution = record.coordination || {};
   const intent = execution.intentStatus || record.intentStatus || record.plan?.intentStatus || {};
   const executionStatus = String(execution.status || "").toUpperCase();
-  const failure = execution.reason || execution.lastError || execution.error ||
-    execution.failureReason || intent.failureReason || record.failureReason || "";
+  const failure = execution.reason || (Array.isArray(execution.reasons) ? execution.reasons.join(", ") : "") ||
+    (Array.isArray(execution.risk?.reasons) ? execution.risk.reasons.join(", ") : "") ||
+    execution.lastError || execution.error || execution.failureReason || intent.failureReason || record.failureReason || "";
   if (executionStatus.startsWith("REJECTED") || intent.success === false || record.status === "REJECTED") {
     return "LeverUp: NOT OPENED · " + String(failure || "execution rejected").slice(0, 100);
   }

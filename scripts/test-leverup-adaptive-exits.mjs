@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { evaluateAdaptiveLeverUpExit } from "../src/leverup-adaptive-exits.js";
+import { selectLeverUpPositionAction } from "../src/leverup-coordinator.js";
 
 const long = {
   positionHash: "0x" + "ab".repeat(32), qtyRaw: "1000", entryPriceRaw: "100000000000000000000",
@@ -70,3 +71,21 @@ const nearTargetExit = evaluateAdaptiveLeverUpExit({
 });
 assert.equal(nearTargetExit.action,"MARKET_CLOSE","near-target reversal must bank profit without waiting for exact TP");
 assert.equal(nearTargetExit.reason,"TAKE_PROFIT_APPROACH_REVERSAL");
+
+const nearTargetFast = evaluateAdaptiveLeverUpExit({
+  position: { ...long, takeProfitRaw: String(103n * 10n**18n) },
+  currentPriceRaw: String(1022n * 10n**17n),
+  state: {
+    history: [102.5,102.4,102.3].map((price,i)=>({at:9000+i*60000,price:String(BigInt(Math.round(price*100))*10n**16n)})),
+    highWaterRaw: String(1025n*10n**17n), lowWaterRaw: String(100n*10n**18n),
+  },
+  pairView: { slippageConfig: { onePercentDepthAboveUsdRaw: "100000", onePercentDepthBelowUsdRaw: "100000" } },
+  now: 9000+3*60000,
+});
+assert.equal(nearTargetFast.action,"MARKET_CLOSE","near-target reversal must trigger after three monitor samples");
+assert.equal(nearTargetFast.reason,"TAKE_PROFIT_APPROACH_REVERSAL");
+assert.equal(selectLeverUpPositionAction({
+  fixedAction: { action: "WAIT", reason: "MINIMUM_HOLD_NOT_REACHED" },
+  adaptive: nearTargetFast,
+}).action,"MARKET_CLOSE","profit protection must use the market-close path during minimum hold");
+console.log("PASS: fast near-target reversal exit and minimum-hold priority.");

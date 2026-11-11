@@ -54,6 +54,40 @@ const crowded = evaluateSignalQuality({ ...base, market: { ...base.market, fundi
 assert.equal(crowded.allowed, false);
 assert.ok(crowded.vetoes.includes("DIRECTIONAL_DERIVATIVES_CROWDING"));
 
+const hypeCountertrend = evaluateSignalQuality({
+  ...base,
+  candidate: { ...base.candidate, side: "SHORT", stopPct: 0.40, targetPct: 0.64,
+    strategy: "MULTI_MARKET_LEVEL_SWEEP_RECLAIM", mode: "TREND_HOLD", regime: "LEVEL_REVERSAL",
+    scoreComponents: ["LEVEL_RECLAIM","3M_REVERSAL","5M_CONFIRMATION"] },
+  forecast: { available: true, medianReturnPct: -0.0815, lowerReturnPct: -0.2915, upperReturnPct: 0.1285,
+    components: { return5mPct: -0.2423, return15mPct: -0.1091, return60mPct: 0.0313, trendProjection5mPct: 0.1206 } },
+  market: { ...base.market, orderFlow: { status: "INSUFFICIENT", tradeCount: 52, tradeImbalance: -0.293 } },
+});
+assert.equal(hypeCountertrend.allowed, false);
+assert.ok(hypeCountertrend.vetoes.includes("COUNTERTREND_REVERSAL_LACKS_60M_TREND_BREAK"));
+
+const btcFlowConflict = evaluateSignalQuality({
+  ...base,
+  candidate: { ...base.candidate, side: "SHORT", stopPct: 0.38, targetPct: 0.61,
+    strategy: "MULTI_MARKET_LEVEL_SWEEP_RECLAIM", mode: "TREND_HOLD", regime: "LEVEL_REVERSAL",
+    scoreComponents: ["LEVEL_RECLAIM","3M_REVERSAL","5M_CONFIRMATION"] },
+  forecast: { available: true, medianReturnPct: -0.0535, lowerReturnPct: -0.164, upperReturnPct: 0.057,
+    components: { return5mPct: -0.1376, return15mPct: -0.0292, return60mPct: -0.1864, trendProjection5mPct: 0.0317 } },
+  market: { ...base.market, orderFlow: { status: "INSUFFICIENT", tradeCount: 70, tradeImbalance: 0.9322 } },
+});
+assert.equal(btcFlowConflict.allowed, false);
+assert.ok(btcFlowConflict.vetoes.includes("SIGNED_TRADE_FLOW_STRONGLY_OPPOSES_ENTRY"));
+
+const bnbAlignedDespiteSparseFlow = evaluateSignalQuality({
+  ...base,
+  candidate: { ...base.candidate, symbol: "BNB", side: "LONG" },
+  forecast: { available: true, medianReturnPct: 0.0829, lowerReturnPct: -0.0228, upperReturnPct: 0.1886,
+    components: { return5mPct: 0.1238, return15mPct: 0.2193, return60mPct: 0.5424, trendProjection5mPct: 0.0415 } },
+  market: { ...base.market, orderFlow: { status: "INSUFFICIENT", tradeCount: 1, tradeImbalance: 1 } },
+});
+assert.equal(bnbAlignedDespiteSparseFlow.allowed, true,
+  "sparse order-flow must not block a setup whose independent trend evidence aligns");
+
 const poorExecution = evaluateSignalQuality({ ...base, market: { ...base.market, spreadBps: 19, topDepthUsd: 510, volume: 260000 } });
 assert.ok(poorExecution.score < good.score);
 
