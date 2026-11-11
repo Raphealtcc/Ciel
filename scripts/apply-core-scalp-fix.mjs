@@ -241,10 +241,10 @@ once(
 once(
   "    const priorReview = await env.DB.prepare(\"SELECT created_at_ms FROM advisor_ai_audit WHERE symbol=? AND model!='CIEL Statistical Ensemble v1' AND model!='CIEL deterministic range guard' ORDER BY created_at_ms DESC LIMIT 1\").bind(candidate.symbol).first();",
   `    const priorReviewSql = candidate.mode === "TREND_PULLBACK_ENTRY"
-      ? "SELECT created_at_ms FROM advisor_ai_audit WHERE symbol=? AND model='CIEL deterministic core scalp guard' ORDER BY created_at_ms DESC LIMIT 1"
+      ? "SELECT created_at_ms FROM advisor_ai_audit WHERE symbol=? AND model='CIEL deterministic trend pullback guard' ORDER BY created_at_ms DESC LIMIT 1"
       : candidate.mode === "RANGE_SCALP"
         ? "SELECT created_at_ms FROM advisor_ai_audit WHERE symbol=? AND model='CIEL deterministic range guard' ORDER BY created_at_ms DESC LIMIT 1"
-        : "SELECT created_at_ms FROM advisor_ai_audit WHERE symbol=? AND model NOT IN ('CIEL Statistical Ensemble v1','CIEL Statistical Ensemble v1 + technical gate','CIEL deterministic range guard','CIEL deterministic core scalp guard','CIEL deterministic core trend continuation guard','CIEL deterministic positioning gate','Hyperliquid market-quality gate') ORDER BY created_at_ms DESC LIMIT 1";
+        : "SELECT created_at_ms FROM advisor_ai_audit WHERE symbol=? AND model NOT IN ('CIEL Statistical Ensemble v1','CIEL Statistical Ensemble v1 + technical gate','CIEL deterministic range guard','CIEL deterministic trend pullback guard','CIEL deterministic core trend continuation guard','CIEL deterministic positioning gate','Hyperliquid market-quality gate') ORDER BY created_at_ms DESC LIMIT 1";
     const priorReview = await env.DB.prepare(priorReviewSql).bind(candidate.symbol).first();`,
   "separate scalp and trend review cooldowns and ignore transient pre-review WAIT rows",
 );
@@ -280,7 +280,7 @@ once(
 once(
   'const reviewed = await review(env,candidate,forecast,reviewerMarket,intraday,eventIntel,candleStructure,sizingLimits);',
   `const reviewed = candidate.strategy === "5M_TREND+1M_PULLBACK+RECLAIM"
-      ? { verdict:"WAIT", reason:"Closed 1m/5m pullback, reclaim, volume, freshness and market-quality gates passed; deterministic scalp review avoids extra Gemini calls.", flags:["LOCAL_TREND_PULLBACK_ENTRY"], model:"CIEL deterministic core scalp guard", queries:[], sources:[] }
+      ? { verdict:"WAIT", reason:"Closed 1m/5m pullback, reclaim, volume, freshness and market-quality gates passed; deterministic scalp review avoids extra Gemini calls.", flags:["LOCAL_TREND_PULLBACK_ENTRY"], model:"CIEL deterministic trend pullback guard", queries:[], sources:[] }
       : await review(env,candidate,forecast,reviewerMarket,intraday,eventIntel,candleStructure,sizingLimits);`,
   "use deterministic local review for core scalps without Gemini calls",
 );
@@ -293,7 +293,7 @@ once(
 
 once(
   'const technicalOnly = !hasForecast || reviewed.verdict === "WAIT" && reviewed.model !== "CIEL deterministic range guard";',
-  'const technicalOnly = !hasForecast || reviewed.verdict === "WAIT" && !["CIEL deterministic range guard","CIEL deterministic core scalp guard"].includes(reviewed.model);',
+  'const technicalOnly = !hasForecast || reviewed.verdict === "WAIT" && !["CIEL deterministic range guard","CIEL deterministic trend pullback guard"].includes(reviewed.model);',
   "label core scalp confirmation correctly",
 );
 
@@ -311,7 +311,7 @@ once(
 
 once(
   'const localRangeReview = r.model === "CIEL deterministic range guard";',
-  'const localRangeReview = r.model === "CIEL deterministic range guard";\n  const localCoreScalpReview = r.model === "CIEL deterministic core scalp guard";',
+  'const localRangeReview = r.model === "CIEL deterministic range guard";\n  const localCoreScalpReview = r.model === "CIEL deterministic trend pullback guard";',
   "recognize local core scalp confirmation",
 );
 
@@ -341,7 +341,7 @@ once(
 
 once(
   'const reviewSummary = reviewed.model === "CIEL deterministic range guard" ? "Local deterministic range review: " + reviewed.reason : "Gemini " + reviewed.verdict + ": " + reviewed.reason;',
-  'const reviewSummary = reviewed.model === "CIEL deterministic core scalp guard" || reviewed.model === "CIEL deterministic range guard" ? "Local deterministic review: " + reviewed.reason : "Gemini " + reviewed.verdict + ": " + reviewed.reason;',
+  'const reviewSummary = reviewed.model === "CIEL deterministic trend pullback guard" || reviewed.model === "CIEL deterministic range guard" ? "Local deterministic review: " + reviewed.reason : "Gemini " + reviewed.verdict + ": " + reviewed.reason;',
   "record deterministic core scalp review in proposal rationale",
 );
 
