@@ -30,7 +30,7 @@ export async function reviewLeverUpPositionWithGemini({ env, position, currentPr
   const keys = parseGeminiApiKeys(env?.GEMINI_API_KEYS);
   const hash = String(position?.positionHash || "").toLowerCase();
   const storage = env?.CIEL_STATE;
-  const context = { now, model: env?.GEMINI_MODEL || "gemini-2.5-flash", configuredKeyCount: keys.length, symbol: position?.symbol || position?.pairSymbol || "UNKNOWN", positionHash: hash };
+  const context = { now, model: env?.GEMINI_MODEL || "gemini-2.5-flash", configuredKeyCount: keys.length, symbol: position?.symbol || position?.pairSymbol || position?.purgeSymbol || "UNKNOWN", positionHash: hash };
   if (!keys.length) {
     const skipped = { status: "SKIPPED_NO_KEYS", action: "HOLD", confidence: 0, configuredKeyCount: 0 };
     await persistGeminiReview(storage, skipped, context);
@@ -41,13 +41,12 @@ export async function reviewLeverUpPositionWithGemini({ env, position, currentPr
     await persistGeminiReview(storage, skipped, context);
     return skipped;
   }
-  const cooldownKey = "ciel:leverup:gemini-review:v1:" + hash;
+  const cooldownKey = "ciel:leverup:gemini-review:cooldown:v1:" + hash;
   if (storage?.get) {
     const last = Number(await storage.get(cooldownKey).catch(() => "0"));
     const cooldownMs = Math.max(60_000, Math.min(10 * 60_000, Number(env?.GEMINI_POSITION_REVIEW_COOLDOWN_MS || 120_000)));
     if (last > 0 && now - last < cooldownMs) {
       const cooldown = { status: "COOLDOWN", action: "HOLD", confidence: 0, retryAt: last + cooldownMs, configuredKeyCount: keys.length, model: String(env?.GEMINI_MODEL || "gemini-2.5-flash").trim() };
-      await persistGeminiReview(storage, cooldown, context);
       return cooldown;
     }
     await storage.put(cooldownKey, String(now), { expirationTtl: 3600 }).catch(() => void 0);

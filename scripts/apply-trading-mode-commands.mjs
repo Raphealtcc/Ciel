@@ -14,6 +14,9 @@ const geminiStatusHelper = `async function handleGeminiStatusCommand(env, comman
     env?.CIEL_STATE?.get("ciel:leverup:position-manager:last-run", "json").catch(() => null)
   ]);
   const time = (value) => Number(value) > 0 ? new Date(Number(value)).toISOString().replace("T", " ").replace(".000Z", " UTC") : "not recorded";
+  const age = (value) => Number(value) > 0 ? Math.max(0, Math.round((Date.now() - Number(value)) / 60000)) + " min ago" : "unknown";
+  const reviewAge = Number(lastReview?.at) > 0 ? Date.now() - Number(lastReview.at) : Infinity;
+  const managerAge = Number(manager?.at) > 0 ? Date.now() - Number(manager.at) : Infinity;
   const counts = manager?.aiReviewStatusCounts && typeof manager.aiReviewStatusCounts === "object"
     ? Object.entries(manager.aiReviewStatusCounts).map(([name, count]) => name + "=" + count).join(", ") : "not recorded";
   const failures = Array.isArray(manager?.aiReviewFailures) ? manager.aiReviewFailures.slice(0, 3) : [];
@@ -21,14 +24,17 @@ const geminiStatusHelper = `async function handleGeminiStatusCommand(env, comman
     "GEMINI POSITION REVIEW STATUS",
     "Model: " + String(env.GEMINI_MODEL || "gemini-2.5-flash"),
     "Configured API keys: " + keys.length + " (values hidden)",
-    "Last review attempt: " + time(lastReview?.at),
+    "Last Gemini review: " + time(lastReview?.at) + " (" + age(lastReview?.at) + ")",
+    "Review freshness: " + (reviewAge <= 5 * 60 * 1000 ? "FRESH" : (Number.isFinite(reviewAge) ? "STALE" : "NO REVIEW RECORDED")),
     "Last result: " + String(lastReview?.status || "NOT YET RECORDED"),
     lastReview?.symbol ? "Position: " + String(lastReview.symbol) + " " + String(lastReview.positionHash || "").slice(0, 12) : "",
     lastReview?.status === "REVIEWED" ? "Decision: " + String(lastReview.action || "HOLD") + " · confidence " + String(lastReview.confidence || 0) + "/100" : "",
     lastReview?.keyIndexUsed ? "Key used: " + String(lastReview.keyIndexUsed) + "/" + String(lastReview.configuredKeyCount || keys.length) : "",
     lastReview?.reason ? "Reason: " + String(lastReview.reason).slice(0, 180) : "",
     lastReview?.retryAt ? "Cooldown until: " + time(lastReview.retryAt) : "",
-    "Last manager run: " + time(manager?.at),
+    "Last manager run: " + time(manager?.at) + " (" + age(manager?.at) + ")",
+    "Manager heartbeat: " + (managerAge <= 2 * 60 * 1000 ? "ACTIVE" : (Number.isFinite(managerAge) ? "STALE" : "NOT RECORDED")),
+    "Open positions detected: " + String(manager?.openPositionCount ?? "unknown"),
     "Positions checked: " + String(manager?.checked ?? "unknown"),
     "Successful AI reviews in last run: " + String(manager?.aiReviewed ?? "unknown"),
     "AI status counts in last run: " + counts,

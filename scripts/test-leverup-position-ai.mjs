@@ -40,6 +40,15 @@ assert.equal(savedReview.action, "REVERSE");
 assert.equal(savedReview.configuredKeyCount, 2);
 assert.equal(savedReview.keyIndexUsed, 2);
 assert.equal(savedReview.symbol, "UNKNOWN");
+const cooldownResult = await reviewLeverUpPositionWithGemini({
+  env: { GEMINI_API_KEYS: "bad-key,good-key", GEMINI_MODEL: "test-model", CIEL_STATE: storage },
+  position: { positionHash: "0x" + "ab".repeat(32), isLong: true },
+  currentPriceRaw: "111", now: 20_000,
+  dependencies: { fetchImpl: async () => { calls++; throw new Error("should not call during cooldown"); } }
+});
+assert.equal(cooldownResult.status, "COOLDOWN");
+assert.equal(calls, 2);
+assert.ok(writes.has("ciel:leverup:gemini-review:cooldown:v1:" + "0x" + "ab".repeat(32)));
 
 let failedCalls = 0;
 const exhausted = await reviewLeverUpPositionWithGemini({
