@@ -122,3 +122,5 @@ assert.ok(source.includes("LOCAL_TREND_BREAKOUT_RETEST"));
 assert.ok(!source.includes('paperStorage.put("ciel:adaptive-learning:v1").bind'));
 
 console.log("PASS: bounded adaptive learning, core-market scheduling, trend-only /profits performance, and 5m breakout-retest long/short gates.");
+
+assert.ok(source.includes("const baseSignals = [analyzeCandleLevelReversal"), "both base signal generators must be evaluated independently");

@@ -24,6 +24,8 @@ assert.ok(source.includes('interval: "1m"'));
 assert.ok(source.includes('mode:"TREND_HOLD",holdMinutes:180'));
 assert.ok(!source.includes('mode:"RANGE_SCALP"'), "range strategy cannot generate new entries");
 assert.ok(!source.includes("function analyzeMicroMomentumContinuation"), "micro-momentum breakout strategy is removed");
+assert.ok(source.includes("const baseSignals = [analyzeCandleLevelReversal"), "level-reversal and trend analyzers must run independently; a truthy first result must not hide the second");
+assert.ok(source.includes("latest.v>=averageVolume*0.65"), "trend pullback volume confirmation should not discard every moderate-volume reclaim");
 assert.ok(source.includes('"5M_TREND_FILTER","1M_PULLBACK","1M_RECLAIM","VOLUME_CONFIRMATION"'));
 assert.ok(source.includes('requiredPaperMargin === null'));
 assert.ok(source.includes('candidate.strategy === "5M_TREND+1M_PULLBACK+RECLAIM"'));

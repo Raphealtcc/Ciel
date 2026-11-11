@@ -19,8 +19,15 @@ assert.ok(good.score >= good.threshold);
 assert.match(good.interpretation, /not a win probability/i);
 
 const missingForecast = evaluateSignalQuality({ ...base, forecast: { available: false, medianReturnPct: null } });
-assert.equal(missingForecast.allowed, false);
-assert.ok(missingForecast.vetoes.includes("STATISTICAL_FORECAST_UNAVAILABLE"));
+assert.equal(missingForecast.allowed, true, "a missing statistical forecast should reduce confidence, not suppress a valid technical setup");
+assert.ok(missingForecast.score < good.score);
+
+const missingDerivatives = evaluateSignalQuality({ ...base, market: { spreadBps: 3, topDepthUsd: 8000, volume: 5000000 } });
+assert.equal(missingDerivatives.allowed, true, "missing derivatives context should be a score penalty, not an automatic rejection");
+
+const uncertainForecast = evaluateSignalQuality({ ...base, forecast: { ...base.forecast, lowerReturnPct: -0.12, upperReturnPct: 0.35 } });
+assert.equal(uncertainForecast.allowed, true, "a forecast interval crossing zero is uncertainty, not a veto");
+assert.ok(uncertainForecast.forecastPenalty >= 4);
 
 const opposingForecast = evaluateSignalQuality({ ...base, forecast: { available: true, medianReturnPct: -0.3 } });
 assert.equal(opposingForecast.allowed, false);
@@ -31,8 +38,9 @@ const losingStrategyHistory = evaluateSignalQuality({
   candidate: { ...base.candidate, holdMinutes: 60 },
   strategyStats: { "5M_TREND_CONTINUATION+BREAKOUT_RETEST": { sampleCount: 30, expectancyR: 0.04, winRate: 0.31, horizonMinutes: 60 } },
 });
-assert.equal(losingStrategyHistory.allowed, false);
-assert.ok(losingStrategyHistory.vetoes.includes("STRATEGY_SHADOW_EXPECTANCY_NOT_POSITIVE"));
+assert.equal(losingStrategyHistory.allowed, true, "weak historical expectancy must rank a strategy lower, not disable it wholesale");
+assert.ok(losingStrategyHistory.score < good.score);
+assert.equal(losingStrategyHistory.vetoes.includes("STRATEGY_SHADOW_EXPECTANCY_NOT_POSITIVE"), false);
 
 const shortHorizonShadowDoesNotVetoTrendHold = evaluateSignalQuality({
   ...base,
@@ -52,12 +60,12 @@ const matching180mWeakShadow = evaluateSignalQuality({
     scoreComponents: ["LEVEL_RECLAIM","3M_REVERSAL","5M_CONFIRMATION"] },
   strategyStats: { "MULTI_MARKET_LEVEL_SWEEP_RECLAIM": { sampleCount: 625, expectancyR: 0.061, winRate: 0.5248, horizonMinutes: 180 } },
 });
-assert.equal(matching180mWeakShadow.allowed, false);
-assert.ok(matching180mWeakShadow.vetoes.includes("STRATEGY_SHADOW_EXPECTANCY_NOT_POSITIVE"));
+assert.equal(matching180mWeakShadow.allowed, true, "matching-horizon shadow weakness must not hard-disable all setups");
+assert.ok(matching180mWeakShadow.score < shortHorizonShadowDoesNotVetoTrendHold.score);
 
 const weakTrendForecast = evaluateSignalQuality({ ...base, forecast: { available: true, medianReturnPct: 0.03 } });
-assert.equal(weakTrendForecast.allowed, false);
-assert.ok(weakTrendForecast.vetoes.includes("FORECAST_TOO_WEAK_FOR_TREND_ENTRY"));
+assert.equal(weakTrendForecast.allowed, true, "neutral forecast should not erase independent trend structure");
+assert.ok(weakTrendForecast.score < good.score);
 
 const crowded = evaluateSignalQuality({ ...base, market: { ...base.market, funding: 0.00008, premiumBps: 14 } });
 assert.equal(crowded.allowed, false);

@@ -149,7 +149,7 @@ const analyzer = `function analyzeTrendPullbackEntry(symbol, oneMinuteRows, five
   const atr=ranges.reduce((a,b)=>a+b,0)/Math.max(1,ranges.length);
   if (!(atr>0)) return null;
   const averageVolume=m1.slice(-21,-1).reduce((sum,c)=>sum+c.v,0)/20;
-  const volumeOk=averageVolume<=0 || latest.v>=averageVolume*0.85;
+  const volumeOk=averageVolume<=0 || latest.v>=averageVolume*0.65;
   if (!volumeOk) return null;
   let side=null, pivot=0;
   if (trendUp) {
