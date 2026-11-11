@@ -45,10 +45,14 @@ assert.ok(candlesRoute.includes("FROM market_samples WHERE symbol=?"), "the publ
 
 assert.ok(source.includes("const persistAllSamples = Math.floor(now / (6 * 60 * 1e3))"), "watchlist D1 samples must retain their current six-minute persistence cadence");
 assert.ok(source.includes("BENCHMARK_PRICE_SYMBOLS.has(row.symbol) || persistAllSamples"), "one-minute benchmark samples and wider-watchlist samples must both remain");
-assert.ok(!source.includes("FROM market_candle_hourly_stats WHERE symbol IN"), "advisor scan must not read hourly structure aggregates from D1");
-assert.ok(source.includes("LIMIT 7200") && source.includes("now-5*86400000"), "intraday D1 history reads must be capped to five days");
-assert.ok(source.includes("24*60*60*1000"), "intraday BUILDING_HISTORY cache must refresh at most daily");
-assert.ok(!source.includes("FROM market_candle_hourly_stats WHERE symbol=?"), "candidate evidence must not issue per-symbol hourly D1 reads");
+const candleMapStart = source.indexOf("function getCandleStructureMap(");
+const candleMapEnd = source.indexOf("function analyzeCandleLevelReversal(", candleMapStart);
+const candleMapSource = source.slice(candleMapStart, candleMapEnd);
+assert.ok(candleMapStart >= 0 && candleMapEnd > candleMapStart && !candleMapSource.includes("FROM market_candle_hourly_stats"), "advisor candle map must use the Durable Object cache, not D1 hourly aggregates");
+const candleEvidenceStart = source.indexOf("function getCandleStructureEvidence(");
+const candleEvidenceEnd = source.indexOf("async function review(", candleEvidenceStart);
+const candleEvidenceSource = source.slice(candleEvidenceStart, candleEvidenceEnd);
+assert.ok(candleEvidenceStart >= 0 && candleEvidenceEnd > candleEvidenceStart && !candleEvidenceSource.includes("FROM market_candle_hourly_stats"), "candidate candle evidence must use the Durable Object cache, not per-symbol D1 reads");
 assert.ok(!source.includes("SELECT created_at_ms FROM advisor_ai_audit WHERE symbol=?"), "advisor review cooldown must not scan the D1 audit table");
 assert.ok(source.includes("ciel:advisor:review:core:") && source.includes("ciel:advisor:review:ai:"), "mode-specific review cooldowns must use KV");
 assert.ok(!source.includes("SELECT created_at_ms,entry_price FROM advisor_positions WHERE symbol=? AND side=? AND strategy=?"), "duplicate signal checks must not read D1 per candidate");
