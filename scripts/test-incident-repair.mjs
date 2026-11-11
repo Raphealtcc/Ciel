@@ -10,6 +10,8 @@ assert.ok(worker.includes(".slice(-240)"));
 assert.ok(worker.includes("VENUE_MAX_LEVERAGE_BELOW_CONFIGURED_MINIMUM"));
 assert.ok(worker.includes("oneMinuteCandleCounts"));
 assert.ok(worker.includes("reviewCompletedAt: now"));
+assert.ok(worker.includes("ciel:api:diagnostics:table-stats:v1"));
+assert.ok(worker.includes("statsCacheNow - Number(cachedStats.at || 0) < 10 * 60 * 1e3"));
 assert.ok(worker.includes("this.coreScalpCandles = values[23] || {};"));
 const scalpWriter = worker.slice(worker.indexOf("async writeCoreScalpCandles(now)"), worker.indexOf("async writeHistory(rows, alerts, now)"));
 assert.ok(scalpWriter.includes("filter((symbol) => Number(LEVERUP_MARKET_MAX_LEVERAGE[symbol]) >= minLeverage)"));
