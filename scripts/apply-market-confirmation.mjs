@@ -30,15 +30,15 @@ once(
 );
 once(
   '          // Temporary isolation: keep one allMids stream while diagnosing upstream 1006 closes.\n          // REST order-book fallback remains enabled independently.',
-  '          // Keep order-flow subscriptions restricted to the four active markets.\n          for (const symbol of ["BTC", "ETH", "SOL", "BNB"]) {\n            socket.send(JSON.stringify({ method: "subscribe", subscription: { type: "l2Book", coin: symbol } }));\n            socket.send(JSON.stringify({ method: "subscribe", subscription: { type: "trades", coin: symbol } }));\n          }',
-  "subscribe to L2 and trades for BTC, ETH, SOL and BNB only"
+  '          // Keep order-flow subscriptions restricted to the six enabled markets.\n          for (const symbol of ["BTC", "ETH", "SOL", "BNB", "HYPE", "ZEC"]) {\n            socket.send(JSON.stringify({ method: "subscribe", subscription: { type: "l2Book", coin: symbol } }));\n            socket.send(JSON.stringify({ method: "subscribe", subscription: { type: "trades", coin: symbol } }));\n          }',
+  "subscribe to L2 and trades for BTC, ETH, SOL, BNB, HYPE and ZEC"
 );
 
 const tradeAnchor = "    const data = packet.data;\n    if (packet.channel === \"candle\") {";
 const tradeHandler = `    const data = packet.data;
     if (packet.channel === "trades") {
       const updates = Array.isArray(data) ? data : [data];
-      const symbols = new Set(["BTC", "ETH", "SOL", "BNB"]);
+      const symbols = new Set(["BTC", "ETH", "SOL", "BNB", "HYPE", "ZEC"]);
       for (const trade of updates) {
         const symbol = String(trade?.coin || "").trim().toUpperCase();
         if (!symbols.has(symbol)) continue;
@@ -56,7 +56,7 @@ once(tradeAnchor, tradeHandler, "collect signed trade notional for independent o
 
 once(
   "      this.latestBooks[symbol] = snapshot;\n      this.bookLastWrite[symbol] = now;",
-  "      this.latestBooks[symbol] = snapshot;\n      if ([\"BTC\",\"ETH\",\"SOL\",\"BNB\"].includes(symbol)) {\n        this.orderFlow[symbol] = appendBookFlowSnapshot(this.orderFlow[symbol], snapshot, now);\n        if (now - Number(this.orderFlowLastPersistAt || 0) >= 10000) {\n          this.orderFlowLastPersistAt = now;\n          await this.state.storage.put(\"orderFlow\", this.orderFlow).catch(() => void 0);\n        }\n      }\n      this.bookLastWrite[symbol] = now;",
+  "      this.latestBooks[symbol] = snapshot;\n      if ([\"BTC\",\"ETH\",\"SOL\",\"BNB\",\"HYPE\",\"ZEC\"].includes(symbol)) {\n        this.orderFlow[symbol] = appendBookFlowSnapshot(this.orderFlow[symbol], snapshot, now);\n        if (now - Number(this.orderFlowLastPersistAt || 0) >= 10000) {\n          this.orderFlowLastPersistAt = now;\n          await this.state.storage.put(\"orderFlow\", this.orderFlow).catch(() => void 0);\n        }\n      }\n      this.bookLastWrite[symbol] = now;",
   "calculate best-quote OFI from consecutive L2 snapshots and persist at most every 10 seconds"
 );
 
@@ -85,8 +85,8 @@ const reviewerReplacement = `    const reviewerMarket = { ...quality.market, fun
     candidate.orderFlow = reviewerMarket.orderFlow;`;
 once(reviewerAnchor, reviewerReplacement, "attach independent breadth and order-flow observations to the existing audit record and proposal");
 
-const telegramAnchor = '"Signal quality: " + Number(s?.signalQualityScore || 0) + "/100 · evidence score, not win probability",';
-const telegramReplacement = `"Signal quality: " + Number(s?.signalQualityScore || 0) + "/100 · evidence score, not win probability",
+const telegramAnchor = '"Signal quality: " + Number(s?.signalQualityScore || 0) + "/100 Â· evidence score, not win probability",';
+const telegramReplacement = `"Signal quality: " + Number(s?.signalQualityScore || 0) + "/100 Â· evidence score, not win probability",
 "Market breadth (research only): " + (s?.marketBreadth?.status === "READY" ? Number(s.marketBreadth.up5Pct).toFixed(0) + "% up 5m / " + Number(s.marketBreadth.up15Pct).toFixed(0) + "% up 15m (n=" + s.marketBreadth.n15 + ")" : "insufficient cross-asset history"),
 "Persistent flow (research only): " + (s?.orderFlow?.status || "INSUFFICIENT") + (s?.orderFlow?.direction ? " " + s.orderFlow.direction : ""),`;
 once(telegramAnchor, telegramReplacement, "show the two shadow research measurements without changing entry eligibility");

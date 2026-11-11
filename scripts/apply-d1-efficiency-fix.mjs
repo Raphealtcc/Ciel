@@ -176,7 +176,7 @@ replaceOnceInSource(
   'now - 24 * 60 * 60 * 1e3',
   "bootstrap a full 24-hour 5m candle window"
 );
-source = source.replaceAll('["BTC","ETH","SOL","BNB","HYPE","ZEC"].includes(symbol)', '["BTC","ETH","SOL","BNB"].includes(symbol)');
+source = source.replaceAll('["BTC","ETH","SOL","BNB","HYPE","ZEC"].includes(symbol)', '["BTC","ETH","SOL","BNB","HYPE","ZEC"].includes(symbol)');
 replaceOnceInSource(
   'var CANDLE_HISTORY_SYMBOLS = /* @__PURE__ */ new Set(["BTC", "ETH", "MON", "SOL"]);',
   'var CANDLE_HISTORY_SYMBOLS = /* @__PURE__ */ new Set(["BTC", "ETH", "MON", "SOL", "BNB", "HYPE", "ZEC"]);',
