@@ -32,6 +32,11 @@ assert.ok(advisor.includes("now - latest > 7 * 60 * 1000"), "5m D1 fallback must
 assert.ok(d1FallbackGuard > 0 && d1FallbackQuery > d1FallbackGuard, "5m candle history may be read from D1 only inside the missing/stale-cache fallback, never unconditionally each minute");
 
 assert.ok(source.includes("this.liveMarketInputs(now), this.state.storage, this.coreScalpCandles, this.coreTrendCandles"), "the feed must pass both persistent candle caches to the advisor");
+const scheduledStart = source.indexOf("async scheduled(_event, env, ctx)");
+const scheduledEnd = source.indexOf("\\n  }\\n};", scheduledStart);
+const scheduled = source.slice(scheduledStart, scheduledEnd);
+assert.ok(scheduled.includes('feedStub2(env).fetch("https://feed/ensure"'), "the Hyperliquid signal feed must be ensured by cron");
+assert.ok(!scheduled.includes("if (liveMode) return;"), "live trading must not disable the Hyperliquid signal feed");
 assert.ok(source.includes('this.state.storage.get("coreTrendCandles")'), "the DO must restore the 5m cache");
 assert.ok(source.includes('this.state.storage.put("coreTrendCandles", this.coreTrendCandles)'), "the DO must persist the 5m cache");
 assert.ok(source.includes("coreTrendCandles?.[symbol]"), "5m candles must be served from DO state");

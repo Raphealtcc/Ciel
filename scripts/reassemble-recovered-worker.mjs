@@ -13,7 +13,7 @@ const modules = [
   ["advisor.js", 125977],
   ["telegram.js", 13973],
   ["hyperliquid_feed.js", 50261],
-  ["index.js", 26321],
+  ["index.js", 26022],
 ];
 
 await mkdir(path.join(output, "src"), { recursive: true });
