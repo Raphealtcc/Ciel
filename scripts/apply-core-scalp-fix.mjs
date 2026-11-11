@@ -244,7 +244,7 @@ once(
       ? "SELECT created_at_ms FROM advisor_ai_audit WHERE symbol=? AND model='CIEL deterministic core scalp guard' ORDER BY created_at_ms DESC LIMIT 1"
       : candidate.mode === "RANGE_SCALP"
         ? "SELECT created_at_ms FROM advisor_ai_audit WHERE symbol=? AND model='CIEL deterministic range guard' ORDER BY created_at_ms DESC LIMIT 1"
-        : "SELECT created_at_ms FROM advisor_ai_audit WHERE symbol=? AND model NOT IN ('CIEL Statistical Ensemble v1','CIEL Statistical Ensemble v1 + technical gate','CIEL deterministic range guard','CIEL deterministic core scalp guard','CIEL deterministic positioning gate','Hyperliquid market-quality gate') ORDER BY created_at_ms DESC LIMIT 1";
+        : "SELECT created_at_ms FROM advisor_ai_audit WHERE symbol=? AND model NOT IN ('CIEL Statistical Ensemble v1','CIEL Statistical Ensemble v1 + technical gate','CIEL deterministic range guard','CIEL deterministic core scalp guard','CIEL deterministic core trend continuation guard','CIEL deterministic positioning gate','Hyperliquid market-quality gate') ORDER BY created_at_ms DESC LIMIT 1";
     const priorReview = await env.DB.prepare(priorReviewSql).bind(candidate.symbol).first();`,
   "separate scalp and trend review cooldowns and ignore transient pre-review WAIT rows",
 );
