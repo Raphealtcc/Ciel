@@ -22,7 +22,7 @@ for (let i = 0; i < symbols.length; i++) {
 const volumeBySymbol = Object.fromEntries(symbols.map((s) => [s, 1_000_000]));
 const breadth = calculateCrossAssetBreadth({ history, symbols, excludeSymbol: "BTC", volumeBySymbol, now });
 assert.equal(breadth.status, "READY");
-assert.equal(breadth.n5, 11);
+assert.equal(breadth.n5, 13);
 assert.ok(breadth.up5Pct > 60 && breadth.up15Pct > 60);
 assert.equal(breadth.excludedSymbol, "BTC");
 

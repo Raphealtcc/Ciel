@@ -76,5 +76,5 @@ const outcomeEnd = source.indexOf("\n  }\n};", outcomeStart);
 assert.ok(outcomeStart >= 0 && outcomeEnd > outcomeStart, "alert outcome updater must exist");
 const outcomeUpdater = source.slice(outcomeStart, outcomeEnd);
 assert.ok(outcomeUpdater.includes("lastAlertOutcomeUpdateAt"), "alert analytics must be throttled durably in DO storage");
-assert.ok(outcomeUpdater.includes("now - lastUpdate < 15 * 60 * 1e3"), "alert analytics D1 reads must be at most once every five minutes");
-assert.ok(outcomeUpdater.includes("LIMIT 20"), "alert analytics batches must be bounded to 30 rows");
+assert.ok(outcomeUpdater.includes("now - lastUpdate < 15 * 60 * 1e3"), "alert analytics D1 reads must be at most once every fifteen minutes");
+assert.ok(outcomeUpdater.includes("LIMIT 20"), "alert analytics batches must be bounded to 20 rows");
