@@ -980,12 +980,16 @@ async function reconcileClosedSettlements({ env, db, now, dependencies = {} }) {
       marginTokenDecimals: 18, marginTokenPriceUsd: null,
     });
     const entryOpenedAt = Number(entry?.executedAt || entry?.createdAt || 0);
-    const closeIntent = await db.prepare(`SELECT signal_id,payload_json,status FROM leverup_execution_intents
-      WHERE action IN (1,9) AND (
-        json_extract(payload_json, '$.tradeId') = ?
-        OR (? > 0 AND lower(json_extract(payload_json, '$.positionHash')) = ? AND created_at_ms >= ?)
-      ) ORDER BY created_at_ms DESC LIMIT 1`)
-      .bind(tradeId, entryOpenedAt, positionHash, entryOpenedAt).first().catch(() => null);
+    const closeIntentByTrade = await db.prepare(`SELECT signal_id,payload_json,status FROM leverup_execution_intents
+      WHERE action IN (1,9) AND json_extract(payload_json, '$.tradeId') = ?
+      ORDER BY created_at_ms DESC LIMIT 1`)
+      .bind(tradeId).first().catch(() => null);
+    const closeIntent = closeIntentByTrade || (entryOpenedAt > 0
+      ? await db.prepare(`SELECT signal_id,payload_json,status FROM leverup_execution_intents
+          WHERE action IN (1,9) AND lower(json_extract(payload_json, '$.positionHash')) = ? AND created_at_ms >= ?
+          ORDER BY created_at_ms DESC LIMIT 1`)
+          .bind(positionHash, entryOpenedAt).first().catch(() => null)
+      : null);
     let closeIntentPayload = {};
     try { closeIntentPayload = JSON.parse(closeIntent?.payload_json || "{}"); } catch {}
     const exchangeCloseReason = closed.closeInfo?.reason || closed.closeInfo?.closeReason || closed.closeInfo?.closeType || closed.closeInfo?.trigger || closed.closeInfo?.exitReason;
@@ -1005,8 +1009,21 @@ async function reconcileClosedSettlements({ env, db, now, dependencies = {} }) {
       reconciled++;
     } else {
       // Backfill the original settlement row with its signal and close reason.
-      await db.prepare("UPDATE leverup_trade_settlements SET source_json = json_patch(COALESCE(source_json, '{}'), ?) WHERE trade_id = ?")
-        .bind(JSON.stringify({ intentSignalId: entry?.signalId || null, closeIntentSignalId: closeIntent?.signal_id || null, closeIntentStatus: closeIntent?.status || null, closeReason }), tradeId).run();
+      const settlementMetadataPatch = JSON.stringify({
+        intentSignalId: entry?.signalId || null,
+        closeIntentSignalId: closeIntent?.signal_id || null,
+        closeIntentStatus: closeIntent?.status || null,
+        closeReason,
+      });
+      await db.prepare(`UPDATE leverup_trade_settlements
+        SET source_json = json_patch(COALESCE(source_json, '{}'), ?)
+        WHERE trade_id = ?
+          AND (
+            json_extract(COALESCE(source_json, '{}'), '$.intentSignalId') IS NOT json_extract(?, '$.intentSignalId')
+            OR json_extract(COALESCE(source_json, '{}'), '$.closeIntentSignalId') IS NOT json_extract(?, '$.closeIntentSignalId')
+            OR json_extract(COALESCE(source_json, '{}'), '$.closeIntentStatus') IS NOT json_extract(?, '$.closeIntentStatus')
+            OR json_extract(COALESCE(source_json, '{}'), '$.closeReason') IS NOT json_extract(?, '$.closeReason')
+          )`).bind(settlementMetadataPatch, tradeId, settlementMetadataPatch, settlementMetadataPatch, settlementMetadataPatch, settlementMetadataPatch).run();
     }
     // Settlement persistence and Telegram delivery are separate idempotent steps.
     // A prior DB write must not suppress a notification that failed or was skipped.
@@ -1228,7 +1245,7 @@ export async function runLeverUpPositionManager({ env, db, now = Date.now(), dep
   // Release an entry slot only after the on-chain pair read confirms its position is gone.
   for (const entry of entries) {
     const hash = String(entry.positionHash || "").toLowerCase();
-    if (!['EXECUTED','RECONCILED'].includes(entry.intentStatus) || !/^0x[0-9a-f]{64}$/.test(hash) || positionMap.has(hash)) continue;
+    if (!['EXECUTED','RECONCILED'].includes(entry.intentStatus) || !/^0x[0-9a-f]{64}$/.test(hash) || positionMap.has(hash) || entry.closeReconciledByOnchainPositionRead === true) continue;
     await updateIntent(db, entry.signalId, "RECONCILED", {
       payload: { ...entry, closedAt: now, closeReconciledByOnchainPositionRead: true },
     });
