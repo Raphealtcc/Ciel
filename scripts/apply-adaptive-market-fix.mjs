@@ -168,31 +168,18 @@ once("const strategyStats = { rangeScalp: modeStats(\"RANGE_SCALP\"), trendHold:
 
 once("lines.push(\"\", \"STRATEGY PERFORMANCE (CLOSED PAPER TRADES)\", \"Range scalps: \" + describeMode(data.strategyStats.rangeScalp), \"Trend holds: \" + describeMode(data.strategyStats.trendHold));","lines.push(\"\", \"STRATEGY PERFORMANCE (CLOSED PAPER TRADES)\", \"Core pullback scalps: \" + describeMode(data.strategyStats.corePullbackScalp), \"5m trend continuation: \" + describeMode(data.strategyStats.coreTrendContinuation), \"Trend holds: \" + describeMode(data.strategyStats.trendHold), \"Range scalps: \" + describeMode(data.strategyStats.rangeScalp));","print all four strategy buckets in /profits");
 once(
-  'mode: params.mode === "TREND_PULLBACK_ENTRY" ? "TREND_PULLBACK_ENTRY" : params.mode === "RANGE_SCALP" ? "RANGE_SCALP" : "TREND_HOLD",',
-  'mode: params.mode === "TREND_PULLBACK_ENTRY" ? "TREND_PULLBACK_ENTRY" : params.mode === "TREND_BREAKOUT_RETEST" ? "TREND_BREAKOUT_RETEST" : params.mode === "RANGE_SCALP" ? "RANGE_SCALP" : "TREND_HOLD",',
-  "persist 5m trend-continuation paper trades under their own strategy mode",
-);
-once(
-  '180), mode:candidate.mode',
-  'candidate.strategy === "5M_TREND_CONTINUATION+BREAKOUT_RETEST" ? 60 : candidate.mode === "RANGE_SCALP" ? 12 : 180), mode:candidate.mode',
-  "retain the 60-minute continuation hold in paper execution",
-);
-
-once("(s.mode === \"TREND_PULLBACK_ENTRY\" ? \"CORE PULLBACK SCALP\" : s.mode === \"RANGE_SCALP\" ? \"RANGE SCALP\" : \"TREND HOLD\")","(s.mode === \"TREND_PULLBACK_ENTRY\" ? \"CORE PULLBACK SCALP\" : s.mode === \"TREND_BREAKOUT_RETEST\" ? \"5M TREND CONTINUATION\" : s.mode === \"RANGE_SCALP\" ? \"RANGE SCALP\" : \"TREND HOLD\")","label 5m continuation correctly in the setup message");
-
-once(
   'const reviewed = candidate.strategy === "5M_TREND+1M_PULLBACK+RECLAIM"',
-  'const reviewed = candidate.mode === "TREND_BREAKOUT_RETEST"\n      ? { verdict:"WAIT", reason:"Closed 5m EMA trend, breakout, retest, volume, freshness and market-quality gates passed; deterministic continuation review avoids duplicate Gemini calls.", flags:["LOCAL_TREND_BREAKOUT_RETEST"], model:"CIEL deterministic core trend continuation guard", queries:[], sources:[] }\n      : candidate.mode === "TREND_PULLBACK_ENTRY"',
-  "use deterministic local review for validated 5m continuation candidates",
+  'const reviewed = candidate.strategy === "5M_TREND_CONTINUATION+BREAKOUT_RETEST"\n      ? { verdict:"WAIT", reason:"Closed 5m EMA trend, breakout, retest, volume, freshness and market-quality gates passed; deterministic continuation review avoids duplicate Gemini calls.", flags:["LOCAL_TREND_BREAKOUT_RETEST"], model:"CIEL deterministic trend continuation guard", queries:[], sources:[] }\n      : candidate.strategy === "5M_TREND+1M_PULLBACK+RECLAIM"\n      ? { verdict:"WAIT", reason:"Closed 5m trend and 1m pullback/reclaim confirmation passed; deterministic trend-entry review avoids duplicate Gemini calls.", flags:["LOCAL_TREND_PULLBACK_RECLAIM"], model:"CIEL deterministic trend pullback guard", queries:[], sources:[] }',
+  "use deterministic local review for validated trend continuation and pullback candidates",
 );
 once(
-  '"LOCAL_RANGE_SCALP_REVIEW", "LOCAL_TREND_PULLBACK_ENTRY"',
-  '"LOCAL_RANGE_SCALP_REVIEW", "LOCAL_TREND_PULLBACK_ENTRY", "LOCAL_TREND_BREAKOUT_RETEST"',
+  '"LOCAL_RANGE_SCALP_REVIEW", "LOCAL_TREND_PULLBACK_RECLAIM"',
+  '"LOCAL_RANGE_SCALP_REVIEW", "LOCAL_TREND_PULLBACK_RECLAIM", "LOCAL_TREND_BREAKOUT_RETEST"',
   "allow the deterministic continuation review through existing forecast and market-quality gates",
 );
 once(
-  '!["CIEL deterministic range guard","CIEL deterministic core scalp guard"].includes(reviewed.model)',
-  '!["CIEL deterministic range guard","CIEL deterministic core scalp guard","CIEL deterministic core trend continuation guard"].includes(reviewed.model)',
+  '!["CIEL deterministic range guard","CIEL deterministic trend pullback guard"].includes(reviewed.model)',
+  '!["CIEL deterministic range guard","CIEL deterministic trend pullback guard","CIEL deterministic trend continuation guard"].includes(reviewed.model)',
   "mark 5m continuation as deterministic technical confirmation rather than missing AI confirmation",
 );
 
