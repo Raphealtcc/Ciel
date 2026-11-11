@@ -10,7 +10,7 @@ const output = path.join(project, "reconstructed");
 const modules = [
   ["symbols.js", 1647],
   ["cloudflare-forecast.js", 4425],
-  ["advisor.js", 125977],
+  ["advisor.js", 124508],
   ["telegram.js", 13973],
   ["hyperliquid_feed.js", 51590],
   ["index.js", 26022],
@@ -49,8 +49,8 @@ if (preamble.length !== 391) {
 }
 
 const worker = preamble + recoveredModules.join("");
-if (worker.length !== 224025) {
-  throw new Error(`Integrity check failed for full Worker: expected 224025, got ${worker.length}`);
+if (worker.length !== 222556) {
+  throw new Error(`Integrity check failed for full Worker: expected 222556, got ${worker.length}`);
 }
 
 const sha256 = createHash("sha256").update(worker, "utf8").digest("hex");
