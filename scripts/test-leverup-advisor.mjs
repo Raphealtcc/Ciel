@@ -9,6 +9,7 @@ const trader = privateKeyToAccount(testTraderKey).address;
 const testAgentKey = "0x" + "0".repeat(63) + "2";
 const agent = privateKeyToAccount(testAgentKey).address;
 const wmon = LEVERUP_TOKENS.WMON.toLowerCase();
+const lvmon = LEVERUP_TOKENS.LVMON.toLowerCase();
 const baseSnapshot = (ratio) => ({
   checkedAt: 1_800_000_000_000, blockNumber: "123", traderAddress: trader, agentAddress: agent,
   market: { symbol: "BTC", pairName: "BTC/USD", base: "0x3333333333333333333333333333333333333333", status: "AVAILABLE", executionVenue: "POOL" },
@@ -16,7 +17,10 @@ const baseSnapshot = (ratio) => ({
   minimumNotionalRaw: (20n * 10n ** 18n).toString(),
   nativeMonBalanceRaw: (50n * 10n ** 18n).toString(), nativeMonBalanceMon: 50,
   oraclePriceRaw: (1000n * 10n ** 18n).toString(), monUsdPriceRaw: (19038n * 10n ** 12n).toString(),
-  accountTokenStates: { [wmon]: { balance: (50n * 10n ** 18n).toString(), allowance: (50n * 10n ** 18n).toString() } },
+  accountTokenStates: {
+    [wmon]: { balance: (50n * 10n ** 18n).toString(), allowance: (50n * 10n ** 18n).toString() },
+    [lvmon]: { balance: (50n * 10n ** 18n).toString(), allowance: (50n * 10n ** 18n).toString() },
+  },
   indexedPositions: [], agentAuthorization: { authorized: true, agentAddress: agent, canMarketOpen: true, canMarketClose: true, canPartialClose: true },
   collateralRatio: ratio,
 });
@@ -45,7 +49,7 @@ const dependencies = {
       amountInRaw: BigInt(Math.ceil(Number(args.desiredMarginMon) * 1.014 * 1e18)).toString(),
       feeToken: "0x0000000000000000000000000000000000000000", antiDdosFee: "0",
       nonce: String(args.now), deadline: Math.floor(args.now / 1000) + 300,
-      actionValues: [args.snapshot.market.base, true, LEVERUP_TOKENS.WMON, LEVERUP_TOKENS.LVMON,
+      actionValues: [args.snapshot.market.base, true, args.tokenIn, LEVERUP_TOKENS.LVMON,
         BigInt(Math.ceil(Number(args.desiredMarginMon) * 1.014 * 1e18)), 10000000000n,
         BigInt(args.snapshot.oraclePriceRaw), args.stopLossPriceRaw, args.takeProfitPriceRaw, 0, 0n],
       notionalUsd: 20, preflight: {
@@ -123,12 +127,12 @@ assert.equal(lowScoreReady.status, "PREFLIGHT_PASS_LIVE_DISABLED",
 assert.equal(ready.liveExecutionEnabled, false);
 assert.equal(ready.killSwitchEnabled, true);
 assert.equal(ready.selectedLeverage, 100);
-assert.equal(seenPlanArgs.tokenIn.toLowerCase(), wmon,
-  "hosted-agent 1CT planning must use the ERC-20 WMON collateral route");
+assert.equal(seenPlanArgs.tokenIn.toLowerCase(), lvmon,
+  "hosted-agent 1CT planning must use LVMON exclusively as collateral");
 assert.equal(ready.dryRunSigning.signed, true,
   "dry-run must locally verify the hosted-agent EIP-712 signature without submitting an intent");
 assert.equal(ready.coordination.status, "DRY_RUN_APPROVED",
-  "dry-run portfolio checks must use the WMON balance and remain non-submitting");
+  "dry-run portfolio checks must use the LVMON balance and remain non-submitting");
 assert.equal(ready.minimumCollateralUsd, 0.23,
   "100x live advisor sizing must use the configured $0.23 LVMON collateral target");
 assert.equal(ready.minimumNotionalUsd, 20);

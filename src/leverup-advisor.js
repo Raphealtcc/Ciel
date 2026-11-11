@@ -235,10 +235,10 @@ export async function prepareLeverUpAdvisorPlan({
     const takeProfitPriceRaw = isLong ? oracleRaw * (10_000n + targetBps) / 10_000n : oracleRaw * (10_000n - targetBps) / 10_000n;
 
     const buildPlan = dependencies.buildPlan || buildMarketOpenPlan;
-    const lvmonState = snapshot.accountTokenStates?.[LEVERUP_TOKENS.LVMON.toLowerCase()];
-    const lvmBalanceMon = lvmonState?.balance == null ? 0 : Number(BigInt(lvmonState.balance)) / 1e18;
-    const collateralToken = lvmBalanceMon >= reserveMon + minimumMarginMon
-      ? LEVERUP_TOKENS.LVMON : LEVERUP_TOKENS.WMON;
+    // CIEL2 uses LVMON exclusively for LeverUp collateral. Do not silently
+    // fall back to WMON: that is a different collateral route and can mask
+    // an LVMON balance/allowance problem during preflight.
+    const collateralToken = LEVERUP_TOKENS.LVMON;
     const budgeted = buildBudgetedLeverUpPlan({
       buildPlan,
       planArgs: { snapshot, desiredMarginMon, maxTradeMarginMon, inferredLeverage,
