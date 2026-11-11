@@ -10,6 +10,10 @@ assert.ok(worker.includes(".slice(-240)"));
 assert.ok(worker.includes("VENUE_MAX_LEVERAGE_BELOW_CONFIGURED_MINIMUM"));
 assert.ok(worker.includes("oneMinuteCandleCounts"));
 assert.ok(worker.includes("reviewCompletedAt: now"));
+assert.ok(worker.includes("at least 61 distinct one-minute price buckets"), "forecast must require a real 60-minute context, not 180 arbitrary ticks");
+assert.ok(worker.includes("const minuteBuckets = new Map()"), "high-frequency feed samples must be resampled by minute");
+assert.ok(worker.includes("12e4 ? points[i].mid_price"), "anchor lookup must tolerate one missed one-minute bucket");
+
 assert.ok(worker.includes("ciel:api:diagnostics:table-stats:v1"));
 assert.ok(worker.includes("statsCacheNow - Number(cachedStats.at || 0) < 10 * 60 * 1e3"));
 assert.ok(worker.includes("this.coreScalpCandles = values[23] || {};"));
