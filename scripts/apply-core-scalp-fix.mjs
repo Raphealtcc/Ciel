@@ -346,7 +346,7 @@ once(
 );
 
 once(
-  'candidate.mode === "RANGE_SCALP" ? 12 : 180',
+  'candidate.mode === "TREND_PULLBACK_ENTRY" ? 15 : candidate.mode === "RANGE_SCALP" ? 12 : 180',
   '180',
   "retain correct hold duration in all fallback paths",
 );
