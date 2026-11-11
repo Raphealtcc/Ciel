@@ -20,7 +20,7 @@ export function calculateLeverUpEntryBudget({ minimumCollateralUsd, minimumNotio
   const bufferUsd = collateralUsd * ((Math.max(0, Number(feeBufferPct) || 0) + Math.max(0, Number(slippageBufferPct) || 0)) / 100);
   return { collateralUsd, feesUsd, bufferUsd, requiredUsd: collateralUsd + feesUsd + bufferUsd, requiredMon: (collateralUsd + feesUsd + bufferUsd) / Number(monUsdPrice) };
 }
-export function evaluateLeverUpPortfolioRisk({ requestedLeverage, totalAllocationMon = 50, reserveMon = 25, availableWmonMon, requestedMarginMon, entryBudgetMon, currentOpenPositions = [], maxConcurrentPositions = 2, proposedStopRiskMon, aggregateStopRiskMon = 0, maxAggregateStopRiskMon = 15, dailyRealizedLossMon = 0, maxDailyRealizedLossMon = 15, rollingDrawdownMon = 0, maxRollingDrawdownMon = 15, staleFeed = false, executionUncertain = false, killSwitchActive = true }) {
+export function evaluateLeverUpPortfolioRisk({ requestedLeverage, totalAllocationMon = 50, reserveMon = 25, availableCollateralMon, requestedMarginMon, entryBudgetMon, currentOpenPositions = [], maxConcurrentPositions = 2, proposedStopRiskMon, aggregateStopRiskMon = 0, maxAggregateStopRiskMon = 15, dailyRealizedLossMon = 0, maxDailyRealizedLossMon = 15, rollingDrawdownMon = 0, maxRollingDrawdownMon = 15, staleFeed = false, executionUncertain = false, killSwitchActive = true }) {
   const reasons = [];
   // Operator overrides may raise these limits, but cannot reduce any below 20 MON.
   const riskLimit = (value) => Number.isFinite(Number(value))
@@ -36,11 +36,11 @@ export function evaluateLeverUpPortfolioRisk({ requestedLeverage, totalAllocatio
   if (!finitePositive(requestedLeverage) || n(requestedLeverage) < 50) reasons.push("LEVERAGE_BELOW_50X");
   if (!finitePositive(totalAllocationMon) || n(reserveMon) < 0 || n(reserveMon) >= n(totalAllocationMon)) reasons.push("INVALID_ALLOCATION_CONFIGURATION");
   const usable = Math.max(0, n(totalAllocationMon) - n(reserveMon));
-  if (!finitePositive(availableWmonMon)) reasons.push("AVAILABLE_WMON_BALANCE_UNKNOWN");
+  if (!finitePositive(availableCollateralMon)) reasons.push("AVAILABLE_LVMON_BALANCE_UNKNOWN");
   if (!finitePositive(requestedMarginMon)) reasons.push("REQUESTED_MARGIN_INVALID");
   const allocationCommitted = Math.max(finitePositive(requestedMarginMon) ? n(requestedMarginMon) : 0, finitePositive(entryBudgetMon) ? n(entryBudgetMon) : 0);
   if (allocationCommitted > usable) reasons.push("TRADE_EXCEEDS_USABLE_ALLOCATION");
-  if (finitePositive(availableWmonMon) && finitePositive(entryBudgetMon) && n(entryBudgetMon) > n(availableWmonMon)) reasons.push("INSUFFICIENT_WMON_FOR_MARGIN_FEES_AND_BUFFER");
+  if (finitePositive(availableCollateralMon) && finitePositive(entryBudgetMon) && n(entryBudgetMon) > n(availableCollateralMon)) reasons.push("INSUFFICIENT_LVMON_FOR_MARGIN_FEES_AND_BUFFER");
   if (currentOpenPositions.length >= n(maxConcurrentPositions)) reasons.push("MAX_CONCURRENT_POSITIONS_REACHED");
   const totalStopRisk = n(aggregateStopRiskMon) + Math.max(0, n(proposedStopRiskMon) || 0);
   if (totalStopRisk > aggregateStopRiskLimitMon) reasons.push("AGGREGATE_STOP_RISK_LIMIT_EXCEEDED");

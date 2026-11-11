@@ -31,7 +31,7 @@ export function buildBudgetedLeverUpPlan({ buildPlan, planArgs, maxEntryBudgetMo
 import { inspectLeverUpTraderSigner } from "./leverup-approval.js";
 import { isRecommendationScoreEligible } from "./technical-scoring.js";
 
-const WMON = LEVERUP_TOKENS.WMON.toLowerCase();
+const LVMON = LEVERUP_TOKENS.LVMON.toLowerCase();
 // These USD limits preserve the prior MON caps at the reference MON/USD quote
 // used when the 50/25/25 MON limits were configured. Convert with the fresh
 // LeverUp MON/USD oracle on every preflight; never let MON appreciation expand
@@ -94,10 +94,10 @@ export function leverUpCollateralUsdForLeverage({ leverage, minimumNotionalUsd, 
 }
 
 function accountSummary(snapshot) {
-  const wmon = snapshot?.accountTokenStates?.[WMON], auth = snapshot?.agentAuthorization;
+  const lvmon = snapshot?.accountTokenStates?.[LVMON], auth = snapshot?.agentAuthorization;
   return {
-    wmonBalanceMon: wmon ? monAmount(wmon.balance) : "unavailable",
-    wmonAllowanceMon: wmon ? monAmount(wmon.allowance) : "unavailable",
+    lvmonBalanceMon: lvmon ? monAmount(lvmon.balance) : "unavailable",
+    lvmonAllowanceMon: lvmon ? monAmount(lvmon.allowance) : "unavailable",
     agentAuthorized: Boolean(auth?.authorized), canMarketOpen: Boolean(auth?.canMarketOpen),
     canMarketClose: Boolean(auth?.canMarketClose), canPartialClose: Boolean(auth?.canPartialClose),
     openPositionCount: Array.isArray(snapshot?.indexedPositions) ? snapshot.indexedPositions.length : null,
@@ -300,7 +300,7 @@ export async function prepareLeverUpAdvisorPlan({
           signal: { id: signalId },
           preflight: { status: "PREFLIGHT_PASS_LIVE_DISABLED", selectedLeverage: plan.selectedLeverage,
             inferredLeverage, marginMonUsed: plan.marginMonUsed, entryBudgetMon, stopRiskMon },
-          account: { wmonBalanceMon: collateralBalanceMon, openPositions: snapshot.indexedPositions || [], staleFeed: false },
+          account: { collateralBalanceMon, openPositions: snapshot.indexedPositions || [], staleFeed: false },
           portfolio: {}, env: { ...env, LEVERUP_TOTAL_ALLOCATION_MON: String(totalAllocationMon),
             LEVERUP_RESERVE_MON: String(reserveMon) }, store: env.CIEL_STATE, now,
         });
