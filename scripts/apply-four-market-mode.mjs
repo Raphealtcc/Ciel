@@ -13,9 +13,9 @@ function once(source, before, after, label) {
 }
 
 worker = once(worker,
-  '    const isScalpMode = candidate.mode === "RANGE_SCALP" || candidate.mode === "CORE_PULLBACK_SCALP" || candidate.mode === "CORE_TREND_CONTINUATION";',
-  '    if (!isTemporaryMarketAllowed(candidate.symbol)) continue;\n    const isScalpMode = candidate.mode === "RANGE_SCALP" || candidate.mode === "CORE_PULLBACK_SCALP" || candidate.mode === "CORE_TREND_CONTINUATION";',
-  "restrict Gemini candidate reviews to the six enabled markets");
+  '    const isScalpMode = false;',
+  '    if (!isTemporaryMarketAllowed(candidate.symbol)) continue;\n    const isScalpMode = false;',
+  "restrict trend candidate reviews to the six enabled markets");
 worker = once(worker,
   "  return [...new Set(parsed)].slice(0, 100);",
   "  return [...restrictTemporaryMarketUniverse([...new Set([\"BTC\",\"ETH\",\"SOL\",\"BNB\",\"HYPE\",\"ZEC\", ...parsed])]), \"MON\"]; ",
