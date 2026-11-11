@@ -1,4 +1,4 @@
-export const TEMPORARY_MARKET_ALLOWLIST = Object.freeze(["BTC", "ETH", "SOL", "BNB"]);
+export const TEMPORARY_MARKET_ALLOWLIST = Object.freeze(["BTC", "ETH", "SOL", "BNB", "HYPE", "ZEC"]);
 const TEMPORARY_MARKET_SET = new Set(TEMPORARY_MARKET_ALLOWLIST);
 
 export function isTemporaryMarketAllowed(symbol) {

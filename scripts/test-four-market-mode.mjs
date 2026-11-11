@@ -3,33 +3,24 @@ import { readFile } from "node:fs/promises";
 import { isTemporaryMarketAllowed, restrictTemporaryMarketUniverse, TEMPORARY_MARKET_ALLOWLIST } from "../src/market-universe.js";
 import { prepareLeverUpAdvisorPlan } from "../src/leverup-advisor.js";
 
-assert.deepEqual(TEMPORARY_MARKET_ALLOWLIST, ["BTC", "ETH", "SOL", "BNB"]);
-assert.deepEqual(
-  restrictTemporaryMarketUniverse(["BTC", "XRP", "eth", "SOL", "BNB", "HYPE", "BTC"]),
-  ["BTC", "ETH", "SOL", "BNB"],
-);
-for (const symbol of ["BTC", "ETH", "SOL", "BNB"]) assert.equal(isTemporaryMarketAllowed(symbol), true);
-for (const symbol of ["XRP", "HYPE", "MON", "DOGE", ""]) assert.equal(isTemporaryMarketAllowed(symbol), false);
-
-const blocked = await prepareLeverUpAdvisorPlan({
-  env: {},
-  candidate: { symbol: "XRP", side: "LONG" },
-  reviewed: { verdict: "APPROVE" },
-  signalId: "TEMP-ALLOWLIST-TEST",
-  now: 1_800_000_000_000,
-});
-assert.equal(blocked.status, "BLOCKED_TEMPORARY_MARKET_UNIVERSE");
-
-const native = await readFile("src/leverup-native-feed.js", "utf8");
+const enabled = ["BTC", "ETH", "SOL", "BNB", "HYPE", "ZEC"];
+assert.deepEqual(TEMPORARY_MARKET_ALLOWLIST, enabled);
+assert.deepEqual(restrictTemporaryMarketUniverse(["BTC", "XRP", "eth", "SOL", "BNB", "HYPE", "ZEC", "DOGE", "BTC"]), enabled);
+for (const symbol of enabled) assert.equal(isTemporaryMarketAllowed(symbol), true);
+for (const symbol of ["XRP", "MON", "DOGE", ""]) assert.equal(isTemporaryMarketAllowed(symbol), false);
+const blocked = await prepareLeverUpAdvisorPlan({env:{},candidate:{symbol:"XRP",side:"LONG"},reviewed:{verdict:"APPROVE"},signalId:"TEMP-ALLOWLIST-TEST",now:1_800_000_000_000});
+assert.equal(blocked.status,"BLOCKED_TEMPORARY_MARKET_UNIVERSE");
+const native=await readFile("src/leverup-native-feed.js","utf8");
 assert.ok(native.includes("restrictTemporaryMarketUniverse(watchValues.map(upper))"));
-const worker = await readFile("reconstructed/patched-worker.js", "utf8");
-assert.ok(worker.includes("restrictTemporaryMarketUniverse([...new Set(parsed)])"));
-assert.ok(worker.includes('return [...restrictTemporaryMarketUniverse([...new Set(parsed)]), "MON"];'), "MON may remain as a collateral/reference quote but is not in the trade allowlist");
-assert.ok(worker.includes("Temporarily restricted market universe"));
+const worker=await readFile("reconstructed/patched-worker.js","utf8");
+assert.ok(worker.includes("restrictTemporaryMarketUniverse([...new Set"));
+assert.ok(worker.includes('return [...restrictTemporaryMarketUniverse([...new Set(["BTC","ETH","SOL","BNB","HYPE","ZEC", ...parsed])]), "MON"];'));
+assert.ok(worker.includes("Market is outside the enabled six-market universe."));
 assert.ok(worker.includes("rows.results = (rows.results || []).filter((position) => isTemporaryMarketAllowed(position.symbol))"));
 assert.ok(worker.includes("isTemporaryMarketAllowed(p.symbol)"));
-assert.ok(worker.includes("outside the temporary four-market universe"));
-assert.ok(worker.includes('new Set(["BTC", "ETH", "MON", "SOL", "BNB"])'));
-
-assert.ok(worker.includes("if (!isTemporaryMarketAllowed(candidate.symbol)) continue;"), "Gemini review loop must only evaluate the four active symbols");
-console.log("PASS: temporary allowlist covers advisor scans, Gemini reviews, paper entries, native LeverUp sampling and manual/live LeverUp preflight.");
+assert.ok(worker.includes("outside the enabled six-market universe"));
+assert.ok(worker.includes('new Set(["BTC", "ETH", "MON", "SOL", "BNB", "HYPE", "ZEC"])'));
+assert.ok(worker.includes("if (!isTemporaryMarketAllowed(candidate.symbol)) continue;"));
+const recovered=await readFile("recovered-src/symbols.js.part-001","utf8");
+assert.ok(recovered.includes("HYPE: 50") && recovered.includes("ZEC: 25"));
+console.log("PASS: six-market allowlist covers advisor, Gemini, paper and LeverUp paths.");
