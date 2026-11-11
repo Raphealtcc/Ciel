@@ -40,8 +40,7 @@ function structureEvidence(candidate) {
 
 function isCounterTrend(candidate) {
   const strategy = String(candidate?.strategy || "").toUpperCase();
-  return candidate?.mode === "RANGE_SCALP" ||
-    strategy.includes("LEVEL_SWEEP") ||
+  return strategy.includes("LEVEL_SWEEP") ||
     strategy.includes("SWING_REVERSAL");
 }
 
@@ -209,18 +208,12 @@ export function shouldSuppressDuplicateSignal({ candidate, priorSignal, now }) {
   }
   const strategy = String(candidate.strategy || "").toUpperCase();
   const mode = String(candidate.mode || "").toUpperCase();
-  const windowMs = mode === "RANGE_SCALP" ? 30 * 60000 :
-    mode === "CORE_PULLBACK_SCALP" ? 15 * 60000 :
-    mode === "CORE_TREND_CONTINUATION" ? 30 * 60000 :
-    strategy.includes("MICRO_MOMENTUM") ? 45 * 60000 : 30 * 60000;
+  const windowMs = 30 * 60000;
   const ageMs = Number(now) - createdAt;
   if (!Number.isFinite(ageMs) || ageMs < 0 || ageMs >= windowMs) return { suppress: false, reason: "OUTSIDE_REARM_WINDOW", ageMs, windowMs };
   const displacementPct = Math.abs(entry / priorEntry - 1) * 100;
   const stop = finite(candidate.stopPct) || 0.25;
-  const rearmBase = strategy.includes("MICRO_MOMENTUM") ? Math.max(0.5, stop * 1.25) :
-    mode === "RANGE_SCALP" ? Math.max(0.35, stop * 0.9) :
-    mode === "CORE_PULLBACK_SCALP" ? Math.max(0.25, stop * 0.8) :
-    mode === "CORE_TREND_CONTINUATION" ? Math.max(0.35, stop) : Math.max(0.35, stop);
+  const rearmBase = Math.max(0.35, stop);
   const rearmPct = clamp(rearmBase, 0.25, 1.0);
   const suppress = displacementPct < rearmPct;
   return { suppress, reason: suppress ? "SAME_SETUP_STILL_ACTIVE" : "PRICE_REARMED",

@@ -224,7 +224,7 @@ export async function prepareLeverUpAdvisorPlan({
       Number.isFinite(aiMargin) && aiMargin > 0 ? aiMargin : minimumMarginMon));
 
     const expectedHoldSeconds = Math.max(0, Number(candidate.holdMinutes ??
-      (candidate.mode === "RANGE_SCALP" ? 12 : candidate.mode === "CORE_PULLBACK_SCALP" ? 15 : 180)) * 60);
+      180) * 60);
     const stopPct = Number(candidate.stopPct), targetPct = Number(candidate.targetPct);
     if (!(stopPct > 0 && targetPct > 0 && stopPct < 100 && targetPct < 100)) throw new Error("CIEL_STOP_OR_TARGET_INVALID");
     const stopBps = BigInt(Math.max(1, Math.round(stopPct * 100)));

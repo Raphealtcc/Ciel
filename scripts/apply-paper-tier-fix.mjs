@@ -240,7 +240,7 @@ replaceExactlyOnce(
   "preserve AI sizing source in the setup notification object",
 );
 replaceExactlyOnce(
-  'paperResult = await openPaperTrade(paperStorage, { signalId:id, symbol:candidate.symbol, side:candidate.side, entryPrice:candidate.entry, stopPrice:stop, targetPrice:target, stopPct:candidate.stopPct, targetPct:candidate.targetPct, confidence:candidate.confidence, strategy:candidate.strategy, entryMonUsd:prices.MON, holdMinutes:candidate.holdMinutes || (candidate.mode === "RANGE_SCALP" ? 12 : 180), mode:candidate.mode, regime:candidate.regime, now });',
+  'paperResult = await openPaperTrade(paperStorage, { signalId:id, symbol:candidate.symbol, side:candidate.side, entryPrice:candidate.entry, stopPrice:stop, targetPrice:target, stopPct:candidate.stopPct, targetPct:candidate.targetPct, confidence:candidate.confidence, strategy:candidate.strategy, entryMonUsd:prices.MON, holdMinutes:candidate.holdMinutes || 180, mode:candidate.mode, regime:candidate.regime, now });',
   'paperResult = await openPaperTrade(paperStorage, { signalId:id, symbol:candidate.symbol, side:candidate.side, entryPrice:candidate.entry, stopPrice:stop, targetPrice:target, stopPct:candidate.stopPct, targetPct:candidate.targetPct, confidence:candidate.confidence, strategy:candidate.strategy, entryMonUsd:prices.MON, marginMon:collateral, leverage, holdMinutes:candidate.holdMinutes || (candidate.mode === "RANGE_SCALP" ? 12 : 180), mode:candidate.mode, regime:candidate.regime, now });',
   "open the paper trade with the exact AI-sized margin shown in the proposal",
 );

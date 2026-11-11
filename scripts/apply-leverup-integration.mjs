@@ -24,7 +24,7 @@ if (!source.includes(profitsImport)) source = profitsImport + "\n" + source;
 if (!source.includes("function compactCielSetupMessage(")) {
   const compactHelper = `function compactCielSetupMessage(p, s, r, monUsd, forecast, leverUpPlan = null) {
   const score = Math.round(Number(s?.confidence || 0) * 100);
-  const mode = s?.mode === "RANGE_SCALP" ? "RANGE" : "TREND";
+  const mode = "TREND";
   const review = String(r?.verdict || "WAIT");
   const median = Number(forecast?.medianReturnPct);
   const lower = Number(forecast?.lowerReturnPct);

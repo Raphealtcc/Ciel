@@ -83,6 +83,9 @@ assert.ok(report.includes("Unrealised P&L: +5.0000 LVMON"));
 assert.ok(report.includes("LONG BTC/USD | entry $190.000000 | mark $200.000000 | unrealised +5.0000 LVMON"));
 assert.ok(report.includes("unrealised P&L is gross before close fees and accrued carry"));
 assert.doesNotMatch(report, /PAPER TRADING/);
+assert.match(report, /Trend holds: 1 closed/);
+assert.doesNotMatch(report, /Range scalps:/);
+assert.match(report, /Other \/ unclassified: 1 closed/);
 console.log("PASS: live realized P&L and on-chain/oracle mark-to-market unrealized P&L are reported separately.");
 
 const degraded = await buildLeverUpProfitReport({

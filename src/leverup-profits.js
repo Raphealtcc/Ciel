@@ -37,7 +37,6 @@ function parseJson(value) {
 }
 function strategyMode(payload) {
   const raw = String(payload?.candidate?.mode || payload?.candidate?.strategyMode || payload?.candidate?.strategy || payload?.mode || "").toUpperCase();
-  if (raw.includes("RANGE")) return "RANGE_SCALP";
   if (raw.includes("TREND")) return "TREND_HOLD";
   return "OTHER";
 }
@@ -203,7 +202,7 @@ export async function buildLeverUpProfitReport({
     ? Number(totalPnlLvmonRaw) / Number(starterBalanceRaw) * 100 : null;
 
   const closedForStats = settlements.filter((row) => String(row.margin_token || "").toLowerCase() === LVMON);
-  const strategyStats = { RANGE_SCALP: [], TREND_HOLD: [], OTHER: [] };
+  const strategyStats = { TREND_HOLD: [], OTHER: [] };
   for (const row of closedForStats) {
     const payload = parseJson(row.entry_payload_json);
     strategyStats[strategyMode(payload)].push(row);
@@ -228,7 +227,6 @@ export async function buildLeverUpProfitReport({
     "Trades: " + (unrealizedError ? "open count unavailable" : open.length + " open") + " | " + lvmonStats.closed + " closed | " + lvmonStats.wins + " wins | " + lvmonStats.losses + " losses | " + lvmonStats.breakeven + " breakeven",
     "",
     "STRATEGY PERFORMANCE (CLOSED LIVE TRADES)",
-    strategyLine("Range scalps", strategyStats.RANGE_SCALP),
     strategyLine("Trend holds", strategyStats.TREND_HOLD),
   ];
   if (strategyStats.OTHER.length) lines.push(strategyLine("Other / unclassified", strategyStats.OTHER));
@@ -257,7 +255,7 @@ export async function buildLeverUpProfitReport({
       const candidate = payload.candidate || {};
       const side = String(candidate.side || "TRADE").toUpperCase();
       const mode = strategyMode(payload);
-      const modeLabel = mode === "RANGE_SCALP" ? "RANGE SCALP" : mode === "TREND_HOLD" ? "TREND HOLD" : "LIVE";
+      const modeLabel = mode === "TREND_HOLD" ? "TREND HOLD" : "LEGACY";
       const reason = String(row.close_reason || parseJson(row.source_json).closeReason || "EXCHANGE_REPORTED_CLOSE");
       const token = String(row.margin_token || "UNKNOWN").toLowerCase();
       const decimals = token === "0x754704bc059f8c67012fed69bc8a327a5aafb603" ? 6 : 18;
