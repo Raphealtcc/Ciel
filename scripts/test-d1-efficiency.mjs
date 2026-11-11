@@ -53,6 +53,8 @@ assert.ok(!source.includes("SELECT created_at_ms FROM advisor_ai_audit WHERE sym
 assert.ok(source.includes("ciel:advisor:review:core:") && source.includes("ciel:advisor:review:ai:"), "mode-specific review cooldowns must use KV");
 assert.ok(!source.includes("SELECT created_at_ms,entry_price FROM advisor_positions WHERE symbol=? AND side=? AND strategy=?"), "duplicate signal checks must not read D1 per candidate");
 assert.ok(source.includes("candidateCount:candidates.length"), "scan diagnostics must count discovered candidates");
+assert.ok(!source.includes("SELECT symbol,mid_price,ts_ms FROM market_samples WHERE symbol=? AND ts_ms>=? ORDER BY ts_ms DESC LIMIT 200"), "advisor scans must use Durable Object price history, not a D1 fallback");
+assert.ok(source.includes("ciel:advisor:proposal-expiry:last-run") && source.includes("now - expirySweepAt >= 5 * 60e3"), "proposal expiry D1 updates must be throttled to five minutes");
 assert.ok(source.includes("noSetupSymbols"), "scan diagnostics must identify markets with no technical setup");
 assert.ok(source.includes("CIEL_ADVISOR_SCAN"), "successful scans must emit structured scan-health logs");
 assert.ok(source.includes("CIEL_ADVISOR_REJECT"), "rejected candidates must emit structured rejection reasons");

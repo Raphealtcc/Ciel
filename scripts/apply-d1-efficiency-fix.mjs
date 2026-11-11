@@ -166,6 +166,35 @@ function replaceOnceInSource(before, after, label) {
   if (count !== 1) throw new Error(label + ": expected exactly one match, found " + count);
   source = source.replace(before, after);
 }
+
+const historyFallbackBefore = `  if (priceHistory) {
+    for (const symbol of symbols) {
+      const points = priceHistory[symbol] || [];
+      if (points.length) hist.set(symbol, points.map((point) => ({ symbol, mid_price: Number(point.p), ts_ms: Number(point.t) })));
+    }
+  } else {
+    for (let offset = 0; offset < symbols.length; offset += 5) {
+      const chunk = await Promise.all(symbols.slice(offset, offset + 5).map((sym) => env.DB.prepare(
+        "SELECT symbol,mid_price,ts_ms FROM market_samples WHERE symbol=? AND ts_ms>=? ORDER BY ts_ms DESC LIMIT 200"
+      ).bind(sym, now - 8 * 60 * 60 * 1e3).all()));
+      for (let index = 0; index < chunk.length; index++) {
+        const rows = (chunk[index].results || []).slice().reverse();
+        if (rows.length) hist.set(symbols[offset + index], rows);
+      }
+    }
+  } ;
+const historyFallbackAfter = `  for (const symbol of symbols) {
+    const points = Array.isArray(priceHistory?.[symbol]) ? priceHistory[symbol] : [];
+    if (points.length) hist.set(symbol, points.map((point) => ({ symbol, mid_price: Number(point.p), ts_ms: Number(point.t) })));
+  } ;
+replaceOnceInSource(historyFallbackBefore, historyFallbackAfter, "use Durable Object price history instead of per-cycle D1 sample reads");
+
+replaceOnceInSource(
+  '  await env.DB.prepare("UPDATE advisor_positions SET status=\\'EXPIRED\\',updated_at_ms=? WHERE status=\\'PROPOSED\\' AND expires_at_ms<=?").bind(now, now).run();',
+  '  const expirySweepKey = "ciel:advisor:proposal-expiry:last-run";\\n  const expirySweepAt = Number(await env.CIEL_STATE.get(expirySweepKey).catch(() => 0));\\n  if (now - expirySweepAt >= 5 * 60e3) {\\n    await env.CIEL_STATE.put(expirySweepKey, String(now), { expirationTtl: 86400 }).catch(() => void 0);\\n    await env.DB.prepare("UPDATE advisor_positions SET status=\\'EXPIRED\\',updated_at_ms=? WHERE status=\\'PROPOSED\\' AND expires_at_ms<=?").bind(now, now).run();\\n  }',
+  "throttle proposal expiry sweep to every five minutes"
+);
+
 replaceOnceInSource(
   'this.coreTrendCandles[symbol] = [...merged.values()].sort((left, right) => left.open_ts_ms - right.open_ts_ms).slice(-60);',
   'this.coreTrendCandles[symbol] = [...merged.values()].sort((left, right) => left.open_ts_ms - right.open_ts_ms).slice(-288);',
