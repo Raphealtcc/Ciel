@@ -490,7 +490,7 @@ async function fetchLeverUpOnchainOracleUpdate(pairBase, fetchImpl = fetch) {
   const response = await fetchImpl("https://service.leverup.xyz/v1/oracle/price/updates/by-position", {
     method: "POST", headers: { "content-type": "application/json" },
     body: JSON.stringify({
-      pairBase, collateral: LEVERUP_TOKENS.WMON, blockChain: "MONAD",
+      pairBase, collateral: LEVERUP_TOKENS.LVMON, blockChain: "MONAD",
       options: { includeEncodingData: true, includeFee: true, includePrice: true, includePublishTime: false, includeEncodingDataByOracleId: false, includePriceSafety: false, allowPartial: false },
     }),
   });

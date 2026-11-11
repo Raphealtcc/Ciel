@@ -593,7 +593,7 @@ export function assertMarginBudget({
   return { availableMarginMon: available, requiredMinimumMon: required, requiredWithBufferMon: requiredWithBuffer };
 }
 
-export function estimateProtocolCosts({ notionalUsd, isLong, expectedHoldSeconds, pairView, marketInfo, tokenIn = LEVERUP_TOKENS.WMON }) {
+export function estimateProtocolCosts({ notionalUsd, isLong, expectedHoldSeconds, pairView, marketInfo, tokenIn = LEVERUP_TOKENS.LVMON }) {
   const notional = Number(notionalUsd), seconds = Number(expectedHoldSeconds);
   if (!Number.isFinite(notional) || notional <= 0 || !Number.isFinite(seconds) || seconds < 0) throw new Error("COST_ESTIMATE_INPUTS_INVALID");
   const fees = pairView?.feeConfig;
@@ -624,7 +624,7 @@ export function estimateProtocolCosts({ notionalUsd, isLong, expectedHoldSeconds
 
 export function buildLeverUpPreflight({
   market, pairView, marketInfo, oraclePriceRaw, monUsdPriceRaw, minimumNotionalRaw,
-  requestedLeverage, intendedNotionalUsd, isLong, expectedHoldSeconds, tokenIn = LEVERUP_TOKENS.WMON,
+  requestedLeverage, intendedNotionalUsd, isLong, expectedHoldSeconds, tokenIn = LEVERUP_TOKENS.LVMON,
   availableMarginMon, collateralRatio, reserveMon = 0,
   safetyBufferPct = 5, now = Date.now(),
 }) {
@@ -721,7 +721,7 @@ export function buildMarketOpenPlan({
   snapshot, desiredMarginMon, maxTradeMarginMon, inferredLeverage, side,
   expectedHoldSeconds, reserveMon = 0, stopLossPriceRaw = 0n,
   takeProfitPriceRaw = 0n, broker = 0, extraFeeRaw = 0n, requireExistingAllowance = true, now = Date.now(),
-  entryPriceToleranceBps = 30, tokenIn: tokenInAddress = LEVERUP_TOKENS.WMON,
+  entryPriceToleranceBps = 30, tokenIn: tokenInAddress = LEVERUP_TOKENS.LVMON,
 }) {
   if (!snapshot?.market || !snapshot?.pairView || !snapshot?.accountTokenStates || !snapshot?.antiDdosConfig) {
     throw new Error("MARKET_OPEN_SNAPSHOT_INCOMPLETE");
