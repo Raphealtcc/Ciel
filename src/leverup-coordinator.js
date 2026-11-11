@@ -83,11 +83,23 @@ export async function prepareLeverUpExecution({ signal, preflight, account, port
 async function updateIntent(db, signalId, status, patch = {}) {
   const sets = ["status = ?", "updated_at_ms = ?"];
   const values = [status, Date.now()];
-  if (patch.intentHash !== undefined) { sets.push("intent_hash = ?"); values.push(patch.intentHash); }
-  if (patch.lastError !== undefined) { sets.push("last_error = ?"); values.push(patch.lastError); }
-  if (patch.payload !== undefined) { sets.push("payload_json = ?"); values.push(JSON.stringify(serializable(patch.payload))); }
-  values.push(signalId);
-  await db.prepare("UPDATE leverup_execution_intents SET " + sets.join(", ") + " WHERE signal_id = ?")
+  const changes = ["status IS NOT ?"];
+  const compareValues = [status];
+  if (patch.intentHash !== undefined) {
+    sets.push("intent_hash = ?"); values.push(patch.intentHash);
+    changes.push("intent_hash IS NOT ?"); compareValues.push(patch.intentHash);
+  }
+  if (patch.lastError !== undefined) {
+    sets.push("last_error = ?"); values.push(patch.lastError);
+    changes.push("last_error IS NOT ?"); compareValues.push(patch.lastError);
+  }
+  if (patch.payload !== undefined) {
+    const payloadJson = JSON.stringify(serializable(patch.payload));
+    sets.push("payload_json = ?"); values.push(payloadJson);
+    changes.push("payload_json IS NOT ?"); compareValues.push(payloadJson);
+  }
+  values.push(signalId, ...compareValues);
+  await db.prepare("UPDATE leverup_execution_intents SET " + sets.join(", ") + " WHERE signal_id = ? AND (" + changes.join(" OR ") + ")")
     .bind(...values).run();
 }
 
@@ -772,7 +784,7 @@ export function evaluateLeverUpPositionAction({ position, currentPriceRaw, now =
 
 async function readEntryMetadata(db) {
   if (!db?.prepare) return [];
-  const result = await db.prepare("SELECT signal_id,pair_base,payload_json,status,created_at_ms FROM leverup_execution_intents WHERE action = 0 AND status IN ('EXECUTED','RECONCILED','CLOSED','SUBMITTED','PENDING','UNCERTAIN')").all();
+  const result = await db.prepare("SELECT i.signal_id,i.pair_base,i.payload_json,i.status,i.created_at_ms FROM leverup_execution_intents i WHERE i.action = 0 AND i.status IN ('EXECUTED','RECONCILED','CLOSED','SUBMITTED','PENDING','UNCERTAIN') AND NOT EXISTS (SELECT 1 FROM leverup_trade_settlements s WHERE s.trade_id = i.signal_id) AND NOT EXISTS (SELECT 1 FROM leverup_trade_settlements s WHERE s.position_hash = lower(json_extract(i.payload_json, '$.positionHash')))").all();
   return (result.results || []).map((row) => {
     try { return { signalId: row.signal_id, tradeId: row.signal_id, pairBase: row.pair_base || null, intentStatus: row.status, createdAt: Number(row.created_at_ms || 0), ...JSON.parse(row.payload_json || "{}") }; }
     catch { return { signalId: row.signal_id, tradeId: row.signal_id, pairBase: row.pair_base || null, intentStatus: row.status, createdAt: Number(row.created_at_ms || 0) }; }
@@ -817,7 +829,7 @@ export async function reconcilePendingLeverUpIntents({ env, db, now = Date.now()
           await updateIntent(db, row.signal_id, "EXECUTED", { payload: { ...payload, tradeId: row.signal_id, positionHash: position.positionHash, executedAt: now, keeperPending: false } });
           reconciled++;
         } else {
-          await updateIntent(db, row.signal_id, "PENDING", { payload: { ...payload, lastPositionCheckAt: now, keeperPending: true, ambiguousPositionMatches: matches.length } });
+          await updateIntent(db, row.signal_id, "PENDING", { payload: { ...payload, keeperPending: true, ambiguousPositionMatches: matches.length } });
         }
         continue;
       }
@@ -835,7 +847,6 @@ export async function reconcilePendingLeverUpIntents({ env, db, now = Date.now()
         rejected++; continue;
       }
       if (!state.executed) {
-        await updateIntent(db, row.signal_id, "PENDING", { payload: { ...payload, lastStatusCheckAt: now } });
         continue;
       }
       const pairBase = String(row.pair_base || payload.plan?.preflight?.pairBase || payload.plan?.pairBase || "").toLowerCase();
@@ -932,11 +943,11 @@ export async function notifyLeverUpClosedTrade(env, closed, settlement, entry) {
 
 async function reconcileClosedSettlements({ env, db, now, dependencies = {} }) {
   if (!db?.prepare) return { checked: 0, reconciled: 0 };
-  const unsettled = await db.prepare("SELECT COUNT(*) AS count FROM leverup_execution_intents WHERE action = 0 AND status IN ('EXECUTED','RECONCILED','CLOSED','SUBMITTED','PENDING')").first();
+  const unsettled = await db.prepare("SELECT COUNT(*) AS count FROM leverup_execution_intents i WHERE i.action = 0 AND i.status IN ('EXECUTED','RECONCILED','CLOSED','SUBMITTED','PENDING') AND NOT EXISTS (SELECT 1 FROM leverup_trade_settlements s WHERE s.trade_id = i.signal_id) AND NOT EXISTS (SELECT 1 FROM leverup_trade_settlements s WHERE s.position_hash = lower(json_extract(i.payload_json, '$.positionHash')))").first();
   if (!Number(unsettled?.count || 0)) return { checked: 0, reconciled: 0, noUnsettledEntries: true };
   const throttleKey = "ciel:leverup:settlement:last-check:v1";
   const lastCheck = Number(await env?.CIEL_STATE?.get(throttleKey).catch(() => "0") || 0);
-  if (lastCheck && now - lastCheck < 60_000) return { checked: 0, reconciled: 0, throttled: true };
+  if (lastCheck && now - lastCheck < 5 * 60_000) return { checked: 0, reconciled: 0, throttled: true };
   await env?.CIEL_STATE?.put(throttleKey, String(now), { expirationTtl: 3600 }).catch(() => void 0);
   // Closed trades are newest-first. A single bounded history page is enough for close alerts
   // and avoids holding the one-minute position-manager cycle open while scanning old history.
@@ -948,6 +959,11 @@ async function reconcileClosedSettlements({ env, db, now, dependencies = {} }) {
   let reconciled = 0;
   for (const closed of history.filter((p) => p?.status === "CLOSED" && p?.closeInfo && p?.positionHash)) {
     const positionHash = String(closed.positionHash).toLowerCase();
+    const settledByPosition = await db.prepare("SELECT trade_id FROM leverup_trade_settlements WHERE position_hash = ? ORDER BY close_time DESC LIMIT 1").bind(positionHash).first().catch(() => null);
+    if (settledByPosition?.trade_id) {
+      const notified = await env?.CIEL_STATE?.get("ciel:leverup:close-notified:v2:" + settledByPosition.trade_id).catch(() => null);
+      if (notified) continue;
+    }
     const closeTimeMs = Number(closed.closeInfo.closeTime || closed.closeInfo.closedAt || closed.closeInfo.timestamp || 0) * (Number(closed.closeInfo.closeTime || 0) < 10_000_000_000 ? 1000 : 1);
     const matchingEntries = entries.filter((x) => String(x.positionHash || "").toLowerCase() === positionHash)
       .filter((x) => !Number(x.executedAt || x.createdAt) || !closeTimeMs || Number(x.executedAt || x.createdAt) <= closeTimeMs)
@@ -969,8 +985,12 @@ async function reconcileClosedSettlements({ env, db, now, dependencies = {} }) {
       }
     }
     const tradeId = leverUpTradeInstanceId(entry) || ("legacy:" + positionHash + ":" + String(closed.closeInfo.closeTime || closed.closeInfo.timestamp || "unknown"));
-    const existing = await db.prepare("SELECT trade_id FROM leverup_trade_settlements WHERE trade_id = ?")
+    let existing = await db.prepare("SELECT trade_id,source_json FROM leverup_trade_settlements WHERE trade_id = ?")
       .bind(tradeId).first();
+    if (!existing) existing = await db.prepare("SELECT trade_id,source_json FROM leverup_trade_settlements WHERE position_hash = ? ORDER BY close_time DESC LIMIT 1")
+      .bind(positionHash).first();
+    let existingMetadata = {};
+    try { existingMetadata = JSON.parse(existing?.source_json || "{}"); } catch {}
     const latest = await db.prepare("SELECT * FROM leverup_position_fee_snapshots WHERE position_hash = ? AND observed_at_ms >= ? ORDER BY observed_at_ms DESC LIMIT 1")
       .bind(positionHash, Number(entry?.executedAt || entry?.createdAt || 0)).first();
     const lastSnapshot = latest ? {
@@ -980,7 +1000,10 @@ async function reconcileClosedSettlements({ env, db, now, dependencies = {} }) {
       marginTokenDecimals: 18, marginTokenPriceUsd: null,
     });
     const entryOpenedAt = Number(entry?.executedAt || entry?.createdAt || 0);
-    const closeIntentByTrade = await db.prepare(`SELECT signal_id,payload_json,status FROM leverup_execution_intents
+    const storedCloseIntent = existingMetadata.closeIntentSignalId || existingMetadata.closeIntentStatus
+      ? { signal_id: existingMetadata.closeIntentSignalId || null, status: existingMetadata.closeIntentStatus || null, payload_json: "{}" }
+      : null;
+    const closeIntentByTrade = storedCloseIntent || await db.prepare(`SELECT signal_id,payload_json,status FROM leverup_execution_intents
       WHERE action IN (1,9) AND json_extract(payload_json, '$.tradeId') = ?
       ORDER BY created_at_ms DESC LIMIT 1`)
       .bind(tradeId).first().catch(() => null);
@@ -993,7 +1016,7 @@ async function reconcileClosedSettlements({ env, db, now, dependencies = {} }) {
     let closeIntentPayload = {};
     try { closeIntentPayload = JSON.parse(closeIntent?.payload_json || "{}"); } catch {}
     const exchangeCloseReason = closed.closeInfo?.reason || closed.closeInfo?.closeReason || closed.closeInfo?.closeType || closed.closeInfo?.trigger || closed.closeInfo?.exitReason;
-    const closeReason = String(exchangeCloseReason || closeIntentPayload.reason || "EXCHANGE_REPORTED_CLOSE");
+    const closeReason = String(exchangeCloseReason || closeIntentPayload.reason || existingMetadata.closeReason || "EXCHANGE_REPORTED_CLOSE");
     const closeForNotification = { ...closed, closeInfo: { ...closed.closeInfo, reason: closeReason } };
     if (!existing) {
       await persistSettlementReconciliation(db, settlement, {
@@ -1027,7 +1050,8 @@ async function reconcileClosedSettlements({ env, db, now, dependencies = {} }) {
     }
     // Settlement persistence and Telegram delivery are separate idempotent steps.
     // A prior DB write must not suppress a notification that failed or was skipped.
-    const notificationKey = "ciel:leverup:close-notified:v2:" + tradeId;
+    const notificationTradeId = existing?.trade_id || tradeId;
+    const notificationKey = "ciel:leverup:close-notified:v2:" + notificationTradeId;
     const alreadyNotified = await env?.CIEL_STATE?.get(notificationKey).catch(() => null);
     if (!alreadyNotified) {
       try {
