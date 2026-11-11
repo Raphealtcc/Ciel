@@ -50,8 +50,8 @@ const candlesRoute = source.slice(apiStart, apiEnd);
 assert.ok(candlesRoute.includes('if (interval === "1m")'), "the public 1m candle endpoint must remain");
 assert.ok(candlesRoute.includes("FROM market_samples WHERE symbol=?"), "the public 1m endpoint must continue using its existing sample history");
 
-assert.ok(source.includes("const wideSampleSlot = Math.floor(now / (10 * 60 * 1e3))"), "watchlist D1 samples must retain their current six-minute persistence cadence");
-assert.ok(source.includes("this.lastWideSampleSlot !== wideSampleSlot"), "one-minute benchmark samples and wider-watchlist samples must both remain");
+assert.ok(source.includes("const wideSampleSlot = Math.floor(now / (10 * 60 * 1e3))"), "wide-watchlist D1 samples must persist once per ten-minute slot");
+assert.ok(source.includes("this.lastWideSampleSlot !== wideSampleSlot"), "wide-watchlist samples must be limited to one write per ten-minute slot");
 const candleMapStart = source.indexOf("function getCandleStructureMap(");
 const candleMapEnd = source.indexOf("function analyzeCandleLevelReversal(", candleMapStart);
 const candleMapSource = source.slice(candleMapStart, candleMapEnd);
