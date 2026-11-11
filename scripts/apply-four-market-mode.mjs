@@ -17,7 +17,7 @@ worker = once(worker,
   '    if (!isTemporaryMarketAllowed(candidate.symbol)) continue;\n    const isScalpMode = candidate.mode === "RANGE_SCALP" || candidate.mode === "CORE_PULLBACK_SCALP" || candidate.mode === "CORE_TREND_CONTINUATION";',
   "restrict Gemini candidate reviews to the six enabled markets");
 worker = once(worker,
-  "  return [...restrictTemporaryMarketUniverse([...new Set([\"BTC\",\"ETH\",\"SOL\",\"BNB\",\"HYPE\",\"ZEC\", ...parsed])]), \"MON\"]; ",
+  "  return [...new Set(parsed)].slice(0, 100);",
   "  return [...restrictTemporaryMarketUniverse([...new Set([\"BTC\",\"ETH\",\"SOL\",\"BNB\",\"HYPE\",\"ZEC\", ...parsed])]), \"MON\"]; ",
   "keep all six enabled markets in the Hyperliquid watchlist");
 
