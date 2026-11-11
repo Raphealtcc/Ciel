@@ -133,11 +133,14 @@ const newCandidateBuild = `    const beforeCount = candidates.length;
       const candles = coreScalpData.get(sym);
       if (!candles || candles.one.length < 25 || candles.five.length < 40) {
         scanDiagnostics.push({symbol:sym,strategy:"CORE_PULLBACK_SCALP",reason:"INSUFFICIENT_CLOSED_CANDLE_HISTORY"});
-        scanDiagnostics.push({symbol:sym,strategy:"CORE_TREND_CONTINUATION",reason:"INSUFFICIENT_CLOSED_5M_HISTORY"});
       } else {
         const scalp = analyzeCorePullbackScalp(sym,candles.one,candles.five,now);
         if (scalp) candidates.push(scalp);
         else scanDiagnostics.push({symbol:sym,strategy:"CORE_PULLBACK_SCALP",reason:"PULLBACK_RECLAIM_VOLUME_OR_FRESHNESS_GATE"});
+      }
+      if (!candles || candles.five.length < 40) {
+        scanDiagnostics.push({symbol:sym,strategy:"CORE_TREND_CONTINUATION",reason:"INSUFFICIENT_CLOSED_5M_HISTORY"});
+      } else {
         const continuation = analyzeCoreTrendContinuation(sym,candles.five,now);
         if (continuation) candidates.push(continuation);
         else scanDiagnostics.push({symbol:sym,strategy:"CORE_TREND_CONTINUATION",reason:"EMA_BREAKOUT_RETEST_VOLUME_OR_FRESHNESS_GATE"});

@@ -28,8 +28,12 @@ const newBlock = `if (!candles || candles.one.length < 25 || candles.five.length
         if (continuation) candidates.push(continuation);
         else scanDiagnostics.push({symbol:sym,strategy:"CORE_TREND_CONTINUATION",reason:"EMA_BREAKOUT_RETEST_VOLUME_OR_FRESHNESS_GATE"});
       }`;
-const count = source.split(oldBlock).length - 1;
-if (count !== 1) throw new Error("Independent 5m trend gate patch expected one combined gate, found " + count);
-source = source.replace(oldBlock, newBlock);
-await writeFile(file, source);
-console.log("Separated 1m pullback and 5m trend-continuation history gates.");
+if (source.includes('if (!candles || candles.five.length < 40)')) {
+  console.log("Independent 5m trend-continuation gate is already present.");
+} else {
+  const count = source.split(oldBlock).length - 1;
+  if (count !== 1) throw new Error("Independent 5m trend gate patch expected one combined gate, found " + count);
+  source = source.replace(oldBlock, newBlock);
+  await writeFile(file, source);
+  console.log("Separated 1m pullback and 5m trend-continuation history gates.");
+}
