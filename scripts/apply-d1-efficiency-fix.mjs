@@ -182,11 +182,11 @@ const historyFallbackBefore = `  if (priceHistory) {
         if (rows.length) hist.set(symbols[offset + index], rows);
       }
     }
-  } ;
+  }`;
 const historyFallbackAfter = `  for (const symbol of symbols) {
     const points = Array.isArray(priceHistory?.[symbol]) ? priceHistory[symbol] : [];
     if (points.length) hist.set(symbol, points.map((point) => ({ symbol, mid_price: Number(point.p), ts_ms: Number(point.t) })));
-  } ;
+  }`;
 replaceOnceInSource(historyFallbackBefore, historyFallbackAfter, "use Durable Object price history instead of per-cycle D1 sample reads");
 
 replaceOnceInSource(
