@@ -17,7 +17,7 @@ once(
 once(
   `const rows = coreScalpData.get(symbol)?.five || [];
     const latest = Number(rows[rows.length - 1]?.close_ts_ms || 0);
-    return rows.length < 40 || now - latest > 7 * 60 * 1e3;`,
+    return rows.length < 40 || now - latest > 7 * 60 * 1000;`,
   `const rows = coreScalpData.get(symbol)?.five || [];
     const validRows = rows.filter((row) => Number(row.close_ts_ms) > 0 && [row.open_price, row.high_price, row.low_price, row.close_price].every((value) => Number(value) > 0));
     const latest = Number(validRows[validRows.length - 1]?.close_ts_ms || 0);
