@@ -199,20 +199,21 @@ const discountedCollateralPlan = buildMarketOpenPlan({
 });
 const discountedEffectiveMonPriceRaw = BigInt(planSnapshot.monUsdPriceRaw) * 8n * 10n ** 17n / (10n ** 18n);
 const discountedOpenFeeUsdRaw = BigInt(planSnapshot.minimumNotionalRaw) * 3n / 10_000n;
-const expectedDiscountedOpenFeeWmonRaw =
-  (discountedOpenFeeUsdRaw * (10n ** 18n) + discountedEffectiveMonPriceRaw - 1n) / discountedEffectiveMonPriceRaw;
-assert.equal(discountedCollateralPlan.openFeeTokenInRaw, expectedDiscountedOpenFeeWmonRaw.toString(),
-  "WMON open fee must be converted using the collateral-ratio-adjusted MON price, not spot MON price");
+const discountedLvmOpenFeeUsdRaw = discountedOpenFeeUsdRaw * (100_000n - 5_000n) / 100_000n;
+const expectedDiscountedOpenFeeLvmonRaw =
+  (discountedLvmOpenFeeUsdRaw * (10n ** 18n) + discountedEffectiveMonPriceRaw - 1n) / discountedEffectiveMonPriceRaw;
+assert.equal(discountedCollateralPlan.openFeeTokenInRaw, expectedDiscountedOpenFeeLvmonRaw.toString(),
+  "LVMON open fee must apply the LVMON fee discount and use the collateral-ratio-adjusted MON price");
 assert.ok(BigInt(discountedCollateralPlan.openFeeTokenInRaw) >
   (discountedOpenFeeUsdRaw * (10n ** 18n) + BigInt(planSnapshot.monUsdPriceRaw) - 1n) / BigInt(planSnapshot.monUsdPriceRaw),
-  "a discounted WMON collateral ratio must increase the WMON amount needed to cover the LVMON-denominated open fee");
+  "LVMON open-fee conversion must use the collateral-ratio-adjusted MON price");
 
 const plan = buildMarketOpenPlan({
   snapshot: planSnapshot, desiredMarginMon: 20, maxTradeMarginMon: 50,
   inferredLeverage: 100, side: "LONG", expectedHoldSeconds: 3600,
 });
-assert.equal(plan.actionValues[2].toLowerCase(), WMON.toLowerCase(), "WMON-backed 1CT opens must use WMON as tokenIn");
-assert.equal(plan.actionValues[3].toLowerCase(), LVMON.toLowerCase(), "WMON-backed 1CT opens must use LVMON in the lvToken field, never the LV governance token");
+assert.equal(plan.actionValues[2].toLowerCase(), LVMON.toLowerCase(), "LeverUp 1CT opens must use LVMON as tokenIn");
+assert.equal(plan.actionValues[3].toLowerCase(), LVMON.toLowerCase(), "LVMON-backed 1CT opens must encode LVMON in the lvToken field, never the LV governance token");
 assert.equal(plan.selectedLeverage, 100);
 assert.equal(plan.notionalUsd, 20);
 assert.equal(plan.marginMonUsed, "10");
@@ -220,7 +221,7 @@ assert.equal(plan.action, 0);
 assert.ok(BigInt(plan.amountInRaw) > 10n * 10n ** 18n, "amountIn includes the open fee");
 assert.equal(plan.feeToken.toLowerCase(), USDC.toLowerCase());
 assert.equal(plan.nonce, (BigInt(Date.now()) > 78n ? plan.nonce : "78"));
-assert.equal(plan.mode, "HOSTED_AGENT_1CT", "WMON market opens are executed through the 1CT hosted agent, not dry-run only");
+assert.equal(plan.mode, "HOSTED_AGENT_1CT", "LVMON market opens are executed through the 1CT hosted agent, not dry-run only");
 assert.equal(plan.protocolSlippageBps, "5");
 assert.equal(plan.slippageBps, "30");
 assert.equal(plan.worstPriceRaw, (1000n * 10n ** 18n * 10_030n / 10_000n).toString());
@@ -240,7 +241,7 @@ const roundingSnapshot = {
   },
   accountTokenStates: {
     ...planSnapshot.accountTokenStates,
-    [WMON.toLowerCase()]: { balance: (125n * 10n ** 18n).toString(), allowance: "0" },
+    [LVMON.toLowerCase()]: { balance: (125n * 10n ** 18n).toString(), allowance: "0" },
   },
 };
 const exactMinimumMon = 0.23 / 0.01817845;
@@ -252,7 +253,7 @@ const roundedMinimumPlan = buildMarketOpenPlan({
 });
 assert.ok(Number(roundedMinimumPlan.marginMonUsed) >= roundedMinimumMon);
 assert.ok(roundedMinimumPlan.notionalUsd >= 20,
-  "rounding minimum WMON upward must produce a valid $20+ notional plan");
+  "rounding minimum LVMON upward must produce a valid $20+ notional plan");
 assert.throws(() => buildMarketOpenPlan({
   snapshot: planSnapshot, desiredMarginMon: 5, maxTradeMarginMon: 50,
   inferredLeverage: 100, side: "LONG", expectedHoldSeconds: 3600,
@@ -266,7 +267,7 @@ const reserveTightSnapshot = {
   ...planSnapshot,
   accountTokenStates: {
     ...planSnapshot.accountTokenStates,
-    [WMON.toLowerCase()]: {
+    [LVMON.toLowerCase()]: {
       balance: (1001n * 10n ** 16n).toString(),
       allowance: (1001n * 10n ** 16n).toString(),
     },
@@ -275,24 +276,24 @@ const reserveTightSnapshot = {
 assert.throws(() => buildMarketOpenPlan({
   snapshot: reserveTightSnapshot, desiredMarginMon: 10, maxTradeMarginMon: 10,
   inferredLeverage: 100, side: "LONG", expectedHoldSeconds: 3600, reserveMon: 0.01,
-}), /WMON_BALANCE_INSUFFICIENT_AFTER_RESERVE_FOR_MARGIN_AND_OPEN_FEE/);
+}), /LVMON_BALANCE_INSUFFICIENT_AFTER_RESERVE_FOR_MARGIN_AND_OPEN_FEE/);
 
 const noAllowanceSnapshot = {
   ...planSnapshot,
   accountTokenStates: {
     ...planSnapshot.accountTokenStates,
-    [WMON.toLowerCase()]: { balance: wmonRaw.toString(), allowance: "0" },
+    [LVMON.toLowerCase()]: { balance: wmonRaw.toString(), allowance: "0" },
   },
 };
 assert.throws(() => buildMarketOpenPlan({
   snapshot: noAllowanceSnapshot, desiredMarginMon: 20, maxTradeMarginMon: 50,
   inferredLeverage: 100, side: "LONG", expectedHoldSeconds: 3600,
-}), /WMON_DIAMOND_ALLOWANCE_INSUFFICIENT/);
+}), /LVMON_DIAMOND_ALLOWANCE_INSUFFICIENT/);
 const approvalReadyPlan = buildMarketOpenPlan({
   snapshot: noAllowanceSnapshot, desiredMarginMon: 20, maxTradeMarginMon: 50,
   inferredLeverage: 100, side: "LONG", expectedHoldSeconds: 3600, requireExistingAllowance: false,
 });
-assert.equal(approvalReadyPlan.mode, "HOSTED_AGENT_1CT", "approval readiness does not change the WMON execution route");
+assert.equal(approvalReadyPlan.mode, "HOSTED_AGENT_1CT", "approval readiness does not change the LVMON execution route");
 
 
 
@@ -315,4 +316,4 @@ assert.equal(nativePlan.actionValues[3].toLowerCase(), LEVERUP_TOKENS.LVMON.toLo
 assert.equal(nativePlan.feeToken, "0x0000000000000000000000000000000000000000");
 assert.equal(nativePlan.antiDdosFee, 0n);
 
-console.log("PASS: 50x floor, dynamic tier sizing, WMON+fee-token balance/allowance checks, amountIn/open-fee calculation, cost estimates, and settlement reconciliation.");
+console.log("PASS: 50x floor, dynamic tier sizing, LVMON+fee-token balance/allowance checks, amountIn/open-fee calculation, cost estimates, and settlement reconciliation.");
