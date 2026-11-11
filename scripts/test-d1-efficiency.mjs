@@ -15,7 +15,8 @@ assert.ok(!writer.includes("this.env.DB"), "one-minute scalp candles must not be
 
 const restore = source.slice(source.indexOf("async restore()"), source.indexOf("async fetch(request)"));
 assert.ok(restore.includes('this.state.storage.get("coreScalpCandles")'), "the DO must restore candle history");
-assert.ok(restore.includes("this.coreScalpCandles = values[23] || {};"), "restored candle history must be hydrated");
+assert.ok(restore.includes("this.coreScalpCandles = values[22] || {};"), "restored 1m candle history must be hydrated");
+assert.ok(restore.includes("this.coreTrendCandles = values[23] || {};"), "restored 5m trend history must be hydrated");
 
 const advisorStart = source.indexOf("async function runAdvisorCycle");
 const advisorEnd = source.indexOf("async function manageOpenPositions", advisorStart);
