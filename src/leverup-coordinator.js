@@ -1322,41 +1322,15 @@ export async function runLeverUpPositionManager({ env, db, now = Date.now(), dep
     // A crossed hard stop is the highest-priority risk action. Do not wait for
     // adaptive history, state storage, Gemini, or any nonessential exit analysis.
     let adaptive = { action: "HOLD", reason: "SKIPPED_HARD_STOP_PRIORITY" };
+    let adaptiveState = null;
     if (fixedAction.action !== "MARKET_CLOSE" && fixedAction.action !== "PARTIAL_CLOSE") {
       const adaptiveKey = "ciel:leverup:adaptive-exit:v2:" + tradeId;
-      let adaptiveState = null;
       try { adaptiveState = await env?.CIEL_STATE?.get(adaptiveKey, "json"); } catch {}
       adaptive = evaluateAdaptiveLeverUpExit({ position, currentPriceRaw: latestPrice, state: adaptiveState || {}, pairView, now });
       if (adaptive?.state && env?.CIEL_STATE?.put) {
         await env.CIEL_STATE.put(adaptiveKey, JSON.stringify(adaptive.state), { expirationTtl: 7 * 24 * 3600 }).catch(() => void 0);
       }
     }
-    // Deterministic hard SL/TP and adaptive exits run first. Gemini is an additional
-    // per-position reviewer; only high-confidence CLOSE advice can request a market close.
-    const reviewAgeMinutes = Number(position.timestamp) > 0
-      ? Math.max(0, (now - (Number(position.timestamp) > 1e12 ? Number(position.timestamp) : Number(position.timestamp) * 1000)) / 60000)
-      : null;
-    const aiReview = await (dependencies.reviewPositionWithGemini || reviewLeverUpPositionWithGemini)({
-      env, position, currentPriceRaw: latestPrice,
-      adaptive: {
-        trendPct: adaptive.trendPct ?? null,
-        momentumPct: adaptive.momentumPct ?? null,
-        atrProxyPct: adaptive.atrProxyPct ?? null,
-        closeScore: adaptive.closeScore ?? null,
-        favourablePct: adaptive.favourablePct ?? null,
-        peakFavourablePct: adaptive.peakFavourablePct ?? adaptive.state?.profitProtection?.peakFavourablePct ?? null,
-        givebackPct: adaptive.givebackPct ?? adaptive.state?.profitProtection?.givebackPct ?? null,
-      },
-      state: adaptive.state || adaptiveState || {},
-      now,
-      maxHoldReached: fixedAction.maxHoldReached === true,
-      positionAgeMinutes: reviewAgeMinutes,
-    }).catch((error) => ({ status: "FAILED", action: "HOLD", confidence: 0, reason: String(error?.message || error).slice(0, 180), configuredKeyCount: String(env?.GEMINI_API_KEYS || "").split(/[,;\\n]+/).filter((x) => x.trim()).length }));
-    geminiConfiguredKeyCount = Math.max(geminiConfiguredKeyCount, Number(aiReview.configuredKeyCount || 0));
-    aiReviewStatusCounts[aiReview.status] = (aiReviewStatusCounts[aiReview.status] || 0) + 1;
-    if (aiReview.status === "REVIEWED") aiReviewed++;
-    if (aiReview.status === "FAILED" && aiReviewFailures.length < 3) aiReviewFailures.push(String(aiReview.reason || "GEMINI_REVIEW_FAILED").slice(0, 180));
-    const aiCloseMinConfidence = Math.max(60, Math.min(100, Number(env?.GEMINI_POSITION_CLOSE_MIN_CONFIDENCE || 80)));
     const minimumHoldActive = BigInt(position.earliestCloseTime || 0) > BigInt(Math.floor(now / 1000));
     // Reconcile exact entry SL/TP against the values stored on the live position.
     const expectedStop = BigInt(saved?.plan?.actionValues?.[7] || 0);
@@ -1377,6 +1351,36 @@ export async function runLeverUpPositionManager({ env, db, now = Date.now(), dep
         ? { action: "MARKET_CLOSE", reason: stopAlreadyCrossed ? "EXPECTED_STOP_ALREADY_CROSSED" : "EXPECTED_TARGET_ALREADY_CROSSED" }
         : { action: "UPDATE_TP_SL", reason: "ENTRY_PROTECTION_MISMATCH", stopLossRaw: expectedStop.toString(), takeProfitRaw: expectedTarget.toString() };
     }
+    // Hard SL/TP and deterministic adaptive exits must not wait for a model call.
+    const deterministicExitAlreadyTriggered = fixedAction.action === "MARKET_CLOSE" ||
+      fixedAction.action === "PARTIAL_CLOSE" || adaptive.action === "MARKET_CLOSE" ||
+      protectionRepair?.action === "MARKET_CLOSE";
+    const reviewAgeMinutes = Number(position.timestamp) > 0
+      ? Math.max(0, (now - (Number(position.timestamp) > 1e12 ? Number(position.timestamp) : Number(position.timestamp) * 1000)) / 60000)
+      : null;
+    const aiReview = deterministicExitAlreadyTriggered
+      ? { status: "SKIPPED_DETERMINISTIC_EXIT", action: "HOLD", confidence: 0, configuredKeyCount: String(env?.GEMINI_API_KEYS || "").split(/[,;\\n]+/).filter((x) => x.trim()).length }
+      : await (dependencies.reviewPositionWithGemini || reviewLeverUpPositionWithGemini)({
+          env, position, currentPriceRaw: latestPrice,
+          adaptive: {
+            trendPct: adaptive.trendPct ?? null,
+            momentumPct: adaptive.momentumPct ?? null,
+            atrProxyPct: adaptive.atrProxyPct ?? null,
+            closeScore: adaptive.closeScore ?? null,
+            favourablePct: adaptive.favourablePct ?? null,
+            peakFavourablePct: adaptive.peakFavourablePct ?? adaptive.state?.profitProtection?.peakFavourablePct ?? null,
+            givebackPct: adaptive.givebackPct ?? adaptive.state?.profitProtection?.givebackPct ?? null,
+          },
+          state: adaptive.state || adaptiveState || {},
+          now,
+          maxHoldReached: fixedAction.maxHoldReached === true,
+          positionAgeMinutes: reviewAgeMinutes,
+        }).catch((error) => ({ status: "FAILED", action: "HOLD", confidence: 0, reason: String(error?.message || error).slice(0, 180), configuredKeyCount: String(env?.GEMINI_API_KEYS || "").split(/[,;\\n]+/).filter((x) => x.trim()).length }));
+    geminiConfiguredKeyCount = Math.max(geminiConfiguredKeyCount, Number(aiReview.configuredKeyCount || 0));
+    aiReviewStatusCounts[aiReview.status] = (aiReviewStatusCounts[aiReview.status] || 0) + 1;
+    if (aiReview.status === "REVIEWED") aiReviewed++;
+    if (aiReview.status === "FAILED" && aiReviewFailures.length < 3) aiReviewFailures.push(String(aiReview.reason || "GEMINI_REVIEW_FAILED").slice(0, 180));
+    const aiCloseMinConfidence = Math.max(60, Math.min(100, Number(env?.GEMINI_POSITION_CLOSE_MIN_CONFIDENCE || 80)));
     // Hard SL/TP triggers outrank repair, adaptive exits and every other review.
     const action = selectLeverUpPositionAction({ fixedAction, adaptive, protectionRepair, aiReview, aiCloseMinConfidence });
     if (action.reason === "GEMINI_POSITION_CLOSE_CONFIRMED") aiCloseSignals++;
