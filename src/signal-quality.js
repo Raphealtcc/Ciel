@@ -10,7 +10,7 @@ const REQUIRED_COMPONENTS = Object.freeze({
 
 function componentSet(candidate) {
   return new Set((Array.isArray(candidate?.scoreComponents) ? candidate.scoreComponents : [])
-    .map((item) => String(item).trim().split(/\\s+/)[0].toUpperCase()));
+    .map((item) => String(item).trim().split(/\s+/)[0].toUpperCase()));
 }
 
 function structureEvidence(candidate) {
@@ -84,15 +84,15 @@ export function evaluateSignalQuality({ candidate, forecast, market, eventIntel 
   const medianReturnPct = finite(forecast?.medianReturnPct);
 
   if (!["LONG","SHORT"].includes(side)) vetoes.push("INVALID_DIRECTION");
-  if (!market || [spreadBps,depthUsd,volumeUsd,funding,premiumBps,oiChangePct].some((value) => value === null)) vetoes.push("INCOMPLETE_MARKET_EVIDENCE");
-  if (!forecast?.available || medianReturnPct === null) vetoes.push("STATISTICAL_FORECAST_UNAVAILABLE");
+  if (!market || [spreadBps,depthUsd,volumeUsd].some((value) => value === null)) vetoes.push("INCOMPLETE_EXECUTION_MARKET_EVIDENCE");
+  // Forecast gaps reduce evidence score; they do not erase a valid technical setup.
   if (!(stopPct > 0 && targetPct > 0)) vetoes.push("INVALID_STOP_OR_TARGET");
 
   const structure = structureEvidence(candidate || {});
   components.push({ key: "PRICE_STRUCTURE", score: structure.score, max: 25, detail: structure.detail });
   if (!structure.complete) vetoes.push("INCOMPLETE_STRATEGY_STRUCTURE:" + structure.missing.join(","));
 
-  let forecastScore = 0;
+  let forecastScore = 0, forecastPenalty = 0;
   if (medianReturnPct !== null && stopPct > 0) {
     const minimumMovePct = Math.max(0.08, stopPct * 0.30);
     const aligned = side === "LONG" ? medianReturnPct > 0 : medianReturnPct < 0;
@@ -109,10 +109,10 @@ export function evaluateSignalQuality({ candidate, forecast, market, eventIntel 
     const continuation = strategy.includes("CONTINUATION") || strategy.includes("PULLBACK") || candidate?.mode === "TREND_HOLD";
     const reversal = strategy.includes("LEVEL_SWEEP") || strategy.includes("SWING_REVERSAL");
     if ((continuation || reversal) && (f5 === null || f15 === null)) {
-      vetoes.push("MULTI_HORIZON_FORECAST_INCOMPLETE");
+      forecastPenalty += 5;
     } else if (continuation && f60 === null) {
-      vetoes.push("60M_TREND_CONFIRMATION_MISSING");
-    } else if (continuation && (f5 <= 0 || f15 <= 0 || f60 <= -0.10)) {
+      forecastPenalty += 3;
+    } else if (continuation && ((f5 <= -minimumMovePct * 0.5 && f15 <= -minimumMovePct * 0.5) || (f60 <= -0.25 && (f5 <= 0 || f15 <= 0)))) {
       vetoes.push("HIGHER_TIMEFRAME_FORECAST_DISAGREEMENT");
     } else if (reversal && (f5 <= 0 || f15 <= 0 || f60 !== null && f60 < -0.75)) {
       vetoes.push("REVERSAL_LACKS_MULTI_HORIZON_CONFIRMATION");
@@ -129,11 +129,16 @@ export function evaluateSignalQuality({ candidate, forecast, market, eventIntel 
       forecastScore = 25;
     } else if (counter) {
       forecastScore = 18;
+      forecastPenalty += 2;
     } else {
-      vetoes.push("FORECAST_TOO_WEAK_FOR_TREND_ENTRY");
-      forecastScore = 0;
+      forecastScore = 13;
+      forecastPenalty += 3;
     }
   }
+  if (medianReturnPct === null) forecastScore = 10;
+  const lowerForecast = finite(forecast?.lowerReturnPct), upperForecast = finite(forecast?.upperReturnPct);
+  if (lowerForecast !== null && upperForecast !== null && lowerForecast <= 0 && upperForecast >= 0) forecastPenalty += 4;
+  forecastScore = Math.max(0, forecastScore - forecastPenalty);
   const flowUsable = !["STALE", "UNAVAILABLE"].includes(flowStatus);
   const flowOpposes = tradeImbalance !== null &&
     (side === "LONG" ? tradeImbalance <= -0.65 : tradeImbalance >= 0.65);
@@ -161,7 +166,7 @@ export function evaluateSignalQuality({ candidate, forecast, market, eventIntel 
   components.push({ key: "EXECUTION_QUALITY", score: spreadScore + depthScore + volumeScore, max: 20,
     detail: "spread " + (spreadBps ?? "n/a") + " bps; top depth $" + (depthUsd ?? "n/a") + "; 24h volume $" + (volumeUsd ?? "n/a") });
 
-  let fundingScore = 0, premiumScore = 0, oiScore = 0;
+  let fundingScore = funding === null ? 2 : 0, premiumScore = premiumBps === null ? 2 : 0, oiScore = oiChangePct === null ? 2 : 0;
   if (funding !== null) {
     const crowdedLong = side === "LONG" && funding >= 0.00005 && premiumBps !== null && premiumBps >= 10;
     const crowdedShort = side === "SHORT" && funding <= -0.00005 && premiumBps !== null && premiumBps <= -10;
@@ -192,11 +197,11 @@ export function evaluateSignalQuality({ candidate, forecast, market, eventIntel 
   components.push({ key: "REGIME_AND_EVENT", score: regime.score, max: 5, detail: regime.reason });
   if (!regime.allowed) vetoes.push(regime.reason);
 
-  const score = Math.round(components.reduce((sum, item) => sum + item.score, 0));
-  let threshold = strategy.includes("SWING_REVERSAL") ? 84 :
-    strategy.includes("LEVEL_SWEEP") ? 85 :
-    strategy.includes("PULLBACK") ? 82 :
-    strategy.includes("CONTINUATION") ? 82 : 80;
+  let score = Math.round(components.reduce((sum, item) => sum + item.score, 0));
+  let threshold = strategy.includes("SWING_REVERSAL") ? 78 :
+    strategy.includes("LEVEL_SWEEP") ? 78 :
+    strategy.includes("PULLBACK") ? 76 :
+    strategy.includes("CONTINUATION") ? 76 : 76;
   const learned = strategyStats?.[String(candidate?.strategy || "")];
   // Shadow profiles are horizon-specific. Do not use a 12m/15m/60m
   // mid-price result to veto a 180m TREND_HOLD candidate.
@@ -208,11 +213,13 @@ export function evaluateSignalQuality({ candidate, forecast, market, eventIntel 
   const candidateHorizonMinutes = finite(candidate?.holdMinutes) ?? 180;
   const shadowHorizonMatches = Math.abs(candidateHorizonMinutes - shadowHorizonMinutes) <= 1 &&
     Number(learned?.horizonMinutes) === shadowHorizonMinutes;
+  let shadowPenalty = 0;
   if (shadowHorizonMatches && Number(learned?.sampleCount) >= 30 && Number.isFinite(Number(learned?.expectancyR))) {
     const expectancyR = Number(learned.expectancyR);
-    if (expectancyR <= 0.10) vetoes.push("STRATEGY_SHADOW_EXPECTANCY_NOT_POSITIVE");
-    else if (expectancyR < 0.20) threshold += 5;
+    if (expectancyR <= 0.10) shadowPenalty = expectancyR <= 0 ? 5 : 3;
+    else if (expectancyR < 0.20) shadowPenalty = 2;
   }
+  score = Math.max(0, score - shadowPenalty);
   const allowed = vetoes.length === 0 && score >= threshold;
   if (score < threshold) vetoes.push("QUALITY_SCORE_BELOW_THRESHOLD");
   return {
@@ -221,6 +228,7 @@ export function evaluateSignalQuality({ candidate, forecast, market, eventIntel 
     threshold,
     vetoes,
     components,
+    shadowPenalty, forecastPenalty,
     interpretation: "Evidence-quality score, not a win probability or guaranteed return.",
   };
 }
