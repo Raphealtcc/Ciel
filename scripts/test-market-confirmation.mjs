@@ -8,7 +8,7 @@ import {
 } from "../src/market-confirmation.js";
 
 const now = 2_000_000_000_000;
-const symbols = ["BTC","ETH","SOL","BNB","XRP","ADA","DOGE","LINK","AVAX","SUI","UNI","AAVE"];
+const symbols = ["BTC","ETH","SOL","BNB","HYPE","ZEC","XRP","ADA","DOGE","LINK","AVAX","SUI","UNI","AAVE"];
 const history = {};
 for (let i = 0; i < symbols.length; i++) {
   const up = i < 9;
@@ -26,10 +26,10 @@ assert.equal(breadth.n5, 11);
 assert.ok(breadth.up5Pct > 60 && breadth.up15Pct > 60);
 assert.equal(breadth.excludedSymbol, "BTC");
 
-const coreBreadth = calculateCrossAssetBreadth({ history, symbols: ["BTC","ETH","SOL","BNB"], excludeSymbol: "BTC", volumeBySymbol, now });
+const coreBreadth = calculateCrossAssetBreadth({ history, symbols: ["BTC","ETH","SOL","BNB","HYPE","ZEC"], excludeSymbol: "BTC", volumeBySymbol, now });
 assert.equal(coreBreadth.status, "READY");
-assert.equal(coreBreadth.n5, 3);
-assert.equal(coreBreadth.n15, 3);
+assert.equal(coreBreadth.n5, 5);
+assert.equal(coreBreadth.n15, 5);
 const insufficient = calculateCrossAssetBreadth({ history, symbols: symbols.slice(0, 2), excludeSymbol: "BTC", now });
 assert.equal(insufficient.status, "INSUFFICIENT_COVERAGE");
 const staleHistory = Object.fromEntries(symbols.map((s) => [s, [{t:now-30*60000,p:100},{t:now-20*60000,p:101},{t:now-10*60000,p:102}]]));
@@ -85,9 +85,9 @@ assert.ok(worker.includes("appendTradeFlowEvents"));
 assert.ok(worker.includes("summarizePersistentOrderFlow"));
 assert.ok(worker.includes('subscription: { type: "l2Book", coin: symbol }'));
 assert.ok(worker.includes('subscription: { type: "trades", coin: symbol }'));
-assert.ok(worker.includes('["BTC", "ETH", "SOL", "BNB"]'), "persistent order-flow capture must include all four active markets");
+assert.ok(worker.includes('["BTC", "ETH", "SOL", "BNB", "HYPE", "ZEC"]'), "persistent order-flow capture must include all six enabled markets");
 assert.ok(worker.includes("marketBreadth"));
 assert.ok(worker.includes("orderFlow"));
-assert.ok(worker.includes('if (["BTC","ETH","SOL","BNB"].includes(symbol))'), "book-flow capture must include BNB alongside BTC, ETH and SOL");
+assert.ok(worker.includes('if (["BTC","ETH","SOL","BNB","HYPE","ZEC"].includes(symbol))'), "book-flow capture must include all six enabled markets");
 assert.ok(worker.includes("research only"));
 console.log("PASS: cross-asset breadth and persistent OFI/trade-flow are computed independently, shown as research-only context, and do not gate entries.");
