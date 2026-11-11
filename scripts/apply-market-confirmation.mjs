@@ -85,8 +85,8 @@ const reviewerReplacement = `    const reviewerMarket = { ...quality.market, fun
     candidate.orderFlow = reviewerMarket.orderFlow;`;
 once(reviewerAnchor, reviewerReplacement, "attach independent breadth and order-flow observations to the existing audit record and proposal");
 
-const telegramAnchor = '"Signal quality: " + Number(s?.signalQualityScore || 0) + "/100 Â· evidence score, not win probability",';
-const telegramReplacement = `"Signal quality: " + Number(s?.signalQualityScore || 0) + "/100 Â· evidence score, not win probability",
+const telegramAnchor = '"Signal quality: " + Number(s?.signalQualityScore || 0) + "/100 evidence score, not win probability",';
+const telegramReplacement = `"Signal quality: " + Number(s?.signalQualityScore || 0) + "/100 evidence score, not win probability",
 "Market breadth (research only): " + (s?.marketBreadth?.status === "READY" ? Number(s.marketBreadth.up5Pct).toFixed(0) + "% up 5m / " + Number(s.marketBreadth.up15Pct).toFixed(0) + "% up 15m (n=" + s.marketBreadth.n15 + ")" : "insufficient cross-asset history"),
 "Persistent flow (research only): " + (s?.orderFlow?.status || "INSUFFICIENT") + (s?.orderFlow?.direction ? " " + s.orderFlow.direction : ""),`;
 once(telegramAnchor, telegramReplacement, "show the two shadow research measurements without changing entry eligibility");
