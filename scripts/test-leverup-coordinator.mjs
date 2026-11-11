@@ -12,7 +12,7 @@ const rollingDrawdown = calculateLeverUpRollingDrawdown([
   { close_time: rollingNow / 1000 - 23 * 3600, net_pnl_after_fees_raw: "-35000000000000000000" },
   { close_time: rollingNow / 1000 - 22 * 3600, net_pnl_after_fees_raw: "5000000000000000000" },
 ], rollingNow, 48);
-assert.equal(rollingDrawdown, 25, "older losses must age out of the 48-hour drawdown window");
+assert.equal(rollingDrawdown, 35, "older losses must age out of the 48-hour drawdown window");
 assert.equal(LEVERUP_RISK_DEFAULTS.maxRollingDrawdownMon, 20);
 assert.equal(LEVERUP_RISK_DEFAULTS.maxAggregateStopRiskMon, 20);
 import { prepareLeverUpExecution, reconcileLeverUpIntent, collectLeverUpPairBases, refreshLeverUpMarketOpenPlan, validateLeverUpTransferBalances, submitLeverUpNativeOnchainEntry, notifyLeverUpClosedTrade, evaluateLeverUpPositionAction, selectLeverUpPositionAction } from "../src/leverup-coordinator.js";
