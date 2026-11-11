@@ -10,7 +10,7 @@ const writer = source.slice(methodStart, methodEnd);
 assert.ok(writer.includes('interval: "1m"'), "the one-minute Hyperliquid candle feed must remain active");
 assert.ok(writer.includes("this.coreScalpCandles[symbol]"), "one-minute candles must be merged into the in-memory DO cache");
 assert.ok(writer.includes('this.state.storage.put("coreScalpCandles", this.coreScalpCandles)'), "one-minute candle history must persist across DO restarts");
-assert.ok(writer.includes(".slice(-240)"), "the rolling one-minute candle cache must retain sufficient history");
+assert.ok(writer.includes(".slice(-90)"), "the rolling one-minute candle cache must retain a 90-minute window, enough for the 60-minute forecast context plus buffer");
 assert.ok(!writer.includes("this.env.DB"), "one-minute scalp candles must not be duplicated in D1");
 
 const restore = source.slice(source.indexOf("async restore()"), source.indexOf("async fetch(request)"));
