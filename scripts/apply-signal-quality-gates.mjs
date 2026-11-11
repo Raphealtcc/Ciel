@@ -28,7 +28,7 @@ function patchFunction(name, endMarker, transform, label) {
 patchFunction("analyzeMicroMomentumContinuation", "__name(analyzeMicroMomentumContinuation", (segment) => {
   let next = segment.replace(".slice(-40);", ".slice(-200);");
   const microGuard = '  if(!["BTC","ETH","SOL","BNB","HYPE","ZEC"].includes(String(symbol||"").toUpperCase()))return null;';
-  if (!next.includes(microGuard)) next = next.replace("function analyzeMicroMomentumContinuation(symbol,rows,now){", "function analyzeMicroMomentumContinuation(symbol,rows,now){\\n" + microGuard);
+  if (!next.includes(microGuard)) next = next.replace("function analyzeMicroMomentumContinuation(symbol,rows,now){", "function analyzeMicroMomentumContinuation(symbol,rows,now){\n" + microGuard);
   if (next === segment) throw new Error("micro-momentum history window was not found");
   const anchor = "  if(!side)return null;\n  const swing=";
   const replacement = `  if(!side)return null;
@@ -93,7 +93,7 @@ once(duplicateAnchor, duplicateReplacement, "suppress repeated setups with KV in
 
 once(
   '    if ((inserted.meta?.changes || 0) > 0) {',
-  '    if ((inserted.meta?.changes || 0) > 0) {\\n      await env.CIEL_STATE.put(duplicateSignalKey, JSON.stringify({created_at_ms: now, entry_price: candidate.entry}), {expirationTtl: 5400}).catch(() => void 0);',
+  '    if ((inserted.meta?.changes || 0) > 0) {\n      await env.CIEL_STATE.put(duplicateSignalKey, JSON.stringify({created_at_ms: now, entry_price: candidate.entry}), {expirationTtl: 5400}).catch(() => void 0);',
   "persist duplicate-suppression state only after a proposal is inserted"
 );
 

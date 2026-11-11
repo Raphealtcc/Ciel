@@ -53,7 +53,7 @@ assert.ok(source.includes('const preferredGroup = Math.floor(now / (5 * 60e3)) %
 assert.ok(source.includes('signal.mode === "TREND_HOLD" || signal.mode === "RANGE_SCALP"'));
 assert.ok(source.includes("1M_SWING_REVERSAL+RECLAIM"));
 assert.ok(source.includes("var CYCLE = 6e4;"));
-assert.ok(source.includes("coreMarkets:[\\"BTC\\",\\"ETH\\",\\"SOL\\"],scalpMarkets:[\\"BTC\\",\\"ETH\\",\\"SOL\\",\\"BNB\\",\\"HYPE\\",\\"ZEC\\"],preferredGroup"));
+assert.ok(source.includes('coreMarkets:["BTC","ETH","SOL"],scalpMarkets:["BTC","ETH","SOL","BNB","HYPE","ZEC"],preferredGroup'));
 assert.ok(source.includes("scanDiagnostics:scanDiagnostics.slice(-120)"));
 assert.ok(source.includes('"INSUFFICIENT_CLOSED_CANDLE_HISTORY"'));
 
