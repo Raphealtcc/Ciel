@@ -231,9 +231,9 @@ once(
     if (candidate.mode === "RANGE_SCALP" && eventIntel?.marketImpact === "BROAD_RISK_OFF") continue;
     const cooldownMs = candidate.mode === "RANGE_SCALP" ? 10 * 6e4 : trendCooldownMs;`,
   `  for (const candidate of candidates) {
-    const isScalpMode = candidate.mode === "RANGE_SCALP" || candidate.mode === "CORE_PULLBACK_SCALP";
+    const isScalpMode = candidate.mode === "RANGE_SCALP" || candidate.mode === "CORE_PULLBACK_SCALP" || candidate.mode === "CORE_TREND_CONTINUATION";
     if (isScalpMode && eventIntel?.marketImpact === "BROAD_RISK_OFF") continue;
-    const cooldownMs = candidate.mode === "CORE_PULLBACK_SCALP" ? 3 * 6e4 : trendCooldownMs;`,
+    const cooldownMs = candidate.mode === "CORE_PULLBACK_SCALP" || candidate.mode === "CORE_TREND_CONTINUATION" ? 3 * 6e4 : trendCooldownMs;`,
   "evaluate scalp and trend candidates independently and cap Gemini reviews at one per symbol per 30 minutes; core pullback scalps use deterministic local review",
 );
 

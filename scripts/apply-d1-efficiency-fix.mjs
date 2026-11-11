@@ -281,7 +281,7 @@ const priorReviewStart = source.indexOf("    const priorReviewSql = candidate.mo
 const qualityReadAt = source.indexOf("    const quality = await getMarketEvidence(env, candidate.symbol, now, liveEvidence?.[candidate.symbol]);", priorReviewStart);
 if (priorReviewStart < 0 || qualityReadAt <= priorReviewStart) throw new Error("Could not locate the mode-specific advisor cooldown query.");
 const kvCooldown = [
-  '    const reviewCooldownKey = candidate.mode === "CORE_PULLBACK_SCALP" ? "ciel:advisor:review:core:" + candidate.symbol : "ciel:advisor:review:ai:" + candidate.symbol;',
+  '    const reviewCooldownKey = candidate.mode === "CORE_PULLBACK_SCALP" || candidate.mode === "CORE_TREND_CONTINUATION" ? "ciel:advisor:review:core:" + candidate.symbol : "ciel:advisor:review:ai:" + candidate.symbol;',
   '    const priorReviewAt = Number(await env.CIEL_STATE.get(reviewCooldownKey)) || 0;',
   '    if (priorReviewAt && now - priorReviewAt < cooldownMs) { console.info("CIEL_ADVISOR_REJECT " + JSON.stringify({symbol:candidate.symbol,reason:"SYMBOL_REVIEW_COOLDOWN",remainingMs:cooldownMs-(now-priorReviewAt)})); continue; }',
   ''
