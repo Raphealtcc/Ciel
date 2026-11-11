@@ -5,7 +5,7 @@ import { evaluateSignalQuality, shouldSuppressDuplicateSignal } from "../src/sig
 const base = {
   candidate: {
     symbol: "BTC", side: "LONG", entry: 100, stopPct: 0.25, targetPct: 0.5,
-    strategy: "5M_TREND_CONTINUATION+BREAKOUT_RETEST", mode: "TREND_HOLD", regime: "TREND_UP",
+    strategy: "5M_TREND_CONTINUATION+BREAKOUT_RETEST", mode: "TREND_HOLD", holdMinutes: 180, regime: "TREND_UP",
     scoreComponents: ["5M_EMA_TREND","5M_RANGE_BREAKOUT","5M_BREAKOUT_RETEST","VOLUME_CONFIRMATION"],
   },
   forecast: { available: true, medianReturnPct: 0.22, components: { return5mPct: 0.15, return15mPct: 0.22, return60mPct: 0.35 } },
@@ -28,10 +28,23 @@ assert.ok(opposingForecast.vetoes.includes("FORECAST_STRONGLY_OPPOSES_ENTRY"));
 
 const losingStrategyHistory = evaluateSignalQuality({
   ...base,
+  candidate: { ...base.candidate, holdMinutes: 60 },
   strategyStats: { "5M_TREND_CONTINUATION+BREAKOUT_RETEST": { sampleCount: 30, expectancyR: 0.04, winRate: 0.31 } },
 });
 assert.equal(losingStrategyHistory.allowed, false);
 assert.ok(losingStrategyHistory.vetoes.includes("STRATEGY_SHADOW_EXPECTANCY_NOT_POSITIVE"));
+
+const shortHorizonShadowDoesNotVetoTrendHold = evaluateSignalQuality({
+  ...base,
+  candidate: {
+    ...base.candidate, holdMinutes: 180, regime: "LEVEL_REVERSAL",
+    strategy: "MULTI_MARKET_LEVEL_SWEEP_RECLAIM",
+    scoreComponents: ["LEVEL_RECLAIM","3M_REVERSAL","5M_CONFIRMATION"],
+  },
+  strategyStats: { "MULTI_MARKET_LEVEL_SWEEP_RECLAIM": { sampleCount: 625, expectancyR: 0.061, winRate: 0.5248 } },
+});
+assert.equal(shortHorizonShadowDoesNotVetoTrendHold.allowed, true);
+assert.ok(!shortHorizonShadowDoesNotVetoTrendHold.vetoes.includes("STRATEGY_SHADOW_EXPECTANCY_NOT_POSITIVE"));
 
 const weakTrendForecast = evaluateSignalQuality({ ...base, forecast: { available: true, medianReturnPct: 0.03 } });
 assert.equal(weakTrendForecast.allowed, false);
