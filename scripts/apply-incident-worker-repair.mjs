@@ -30,7 +30,7 @@ let method = source.slice(methodStart, methodEnd);
 method = replaceOnce(
   method,
   '    const symbols = ["BTC", "ETH", "SOL", "BNB", "HYPE", "ZEC"].filter((symbol) => Number(this.latest[symbol]) > 0);',
-  '    const minLeverage = Number(this.env?.LEVERUP_MIN_LEVERAGE || 50);\n    const symbols = ["BTC", "ETH", "SOL", "BNB", "HYPE", "ZEC"].filter((symbol) => Number(this.latest[symbol]) > 0 && Number(LEVERUP_MARKET_MAX_LEVERAGE[symbol]) >= minLeverage);',
+  '    const minLeverage = Number(this.env?.LEVERUP_MIN_LEVERAGE || 50);\n    const symbols = ["BTC", "ETH", "SOL", "BNB", "HYPE", "ZEC"].filter((symbol) => Number(LEVERUP_MARKET_MAX_LEVERAGE[symbol]) >= minLeverage);',
   "fetch 1m candles only for markets executable at the configured leverage floor",
 );
 method = replaceOnce(
@@ -49,6 +49,18 @@ method = replaceRegexOnce(
 const capCount = method.split(".slice(-90)").length - 1;
 if (capCount !== 2) throw new Error("Expected two 90-candle caps, found " + capCount);
 method = method.replaceAll(".slice(-90)", ".slice(-240)");
+method = replaceOnce(
+  method,
+  "const merged = new Map(existing.map((row) => [Number(row.open_ts_ms), row]));",
+  'if (!candles.length && !existing.length) {\n            const lastEmptyLog = Number(this.coreScalpCandleEmptyLogAt?.[symbol] || 0);\n            if (now - lastEmptyLog > 5 * 60 * 1e3) {\n              this.coreScalpCandleEmptyLogAt = { ...(this.coreScalpCandleEmptyLogAt || {}), [symbol]: now };\n              console.warn("CIEL_CORE_SCALP_1M_EMPTY " + JSON.stringify({ symbol, lookbackMinutes, responseStatus: response.status, payloadType: Array.isArray(payload) ? "array" : typeof payload, payloadKeys: payload && typeof payload === "object" ? Object.keys(payload).slice(0, 8) : [] }));\n            }\n          }\n          const merged = new Map(existing.map((row) => [Number(row.open_ts_ms), row]));',
+  "log empty initial 1m history without flooding logs",
+);
+method = replaceRegexOnce(
+  method,
+  /this\\.coreScalpCandles\\[symbol\\] = \\[\\.\\.\\.merged\\.values\\(\\)\\]\\s*\\.sort\\(\\(a,b\\) => a\\.open_ts_ms-b\\.open_ts_ms\\)\\s*\\.slice\\(-240\\);\\s*updated = true;/,
+  "const next = [...merged.values()].sort((a, b) => a.open_ts_ms - b.open_ts_ms).slice(-240);\n          const previousLast = Number(existing[existing.length - 1]?.open_ts_ms || 0);\n          const nextLast = Number(next[next.length - 1]?.open_ts_ms || 0);\n          this.coreScalpCandles[symbol] = next;\n          if (next.length !== existing.length || nextLast !== previousLast) updated = true;",
+  "avoid no-op Durable Object storage writes",
+);
 source = source.slice(0, methodStart) + method + source.slice(methodEnd);
 
 source = replaceOnce(
