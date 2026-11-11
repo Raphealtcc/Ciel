@@ -57,7 +57,7 @@ method = replaceOnce(
 );
 method = replaceRegexOnce(
   method,
-  /this\\.coreScalpCandles\\[symbol\\] = \\[\\.\\.\\.merged\\.values\\(\\)\\]\\s*\\.sort\\(\\(a,b\\) => a\\.open_ts_ms-b\\.open_ts_ms\\)\\s*\\.slice\\(-240\\);\\s*updated = true;/,
+  /this\.coreScalpCandles\[symbol\]\s*=\s*\[\.\.\.merged\.values\(\)\]\s*\.sort\(\(a,\s*b\)\s*=>\s*a\.open_ts_ms\s*-\s*b\.open_ts_ms\)\s*\.slice\(-240\);\s*updated\s*=\s*true;/,
   "const next = [...merged.values()].sort((a, b) => a.open_ts_ms - b.open_ts_ms).slice(-240);\n          const previousLast = Number(existing[existing.length - 1]?.open_ts_ms || 0);\n          const nextLast = Number(next[next.length - 1]?.open_ts_ms || 0);\n          this.coreScalpCandles[symbol] = next;\n          if (next.length !== existing.length || nextLast !== previousLast) updated = true;",
   "avoid no-op Durable Object storage writes",
 );
