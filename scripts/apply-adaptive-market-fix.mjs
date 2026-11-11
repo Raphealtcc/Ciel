@@ -164,9 +164,9 @@ once(
   "include strategy rejection and adaptive-learning summaries in diagnostics",
 );
 
-once("const strategyStats = { rangeScalp: modeStats(\"RANGE_SCALP\"), trendHold: modeStats(\"TREND_HOLD\"), legacy: modeStats(\"LEGACY\") };","const strategyStats = { corePullbackScalp: modeStats(\"TREND_PULLBACK_ENTRY\"), coreTrendContinuation: modeStats(\"TREND_BREAKOUT_RETEST\"), trendHold: modeStats(\"TREND_HOLD\"), rangeScalp: modeStats(\"RANGE_SCALP\"), legacy: modeStats(\"LEGACY\") };","report TREND_PULLBACK_ENTRY, TREND_BREAKOUT_RETEST, TREND_HOLD and RANGE_SCALP separately");
+once("const strategyStats = { rangeScalp: modeStats(\"RANGE_SCALP\"), trendHold: modeStats(\"TREND_HOLD\"), legacy: modeStats(\"LEGACY\") };","const strategyStats = { trendHold: modeStats(\"TREND_HOLD\") };","report only the active TREND_HOLD strategy");
 
-once("lines.push(\"\", \"STRATEGY PERFORMANCE (CLOSED PAPER TRADES)\", \"Range scalps: \" + describeMode(data.strategyStats.rangeScalp), \"Trend holds: \" + describeMode(data.strategyStats.trendHold));","lines.push(\"\", \"STRATEGY PERFORMANCE (CLOSED PAPER TRADES)\", \"Core pullback scalps: \" + describeMode(data.strategyStats.corePullbackScalp), \"5m trend continuation: \" + describeMode(data.strategyStats.coreTrendContinuation), \"Trend holds: \" + describeMode(data.strategyStats.trendHold), \"Range scalps: \" + describeMode(data.strategyStats.rangeScalp));","print all four strategy buckets in /profits");
+once("lines.push(\"\", \"STRATEGY PERFORMANCE (CLOSED PAPER TRADES)\", \"Range scalps: \" + describeMode(data.strategyStats.rangeScalp), \"Trend holds: \" + describeMode(data.strategyStats.trendHold));","lines.push(\"\", \"STRATEGY PERFORMANCE (CLOSED PAPER TRADES)\", \"Trend holds: \" + describeMode(data.strategyStats.trendHold));","print only active trend-hold performance in /profits");
 once(
   'const reviewed = candidate.strategy === "5M_TREND+1M_PULLBACK+RECLAIM"',
   'const reviewed = candidate.strategy === "5M_TREND_CONTINUATION+BREAKOUT_RETEST"\n      ? { verdict:"WAIT", reason:"Closed 5m EMA trend, breakout, retest, volume, freshness and market-quality gates passed; deterministic continuation review avoids duplicate Gemini calls.", flags:["LOCAL_TREND_BREAKOUT_RETEST"], model:"CIEL deterministic trend continuation guard", queries:[], sources:[] }\n      : candidate.strategy === "5M_TREND+1M_PULLBACK+RECLAIM"',
@@ -253,4 +253,4 @@ function patchGeminiMultiProjectFailover() {
 patchGeminiMultiProjectFailover();
 
 await writeFile(file,source);
-console.log("Adaptive market patch complete: BTC/ETH/SOL retain primary priority; BTC/ETH/SOL/BNB/HYPE/ZEC receive scalp and 5m continuation coverage; other configured markets remain eligible; bounded learning affects ranking only.");
+console.log("Adaptive market patch complete: BTC/ETH/SOL retain primary priority; BTC/ETH/SOL/BNB/HYPE/ZEC receive trend-pullback and 5m breakout-retest coverage; other configured markets remain eligible; bounded learning affects ranking only.");
