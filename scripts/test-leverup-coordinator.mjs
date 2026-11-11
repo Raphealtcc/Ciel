@@ -151,10 +151,12 @@ function fakeIntentDb() {
             return { success: true };
           }
           if (sql.startsWith("UPDATE leverup_execution_intents")) {
-            const signalId = params[params.length - 1];
+            const fields = sql.slice(sql.indexOf(" SET ") + 5, sql.indexOf(" WHERE ")).split(", ");
+            // updateIntent binds SET values first, then signal_id, then optimistic
+            // comparison values. Do not mistake the final comparison value for signal_id.
+            const signalId = params[fields.length];
             const row = rows.get(signalId);
             if (!row) return { success: false };
-            const fields = sql.slice(sql.indexOf(" SET ") + 5, sql.indexOf(" WHERE ")).split(", ");
             fields.forEach((field, index) => {
               const key = field.split(" = ")[0];
               const value = params[index];
