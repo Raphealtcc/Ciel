@@ -326,15 +326,15 @@ const priorReviewStart = source.indexOf("    const priorReviewSql = candidate.mo
 const qualityReadAt = source.indexOf("    const quality = await getMarketEvidence(env, candidate.symbol, now, liveEvidence?.[candidate.symbol]);", priorReviewStart);
 if (priorReviewStart < 0 || qualityReadAt <= priorReviewStart) throw new Error("Could not locate the mode-specific advisor cooldown query.");
 const kvCooldown = [
-  '    const reviewCooldownKey = candidate.mode === "TREND_PULLBACK_ENTRY" || candidate.mode === "TREND_BREAKOUT_RETEST" ? "ciel:advisor:review:core:" + candidate.symbol : "ciel:advisor:review:ai:" + candidate.symbol;',
+  '    const reviewCooldownKey = "ciel:advisor:review:trend:" + candidate.symbol;',
   '    const priorReviewAt = Number(await env.CIEL_STATE.get(reviewCooldownKey)) || 0;',
   '    if (priorReviewAt && now - priorReviewAt < cooldownMs) { console.info("CIEL_ADVISOR_REJECT " + JSON.stringify({symbol:candidate.symbol,reason:"SYMBOL_REVIEW_COOLDOWN",remainingMs:cooldownMs-(now-priorReviewAt)})); continue; }',
   ''
 ].join("\n");
 source = source.slice(0, priorReviewStart) + kvCooldown + source.slice(qualityReadAt);
 replaceOnceInSource(
-  '    const reviewed = candidate.mode === "TREND_PULLBACK_ENTRY"',
-  '    await env.CIEL_STATE.put(reviewCooldownKey, String(now), { expirationTtl: 86400 }).catch(() => void 0);\n    const reviewed = candidate.mode === "TREND_PULLBACK_ENTRY"',
+  '    const reviewed = candidate.strategy === "5M_TREND+1M_PULLBACK+RECLAIM"',
+  '    await env.CIEL_STATE.put(reviewCooldownKey, String(now), { expirationTtl: 86400 }).catch(() => void 0);\n    const reviewed = candidate.strategy === "5M_TREND+1M_PULLBACK+RECLAIM"',
   "persist the per-symbol cooldown only when a candidate reaches review"
 );
 
