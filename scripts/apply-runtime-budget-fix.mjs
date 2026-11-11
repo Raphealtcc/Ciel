@@ -24,8 +24,8 @@ function replaceBootstrapOnce(before, after, label) {
 }
 replaceBootstrapOnce("const startTime = now - 4 * 86400000;", "const startTime = now - 24 * 60 * 60 * 1000;", "bound bootstrap to 24h");
 replaceBootstrapOnce(
-  \`const coverage = await this.env.DB.prepare("SELECT COUNT(*) AS n,MIN(ts_ms) AS first_ts FROM market_samples WHERE symbol=? AND ts_ms>=?").bind(symbol,startTime).first();\`,
-  \`const coverage = await this.env.DB.prepare("SELECT COUNT(*) AS n,MIN(open_ts_ms) AS first_ts FROM market_candles WHERE symbol=? AND interval='5m' AND open_ts_ms>=?").bind(symbol,startTime).first();\`,
+  `const coverage = await this.env.DB.prepare("SELECT COUNT(*) AS n,MIN(ts_ms) AS first_ts FROM market_samples WHERE symbol=? AND ts_ms>=?").bind(symbol,startTime).first();`,
+  `const coverage = await this.env.DB.prepare("SELECT COUNT(*) AS n,MIN(open_ts_ms) AS first_ts FROM market_candles WHERE symbol=? AND interval='5m' AND open_ts_ms>=?").bind(symbol,startTime).first();`,
   "measure existing candle archive coverage",
 );
 replaceBootstrapOnce(
