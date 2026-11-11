@@ -27,7 +27,8 @@ function patchFunction(name, endMarker, transform, label) {
 
 patchFunction("analyzeMicroMomentumContinuation", "__name(analyzeMicroMomentumContinuation", (segment) => {
   let next = segment.replace(".slice(-40);", ".slice(-200);");
-  next = next.replace("function analyzeMicroMomentumContinuation(symbol,rows,now){", 'function analyzeMicroMomentumContinuation(symbol,rows,now){\n  if(!["BTC","ETH","SOL"].includes(symbol))return null;');
+  const microGuard = '  if(!["BTC","ETH","SOL","BNB","HYPE","ZEC"].includes(String(symbol||"").toUpperCase()))return null;';
+  if (!next.includes(microGuard)) next = next.replace("function analyzeMicroMomentumContinuation(symbol,rows,now){", "function analyzeMicroMomentumContinuation(symbol,rows,now){\\n" + microGuard);
   if (next === segment) throw new Error("micro-momentum history window was not found");
   const anchor = "  if(!side)return null;\n  const swing=";
   const replacement = `  if(!side)return null;
@@ -79,16 +80,22 @@ once(
   "show the evidence-quality score on each Telegram recommendation"
 );
 
-const duplicateAnchor = '    if (priorReview && now - Number(priorReview.created_at_ms) < cooldownMs) continue;\n    const quality = await getMarketEvidence';
-const duplicateReplacement = `    if (priorReview && now - Number(priorReview.created_at_ms) < cooldownMs) continue;
-    const priorSameSignal = await env.DB.prepare("SELECT created_at_ms,entry_price FROM advisor_positions WHERE symbol=? AND side=? AND strategy=? AND created_at_ms>=? ORDER BY created_at_ms DESC LIMIT 1").bind(candidate.symbol,candidate.side,candidate.strategy,now-90*6e4).first();
+const duplicateAnchor = '    const quality = await getMarketEvidence(env, candidate.symbol, now, liveEvidence?.[candidate.symbol]);';
+const duplicateReplacement = `    const duplicateSignalKey = "ciel:advisor:duplicate:v1:" + candidate.symbol + ":" + candidate.side + ":" + String(candidate.strategy || candidate.mode || "UNKNOWN");
+    const priorSameSignal = await env.CIEL_STATE.get(duplicateSignalKey, "json").catch(() => null);
     const duplicateDecision = shouldSuppressDuplicateSignal({candidate,priorSignal:priorSameSignal,now});
     if (duplicateDecision.suppress) {
       scanDiagnostics.push({symbol:candidate.symbol,strategy:candidate.strategy,reason:"REPEATED_SETUP_SUPPRESSED",ageMinutes:Math.round(duplicateDecision.ageMs/60000),entryDisplacementPct:Number(duplicateDecision.displacementPct.toFixed(3))});
       continue;
     }
-    const quality = await getMarketEvidence`;
-once(duplicateAnchor, duplicateReplacement, "suppress repeated same-side/same-strategy setups until price materially rearms");
+    const quality = await getMarketEvidence(env, candidate.symbol, now, liveEvidence?.[candidate.symbol]);`;
+once(duplicateAnchor, duplicateReplacement, "suppress repeated setups with KV instead of a D1 query");
+
+once(
+  '    if ((inserted.meta?.changes || 0) > 0) {',
+  '    if ((inserted.meta?.changes || 0) > 0) {\\n      await env.CIEL_STATE.put(duplicateSignalKey, JSON.stringify({created_at_ms: now, entry_price: candidate.entry}), {expirationTtl: 5400}).catch(() => void 0);',
+  "persist duplicate-suppression state only after a proposal is inserted"
+);
 
 const qualityAnchor = "    const intraday = isScalpMode ? null : await getIntradayPattern";
 const qualityCode = `    const signalQuality = evaluateSignalQuality({candidate,forecast,market:reviewerMarket,eventIntel,strategyStats:strategyShadowStats});
