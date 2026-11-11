@@ -96,9 +96,12 @@ const newCandidateBuild = `    const beforeCount = candidates.length;
     const confidenceFloor = setting(env.ADVISORY_MIN_CONFIDENCE,0.72,0.5,0.95);
     const isCore = coreMarketSet.has(sym);
     const isTrendEligible = trendEntryMarketSet.has(sym);
-    const eligibleBaseSignals = baseSignals.filter((signal) => signal && signal.confidence >= confidenceFloor && (!isCore || signal.mode === "TREND_HOLD"));
-    for (const signal of eligibleBaseSignals) candidates.push(signal);
-    if (isCore && eligibleBaseSignals.length === 0) scanDiagnostics.push({symbol:sym,strategy:"TREND_HOLD",reason:baseSignals.some(Boolean) ? "BELOW_CONFIDENCE_OR_CORE_MODE" : "NO_VALID_TREND_SIGNAL"});
+    const signal = baseSignals.find((item) => item && (!isCore || item.mode === "TREND_HOLD"));
+    if (signal && signal.confidence >= confidenceFloor && (!isCore || signal.mode === "TREND_HOLD")) candidates.push(signal);
+    for (const alternateSignal of baseSignals) {
+      if (alternateSignal && alternateSignal !== signal && (!isCore || alternateSignal.mode === "TREND_HOLD")) candidates.push(alternateSignal);
+    }
+    if (isCore && !signal && !baseSignals.some((item) => item && item.mode === "TREND_HOLD")) scanDiagnostics.push({symbol:sym,strategy:"TREND_HOLD",reason:baseSignals.some(Boolean) ? "NO_CORE_TREND_MODE" : "NO_VALID_TREND_SIGNAL"});
     if (isTrendEligible) {
       const candles = coreScalpData.get(sym);
       if (!candles || candles.one.length < 25 || candles.five.length < 40) {
