@@ -31,7 +31,7 @@ assert.equal(config.vars.LEVERUP_LIVE_TRADING, undefined, "production live mode 
 assert.equal(config.vars.LEVERUP_KILL_SWITCH, undefined, "production kill switch must remain remotely managed");
 assert.equal(config.vars.LEVERUP_PURGE_LIVE_ENABLED, "true", "Only the explicit manual purge command may close live positions while the kill switch is on");
 assert.equal(config.vars.LEVERUP_MIN_LEVERAGE, "50");
-assert.equal(config.vars.LEVERUP_TOTAL_ALLOCATION_MON, "70", "production allocation must retain the approved 70 MON cap");
+assert.equal(config.vars.LEVERUP_TOTAL_ALLOCATION_MON, "200", "production allocation must use the requested 200 MON cap");
 assert.equal(config.vars.LEVERUP_RESERVE_MON, "30", "production reserve must retain the approved 30 MON reserve");
 assert.equal(config.vars.LEVERUP_MAX_TRADE_MARGIN_MON, "30", "production trade margin must retain the approved 30 MON cap");
 assert.equal(config.vars.LEVERUP_MAX_CONCURRENT_POSITIONS, "2");
