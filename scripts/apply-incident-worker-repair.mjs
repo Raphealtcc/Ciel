@@ -78,8 +78,8 @@ source = replaceOnce(
 
 source = replaceOnce(
   source,
-  'candleLevelSymbols:candleStructureRows.size,coreMarkets:["BTC","ETH","SOL"],scalpMarkets:["BTC","ETH","SOL","BNB","HYPE","ZEC"],preferredGroup,',
-  'candleLevelSymbols: candleStructureRows.size, oneMinuteCandleCounts: Object.fromEntries(Object.entries(coreScalpCandles || {}).map(([symbol, rows]) => [symbol, Array.isArray(rows) ? rows.length : 0])), fiveMinuteCandleCounts: Object.fromEntries(Object.entries(coreTrendCandles || {}).map(([symbol, rows]) => [symbol, Array.isArray(rows) ? rows.length : 0])), coreMarkets: ["BTC", "ETH", "SOL"], scalpMarkets: ["BTC", "ETH", "SOL", "BNB", "HYPE"], unsupportedLeverageMarkets: symbols.filter((symbol) => Number.isFinite(Number(LEVERUP_MARKET_MAX_LEVERAGE[symbol])) && Number(LEVERUP_MARKET_MAX_LEVERAGE[symbol]) < Number(env?.LEVERUP_MIN_LEVERAGE || 50)), preferredGroup,',
+  'candleLevelSymbols:candleStructureRows.size,coreMarkets:["BTC","ETH","SOL"],trendEntryMarkets:["BTC","ETH","SOL","BNB","HYPE","ZEC"],preferredGroup,',
+  'candleLevelSymbols: candleStructureRows.size, oneMinuteCandleCounts: Object.fromEntries(Object.entries(coreScalpCandles || {}).map(([symbol, rows]) => [symbol, Array.isArray(rows) ? rows.length : 0])), fiveMinuteCandleCounts: Object.fromEntries(Object.entries(coreTrendCandles || {}).map(([symbol, rows]) => [symbol, Array.isArray(rows) ? rows.length : 0])), coreMarkets: ["BTC", "ETH", "SOL"], trendEntryMarkets: ["BTC", "ETH", "SOL", "BNB", "HYPE", "ZEC"], unsupportedLeverageMarkets: symbols.filter((symbol) => Number.isFinite(Number(LEVERUP_MARKET_MAX_LEVERAGE[symbol])) && Number(LEVERUP_MARKET_MAX_LEVERAGE[symbol]) < Number(env?.LEVERUP_MIN_LEVERAGE || 50)), preferredGroup,',
   "record per-symbol candle coverage and unsupported leverage markets",
 );
 
