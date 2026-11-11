@@ -124,13 +124,13 @@ once(
 
 once(
   '  async updateAlertOutcomes(now) {\n    const result = await this.env.DB.prepare(',
-  '  async updateAlertOutcomes(now) {\n    const lastUpdate = Number(await this.state.storage.get("lastAlertOutcomeUpdateAt") || 0);\n    if (lastUpdate && now - lastUpdate < 5 * 60 * 1e3) return;\n    const result = await this.env.DB.prepare(',
-  "throttle non-critical alert outcome analytics to one D1 read batch every five minutes",
+  '  async updateAlertOutcomes(now) {\n    const lastUpdate = Number(await this.state.storage.get("lastAlertOutcomeUpdateAt") || 0);\n    if (lastUpdate && now - lastUpdate < 15 * 60 * 1e3) return;\n    const result = await this.env.DB.prepare(',
+  "throttle non-critical alert outcome analytics to one D1 read batch every fifteen minutes",
 );
 once(
   'ORDER BY created_at_ms ASC LIMIT 200',
-  'ORDER BY created_at_ms ASC LIMIT 30',
-  "bound each alert outcome batch to 30 rows",
+  'ORDER BY created_at_ms ASC LIMIT 20',
+  "bound each alert outcome batch to 20 rows",
 );
 once(
   '    if (statements.length) await this.env.DB.batch(statements);\n  }\n};',
