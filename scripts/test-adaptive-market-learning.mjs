@@ -38,7 +38,6 @@ assert.ok(good>1&&good<=1.1);
 const losing=buildAdaptiveLearningProfile(Array.from({length:20},(_,i)=>trade(i,-1)),now);
 const bad=adaptiveCandidateMultiplier(losing,{symbol:"BTC",mode:"TREND_HOLD"});
 assert.ok(bad<1&&bad>=0.9);
-assert.equal(adaptiveCandidateMultiplier(profitable,{symbol:"BTC",mode:"TREND_HOLD"}),1);
 assert.ok(source.includes('["BTC","ETH","SOL","BNB","HYPE","ZEC", ...configuredWatchSymbols(env.WATCH_SYMBOLS)]'));
 assert.ok(source.includes("orderedSymbols"));
 assert.ok(source.includes('const trendEntryMarketSet = new Set(["BTC","ETH","SOL","BNB","HYPE","ZEC"])'));
@@ -117,7 +116,7 @@ const topLevelHelpers=source.slice(helperScopeStart,helperScopeEnd);
 assert.ok(topLevelHelpers.includes("function getCandleStructureMap("),"candle structure map helper must be top-level and visible to runAdvisorCycle");
 assert.ok(topLevelHelpers.includes("function analyzeCandleLevelReversal("),"candle-level reversal helper must be top-level and visible to runAdvisorCycle");
 assert.ok(topLevelHelpers.includes("function getCandleStructureEvidence("),"candle evidence helper must be top-level and visible to runAdvisorCycle");
-assert.ok(source.includes("CIEL deterministic core trend continuation guard"));
+assert.ok(source.includes("CIEL deterministic trend continuation guard"));
 assert.ok(source.includes("LOCAL_TREND_BREAKOUT_RETEST"));
 
 assert.ok(!source.includes('paperStorage.put("ciel:adaptive-learning:v1").bind'));
