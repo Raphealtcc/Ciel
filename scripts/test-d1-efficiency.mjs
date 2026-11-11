@@ -49,6 +49,7 @@ assert.ok(!source.includes("FROM market_candle_hourly_stats WHERE symbol IN"), "
 assert.ok(!source.includes("FROM market_candle_hourly_stats WHERE symbol=?"), "candidate evidence must not issue per-symbol hourly D1 reads");
 assert.ok(!source.includes("SELECT created_at_ms FROM advisor_ai_audit WHERE symbol=?"), "advisor review cooldown must not scan the D1 audit table");
 assert.ok(source.includes("ciel:advisor:review:core:") && source.includes("ciel:advisor:review:ai:"), "mode-specific review cooldowns must use KV");
+assert.ok(!source.includes("SELECT created_at_ms,entry_price FROM advisor_positions WHERE symbol=? AND side=? AND strategy=?"), "duplicate signal checks must not read D1 per candidate");
 assert.ok(source.includes("candidateCount:candidates.length"), "scan diagnostics must count discovered candidates");
 assert.ok(source.includes("noSetupSymbols"), "scan diagnostics must identify markets with no technical setup");
 assert.ok(source.includes("CIEL_ADVISOR_SCAN"), "successful scans must emit structured scan-health logs");
@@ -75,5 +76,5 @@ const outcomeEnd = source.indexOf("\n  }\n};", outcomeStart);
 assert.ok(outcomeStart >= 0 && outcomeEnd > outcomeStart, "alert outcome updater must exist");
 const outcomeUpdater = source.slice(outcomeStart, outcomeEnd);
 assert.ok(outcomeUpdater.includes("lastAlertOutcomeUpdateAt"), "alert analytics must be throttled durably in DO storage");
-assert.ok(outcomeUpdater.includes("now - lastUpdate < 5 * 60 * 1e3"), "alert analytics D1 reads must be at most once every five minutes");
-assert.ok(outcomeUpdater.includes("LIMIT 30"), "alert analytics batches must be bounded to 30 rows");
+assert.ok(outcomeUpdater.includes("now - lastUpdate < 15 * 60 * 1e3"), "alert analytics D1 reads must be at most once every five minutes");
+assert.ok(outcomeUpdater.includes("LIMIT 20"), "alert analytics batches must be bounded to 30 rows");
