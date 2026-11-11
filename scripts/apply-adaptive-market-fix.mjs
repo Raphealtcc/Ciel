@@ -173,8 +173,8 @@ once(
   "use deterministic local review for validated trend continuation and pullback candidates",
 );
 once(
-  '"LOCAL_RANGE_SCALP_REVIEW", "LOCAL_TREND_PULLBACK_RECLAIM"',
-  '"LOCAL_RANGE_SCALP_REVIEW", "LOCAL_TREND_PULLBACK_RECLAIM", "LOCAL_TREND_BREAKOUT_RETEST"',
+  '"LOCAL_RANGE_SCALP_REVIEW", "LOCAL_TREND_PULLBACK_ENTRY"',
+  '"LOCAL_RANGE_SCALP_REVIEW", "LOCAL_TREND_PULLBACK_ENTRY", "LOCAL_TREND_BREAKOUT_RETEST"',
   "allow the deterministic continuation review through existing forecast and market-quality gates",
 );
 once(
