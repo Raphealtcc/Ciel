@@ -322,19 +322,19 @@ marketEvidence = marketEvidence.slice(0,fallbackStart) +
 source = source.slice(0,marketEvidenceStart) + marketEvidence + source.slice(marketEvidenceEnd);
 
 // Replace the mode-specific unindexed D1 AI-audit cooldown lookup with KV.
-const priorReviewStart = source.indexOf("    const priorReviewSql = candidate.mode === \"CORE_PULLBACK_SCALP\"");
+const priorReviewStart = source.indexOf("    const priorReviewSql = candidate.mode === \"TREND_PULLBACK_ENTRY\"");
 const qualityReadAt = source.indexOf("    const quality = await getMarketEvidence(env, candidate.symbol, now, liveEvidence?.[candidate.symbol]);", priorReviewStart);
 if (priorReviewStart < 0 || qualityReadAt <= priorReviewStart) throw new Error("Could not locate the mode-specific advisor cooldown query.");
 const kvCooldown = [
-  '    const reviewCooldownKey = candidate.mode === "CORE_PULLBACK_SCALP" || candidate.mode === "CORE_TREND_CONTINUATION" ? "ciel:advisor:review:core:" + candidate.symbol : "ciel:advisor:review:ai:" + candidate.symbol;',
+  '    const reviewCooldownKey = candidate.mode === "TREND_PULLBACK_ENTRY" || candidate.mode === "TREND_BREAKOUT_RETEST" ? "ciel:advisor:review:core:" + candidate.symbol : "ciel:advisor:review:ai:" + candidate.symbol;',
   '    const priorReviewAt = Number(await env.CIEL_STATE.get(reviewCooldownKey)) || 0;',
   '    if (priorReviewAt && now - priorReviewAt < cooldownMs) { console.info("CIEL_ADVISOR_REJECT " + JSON.stringify({symbol:candidate.symbol,reason:"SYMBOL_REVIEW_COOLDOWN",remainingMs:cooldownMs-(now-priorReviewAt)})); continue; }',
   ''
 ].join("\n");
 source = source.slice(0, priorReviewStart) + kvCooldown + source.slice(qualityReadAt);
 replaceOnceInSource(
-  '    const reviewed = candidate.mode === "CORE_PULLBACK_SCALP"',
-  '    await env.CIEL_STATE.put(reviewCooldownKey, String(now), { expirationTtl: 86400 }).catch(() => void 0);\n    const reviewed = candidate.mode === "CORE_PULLBACK_SCALP"',
+  '    const reviewed = candidate.mode === "TREND_PULLBACK_ENTRY"',
+  '    await env.CIEL_STATE.put(reviewCooldownKey, String(now), { expirationTtl: 86400 }).catch(() => void 0);\n    const reviewed = candidate.mode === "TREND_PULLBACK_ENTRY"',
   "persist the per-symbol cooldown only when a candidate reaches review"
 );
 

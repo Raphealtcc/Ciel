@@ -84,7 +84,7 @@ once(
   "refresh 1m core candles only after the background task queue is initialized",
 );
 
-const analyzer = `function analyzeCorePullbackScalp(symbol, oneMinuteRows, fiveMinuteRows, now) {
+const analyzer = `function analyzeTrendPullbackEntry(symbol, oneMinuteRows, fiveMinuteRows, now) {
   const normalize = (rows, intervalMs) => (Array.isArray(rows) ? rows : [])
     .map((row) => ({
       t: Number(row.close_ts_ms || row.open_ts_ms + intervalMs),
@@ -137,7 +137,7 @@ const analyzer = `function analyzeCorePullbackScalp(symbol, oneMinuteRows, fiveM
       if(stopPct>0&&stopPct<=0.45){
         return {symbol,side,entry,stopPct,targetPct:Math.max(0.25,stopPct*1.5),confidence:Math.min(0.88,0.79+(reversalAvgVol>0&&reversalLatest.v>=reversalAvgVol?0.03:0)),
           scoreComponents:["1M_SWING_EXHAUSTION","1M_PIVOT_RECLAIM","1M_RSI_TURN","1M_VOLUME_CONFIRMATION"],scoreModel:"core-1m-swing-reversal-v1",
-          strategy:"1M_SWING_REVERSAL+RECLAIM",regime:"COUNTER_TREND_REVERSAL",mode:"CORE_PULLBACK_SCALP",holdMinutes:12,
+          strategy:"1M_SWING_REVERSAL+RECLAIM",regime:"COUNTER_TREND_REVERSAL",mode:"TREND_HOLD",holdMinutes:180,
           rsi:currentRsi,bounce:null,cci:null,stochRsi:null,rangePositionPct:null,
           reason:"Closed 1m candles confirm swing exhaustion, pivot retest, directional reclaim/rejection, improving RSI and volume. Evaluated independently of 5m EMA direction."};
       }
@@ -179,12 +179,12 @@ const analyzer = `function analyzeCorePullbackScalp(symbol, oneMinuteRows, fiveM
     scoreModel:"core-pullback-scalp-v1",
     strategy:"5M_TREND+1M_PULLBACK+RECLAIM",
     regime:trendUp?"TREND_UP":"TREND_DOWN",
-    mode:"CORE_PULLBACK_SCALP",holdMinutes:15,
+    mode:"TREND_HOLD",holdMinutes:180,
     rsi:null,bounce:null,cci:null,stochRsi:null,rangePositionPct:null,
     reason:"Closed 5m candles establish directional EMA9/EMA21 trend; closed 1m candles show a pullback toward EMA9 followed by a directional reclaim and volume confirmation. Entry is the latest closed 1m candle close."
   };
 }
-__name(analyzeCorePullbackScalp, "analyzeCorePullbackScalp");
+__name(analyzeTrendPullbackEntry, "analyzeTrendPullbackEntry");
 
 `;
 once(
@@ -219,7 +219,7 @@ once(
     if (isCore) {
       const candles = coreScalpData.get(sym);
       if (candles) {
-        const scalp = analyzeCorePullbackScalp(sym,candles.one,candles.five,now);
+        const scalp = analyzeTrendPullbackEntry(sym,candles.one,candles.five,now);
         if (scalp && scalp.confidence >= setting(env.ADVISORY_MIN_CONFIDENCE,0.72,0.5,0.95)) candidates.push(scalp);
       }
     }`,
@@ -231,16 +231,16 @@ once(
     if (candidate.mode === "RANGE_SCALP" && eventIntel?.marketImpact === "BROAD_RISK_OFF") continue;
     const cooldownMs = candidate.mode === "RANGE_SCALP" ? 10 * 6e4 : trendCooldownMs;`,
   `  for (const candidate of candidates) {
-    const isScalpMode = candidate.mode === "RANGE_SCALP" || candidate.mode === "CORE_PULLBACK_SCALP" || candidate.mode === "CORE_TREND_CONTINUATION";
+    const isScalpMode = false;
     if (isScalpMode && eventIntel?.marketImpact === "BROAD_RISK_OFF") continue;
-    const cooldownMs = candidate.mode === "CORE_PULLBACK_SCALP" || candidate.mode === "CORE_TREND_CONTINUATION" ? 3 * 6e4 : trendCooldownMs;`,
+    const cooldownMs = trendCooldownMs;`,
   "evaluate scalp and trend candidates independently and cap Gemini reviews at one per symbol per 30 minutes; core pullback scalps use deterministic local review",
 );
 
 
 once(
   "    const priorReview = await env.DB.prepare(\"SELECT created_at_ms FROM advisor_ai_audit WHERE symbol=? AND model!='CIEL Statistical Ensemble v1' AND model!='CIEL deterministic range guard' ORDER BY created_at_ms DESC LIMIT 1\").bind(candidate.symbol).first();",
-  `    const priorReviewSql = candidate.mode === "CORE_PULLBACK_SCALP"
+  `    const priorReviewSql = candidate.mode === "TREND_PULLBACK_ENTRY"
       ? "SELECT created_at_ms FROM advisor_ai_audit WHERE symbol=? AND model='CIEL deterministic core scalp guard' ORDER BY created_at_ms DESC LIMIT 1"
       : candidate.mode === "RANGE_SCALP"
         ? "SELECT created_at_ms FROM advisor_ai_audit WHERE symbol=? AND model='CIEL deterministic range guard' ORDER BY created_at_ms DESC LIMIT 1"
@@ -279,15 +279,15 @@ once(
 
 once(
   'const reviewed = await review(env,candidate,forecast,reviewerMarket,intraday,eventIntel,candleStructure,sizingLimits);',
-  `const reviewed = candidate.mode === "CORE_PULLBACK_SCALP"
-      ? { verdict:"WAIT", reason:"Closed 1m/5m pullback, reclaim, volume, freshness and market-quality gates passed; deterministic scalp review avoids extra Gemini calls.", flags:["LOCAL_CORE_PULLBACK_SCALP"], model:"CIEL deterministic core scalp guard", queries:[], sources:[] }
+  `const reviewed = candidate.strategy === "5M_TREND+1M_PULLBACK+RECLAIM"
+      ? { verdict:"WAIT", reason:"Closed 1m/5m pullback, reclaim, volume, freshness and market-quality gates passed; deterministic scalp review avoids extra Gemini calls.", flags:["LOCAL_TREND_PULLBACK_ENTRY"], model:"CIEL deterministic core scalp guard", queries:[], sources:[] }
       : await review(env,candidate,forecast,reviewerMarket,intraday,eventIntel,candleStructure,sizingLimits);`,
   "use deterministic local review for core scalps without Gemini calls",
 );
 
 once(
   'const waitFallback = reviewed.verdict === "WAIT" && !explicitRisk && (!hasForecast || reviewed.flags.some((flag) => ["NO_GEMINI_KEY", "GEMINI_RATE_LIMIT", "GEMINI_COOLDOWN", "GEMINI_API_ERROR", "GEMINI_UNAVAILABLE", "GEMINI_KEYS_FAILED", "GEMINI_PERMISSION_DENIED", "LOCAL_RANGE_SCALP_REVIEW"].includes(flag)));',
-  'const waitFallback = reviewed.verdict === "WAIT" && !explicitRisk && (!hasForecast || reviewed.flags.some((flag) => ["NO_GEMINI_KEY", "GEMINI_RATE_LIMIT", "GEMINI_COOLDOWN", "GEMINI_API_ERROR", "GEMINI_UNAVAILABLE", "GEMINI_KEYS_FAILED", "GEMINI_PERMISSION_DENIED", "LOCAL_RANGE_SCALP_REVIEW", "LOCAL_CORE_PULLBACK_SCALP"].includes(flag)));',
+  'const waitFallback = reviewed.verdict === "WAIT" && !explicitRisk && (!hasForecast || reviewed.flags.some((flag) => ["NO_GEMINI_KEY", "GEMINI_RATE_LIMIT", "GEMINI_COOLDOWN", "GEMINI_API_ERROR", "GEMINI_UNAVAILABLE", "GEMINI_KEYS_FAILED", "GEMINI_PERMISSION_DENIED", "LOCAL_RANGE_SCALP_REVIEW", "LOCAL_TREND_PULLBACK_ENTRY"].includes(flag)));',
   "allow deterministic scalp review only through existing forecast and market-quality gates",
 );
 
@@ -299,13 +299,13 @@ once(
 
 once(
   'holdMinutes:candidate.holdMinutes || (candidate.mode === "RANGE_SCALP" ? 12 : 180), mode:candidate.mode',
-  'holdMinutes:candidate.holdMinutes || (candidate.mode === "CORE_PULLBACK_SCALP" ? 15 : candidate.mode === "RANGE_SCALP" ? 12 : 180), mode:candidate.mode',
+  'holdMinutes:candidate.holdMinutes || (180), mode:candidate.mode',
   "set dedicated 15-minute paper hold for core scalps",
 );
 
 once(
   'mode: params.mode === "RANGE_SCALP" ? "RANGE_SCALP" : "TREND_HOLD",',
-  'mode: params.mode === "CORE_PULLBACK_SCALP" ? "CORE_PULLBACK_SCALP" : params.mode === "RANGE_SCALP" ? "RANGE_SCALP" : "TREND_HOLD",',
+  'mode: "TREND_HOLD",',
   "persist the new paper strategy mode distinctly",
 );
 
@@ -329,13 +329,13 @@ once(
 
 once(
   'const regimeLine = s.mode === "RANGE_SCALP"\n    ? "Market regime: RANGE | 30-minute support/resistance band " + Number(s.rangeWidthPct).toFixed(2) + "% wide; entries only at confirmed outer edges, target is the range midpoint."',
-  'const regimeLine = s.mode === "CORE_PULLBACK_SCALP"\n    ? "Market regime: " + String(s.regime) + " | 5m EMA trend filter + closed 1m pullback/reclaim."\n    : s.mode === "RANGE_SCALP"\n    ? "Market regime: RANGE | 30-minute support/resistance band " + Number(s.rangeWidthPct).toFixed(2) + "% wide; entries only at confirmed outer edges, target is the range midpoint."',
+  'const regimeLine = s.mode === "TREND_PULLBACK_ENTRY"\n    ? "Market regime: " + String(s.regime) + " | 5m EMA trend filter + closed 1m pullback/reclaim."\n    : s.mode === "RANGE_SCALP"\n    ? "Market regime: RANGE | 30-minute support/resistance band " + Number(s.rangeWidthPct).toFixed(2) + "% wide; entries only at confirmed outer edges, target is the range midpoint."',
   "describe core pullback market regime in setup card",
 );
 
 once(
   '"Execution mode: " + (s.mode === "RANGE_SCALP" ? "RANGE SCALP" : "TREND HOLD") + " | maximum paper hold " + String(s.holdMinutes || (s.mode === "RANGE_SCALP" ? 12 : 180)) + "m",',
-  '"Execution mode: " + (s.mode === "CORE_PULLBACK_SCALP" ? "CORE PULLBACK SCALP" : s.mode === "RANGE_SCALP" ? "RANGE SCALP" : "TREND HOLD") + " | maximum paper hold " + String(s.holdMinutes || (s.mode === "CORE_PULLBACK_SCALP" ? 15 : s.mode === "RANGE_SCALP" ? 12 : 180)) + "m",',
+  '"Execution mode: " + (s.mode === "TREND_PULLBACK_ENTRY" ? "CORE PULLBACK SCALP" : s.mode === "RANGE_SCALP" ? "RANGE SCALP" : "TREND HOLD") + " | maximum paper hold " + String(s.holdMinutes || (s.mode === "TREND_PULLBACK_ENTRY" ? 15 : s.mode === "RANGE_SCALP" ? 12 : 180)) + "m",',
   "label new scalp mode in Telegram setup card",
 );
 
@@ -347,7 +347,7 @@ once(
 
 once(
   'candidate.mode === "RANGE_SCALP" ? 12 : 180',
-  'candidate.mode === "CORE_PULLBACK_SCALP" ? 15 : candidate.mode === "RANGE_SCALP" ? 12 : 180',
+  'candidate.mode === "TREND_PULLBACK_ENTRY" ? 15 : candidate.mode === "RANGE_SCALP" ? 12 : 180',
   "retain correct hold duration in all fallback paths",
 );
 
@@ -355,7 +355,7 @@ once(
 const legacyModeLabel = 'trade.mode === "RANGE_SCALP" ? "RANGE SCALP" : trade.mode === "TREND_HOLD" ? "TREND HOLD" : "LEGACY"';
 const legacyModeCount = source.split(legacyModeLabel).length - 1;
 if (legacyModeCount !== 2) throw new Error("Expected two paper summary mode labels, found " + legacyModeCount);
-source = source.replaceAll(legacyModeLabel, 'trade.mode === "CORE_PULLBACK_SCALP" ? "CORE PULLBACK SCALP" : trade.mode === "RANGE_SCALP" ? "RANGE SCALP" : trade.mode === "TREND_HOLD" ? "TREND HOLD" : "LEGACY"');
+source = source.replaceAll(legacyModeLabel, 'trade.mode === "TREND_PULLBACK_ENTRY" ? "CORE PULLBACK SCALP" : trade.mode === "RANGE_SCALP" ? "RANGE SCALP" : trade.mode === "TREND_HOLD" ? "TREND HOLD" : "LEGACY"');
 console.log("Applied core scalp patch: show core pullback trades distinctly in paper summaries");
 
 once(

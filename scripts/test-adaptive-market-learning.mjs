@@ -26,34 +26,34 @@ const context=vm.createContext({
     return {efficiency,emaGapPct:e50>0?Math.abs(e20/e50-1)*100:0};
   }
 });
-vm.runInContext(source.slice(helperStart,advisorStart)+"\nglobalThis.learningTests={buildAdaptiveLearningProfile,adaptiveCandidateMultiplier,analyzeCoreTrendContinuation,analyzeMicroMomentumContinuation};",context);
-const {buildAdaptiveLearningProfile,adaptiveCandidateMultiplier,analyzeCoreTrendContinuation,analyzeMicroMomentumContinuation}=context.learningTests;
+vm.runInContext(source.slice(helperStart,advisorStart)+"\nglobalThis.learningTests={buildAdaptiveLearningProfile,adaptiveCandidateMultiplier,analyzeCoreTrendContinuation};",context);
+const {buildAdaptiveLearningProfile,adaptiveCandidateMultiplier,analyzeCoreTrendContinuation}=context.learningTests;
 const now=1800000000000;
-const trade=(i,pnl,mode="CORE_PULLBACK_SCALP",symbol="BTC")=>({status:"CLOSED",closedAtMs:now-i*60000,signalId:"s"+i,symbol,mode,grossPnlMon:pnl,marginMon:10,bestFavorableMovePct:Math.max(0,pnl),closeReason:pnl>0?"TAKE_PROFIT":"STOP_LOSS"});
+const trade=(i,pnl,mode="TREND_HOLD",symbol="BTC")=>({status:"CLOSED",closedAtMs:now-i*60000,signalId:"s"+i,symbol,mode,grossPnlMon:pnl,marginMon:10,bestFavorableMovePct:Math.max(0,pnl),closeReason:pnl>0?"TAKE_PROFIT":"STOP_LOSS"});
 const insufficient=buildAdaptiveLearningProfile(Array.from({length:7},(_,i)=>trade(i,1)),now);
-assert.equal(adaptiveCandidateMultiplier(insufficient,{symbol:"BTC",mode:"CORE_PULLBACK_SCALP"}),1);
+assert.equal(adaptiveCandidateMultiplier(insufficient,{symbol:"BTC",mode:"TREND_HOLD"}),1);
 const profitable=buildAdaptiveLearningProfile(Array.from({length:20},(_,i)=>trade(i,1)),now);
-const good=adaptiveCandidateMultiplier(profitable,{symbol:"BTC",mode:"CORE_PULLBACK_SCALP"});
+const good=adaptiveCandidateMultiplier(profitable,{symbol:"BTC",mode:"TREND_HOLD"});
 assert.ok(good>1&&good<=1.1);
 const losing=buildAdaptiveLearningProfile(Array.from({length:20},(_,i)=>trade(i,-1)),now);
-const bad=adaptiveCandidateMultiplier(losing,{symbol:"BTC",mode:"CORE_PULLBACK_SCALP"});
+const bad=adaptiveCandidateMultiplier(losing,{symbol:"BTC",mode:"TREND_HOLD"});
 assert.ok(bad<1&&bad>=0.9);
 assert.equal(adaptiveCandidateMultiplier(profitable,{symbol:"BTC",mode:"TREND_HOLD"}),1);
 assert.ok(source.includes('["BTC","ETH","SOL","BNB","HYPE","ZEC", ...configuredWatchSymbols(env.WATCH_SYMBOLS)]'));
 assert.ok(source.includes("orderedSymbols"));
-assert.ok(source.includes('const coreScalpMarketSet = new Set(["BTC","ETH","SOL","BNB","HYPE","ZEC"])'));
+assert.ok(source.includes('const trendEntryMarketSet = new Set(["BTC","ETH","SOL","BNB","HYPE","ZEC"])'));
 assert.ok(!source.includes("signal.confidence >= minimumConfidence"));
 assert.ok(!source.includes("scalp.confidence >= minimumConfidence"));
 assert.ok(!source.includes("continuation.confidence >= minimumConfidence"));
 assert.ok(source.includes("Math.max(0.03, candidate.stopPct * 0.10)"));
 assert.ok(source.includes("stronglyOpposed"));
-assert.ok(source.includes('candidate.mode !== "CORE_PULLBACK_SCALP"'));
+assert.ok(source.includes('candidate.mode === "TREND_HOLD"'));
 assert.ok(source.includes("candidate.rsi < 10") && source.includes("candidate.rsi > 90"));
 assert.ok(source.includes('const preferredGroup = Math.floor(now / (5 * 60e3)) % 3 === 2 ? "WATCHLIST" : "CORE"'));
-assert.ok(source.includes('signal.mode === "TREND_HOLD" || signal.mode === "RANGE_SCALP"'));
+assert.ok(source.includes('signal.mode === "TREND_HOLD"'));
 assert.ok(source.includes("1M_SWING_REVERSAL+RECLAIM"));
 assert.ok(source.includes("var CYCLE = 6e4;"));
-assert.ok(source.includes('coreMarkets:["BTC","ETH","SOL"],scalpMarkets:["BTC","ETH","SOL","BNB","HYPE","ZEC"],preferredGroup'));
+assert.ok(source.includes('coreMarkets:["BTC","ETH","SOL"],trendEntryMarkets:["BTC","ETH","SOL","BNB","HYPE","ZEC"],preferredGroup'));
 assert.ok(source.includes("scanDiagnostics:scanDiagnostics.slice(-120)"));
 assert.ok(source.includes('"INSUFFICIENT_CLOSED_CANDLE_HISTORY"'));
 
@@ -87,46 +87,22 @@ const continuationLong=analyzeCoreTrendContinuation("BTC",trendCandles(1),now);
 const continuationShort=analyzeCoreTrendContinuation("ETH",trendCandles(-1),now);
 assert.equal(continuationLong?.side,"LONG");
 assert.equal(continuationShort?.side,"SHORT");
-assert.equal(continuationLong?.mode,"CORE_TREND_CONTINUATION");
+assert.equal(continuationLong?.mode,"TREND_HOLD");
 assert.ok(continuationLong.stopPct<=0.45&&continuationShort.stopPct<=0.45);
 assert.equal(analyzeCoreTrendContinuation("BTC",trendCandles(1).slice(0,20),now),null);
-function microRows(direction){
-  const rows=[];
-  for(let i=0;i<80;i++){
-    const base=100+direction*0.002*i;
-    const first=i>=65?(i-64)*0.01:0;
-    const second=i>=70?(i-69)*0.02:0;
-    const third=i>=75?(i-74)*0.03:0;
-    const price=base+direction*(first+second+third);
-    rows.push({ts_ms:now-(80-i)*60000,mid_price:price});
-  }
-  return rows;
-}
-const microLong=analyzeMicroMomentumContinuation("BTC",microRows(1),now);
-const microShort=analyzeMicroMomentumContinuation("ETH",microRows(-1),now);
-assert.equal(microLong?.side,"LONG");
-assert.equal(microShort?.side,"SHORT");
-assert.equal(analyzeMicroMomentumContinuation("BNB",microRows(1),now)?.side,"LONG");
-assert.equal(analyzeMicroMomentumContinuation("HYPE",microRows(1),now)?.side,"LONG");
-assert.equal(analyzeMicroMomentumContinuation("ZEC",microRows(1),now)?.side,"LONG");
-assert.equal(analyzeMicroMomentumContinuation("DOGE",microRows(1),now),null,"markets outside the six-market universe must not receive this strategy");
-assert.equal(microLong?.mode,"TREND_HOLD");
-assert.ok(microLong.stopPct<=0.45&&microShort.stopPct<=0.45);
-assert.equal(analyzeMicroMomentumContinuation("BTC",microRows(1).slice(0,8),now),null);
-
 assert.ok(source.includes("cooldown.allKeysFailed === true"));
 assert.ok(source.includes("for (let i = 0; i < keys.length; i++)"));
 assert.ok(source.includes("keyIndexUsed: ix + 1"));
 assert.ok(source.includes("ALL_KEYS_RATE_LIMITED"));
 assert.ok(!source.includes("stopped key rotation because quota may be project-wide"));
 assert.ok(source.includes("function analyzeCoreTrendContinuation"));
-assert.ok(source.includes("function analyzeMicroMomentumContinuation"));
-assert.ok(source.includes("NO_CONFIRMED_3M_5M_10M_RANGE_BREAKOUT"));
-assert.ok(source.includes("1M_MICRO_MOMENTUM_BREAKOUT"));
-assert.ok(source.includes("CORE_TREND_CONTINUATION"));
+
+
+
+assert.ok(source.includes("5M_TREND_CONTINUATION+BREAKOUT_RETEST"));
 assert.ok(source.includes("5M_STRUCTURE+EMA+MACD+RSI+BREAKOUT_RETEST"));
-assert.ok(source.includes("corePullbackScalp: modeStats(\"CORE_PULLBACK_SCALP\")"));
-assert.ok(source.includes("coreTrendContinuation: modeStats(\"CORE_TREND_CONTINUATION\")"));
+assert.ok(source.includes("corePullbackScalp: modeStats(\"TREND_PULLBACK_ENTRY\")"));
+assert.ok(source.includes("coreTrendContinuation: modeStats(\"TREND_BREAKOUT_RETEST\")"));
 assert.ok(source.includes('"PULLBACK_RECLAIM_VOLUME_OR_FRESHNESS_GATE"'));
 assert.ok(source.includes("coreForecastChecks>=Math.min(3,coreTrendCandidateCount)")&&source.includes("otherForecastChecks>=6-Math.min(3,coreTrendCandidateCount)"));
 assert.ok(source.includes('paperStorage.put("ciel:adaptive-learning:v1"'));
@@ -142,7 +118,7 @@ assert.ok(topLevelHelpers.includes("function getCandleStructureMap("),"candle st
 assert.ok(topLevelHelpers.includes("function analyzeCandleLevelReversal("),"candle-level reversal helper must be top-level and visible to runAdvisorCycle");
 assert.ok(topLevelHelpers.includes("function getCandleStructureEvidence("),"candle evidence helper must be top-level and visible to runAdvisorCycle");
 assert.ok(source.includes("CIEL deterministic core trend continuation guard"));
-assert.ok(source.includes("LOCAL_CORE_TREND_CONTINUATION"));
+assert.ok(source.includes("LOCAL_TREND_BREAKOUT_RETEST"));
 
 assert.ok(!source.includes('paperStorage.put("ciel:adaptive-learning:v1").bind'));
 

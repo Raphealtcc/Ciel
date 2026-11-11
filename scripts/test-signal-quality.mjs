@@ -5,8 +5,8 @@ import { evaluateSignalQuality, shouldSuppressDuplicateSignal } from "../src/sig
 const base = {
   candidate: {
     symbol: "BTC", side: "LONG", entry: 100, stopPct: 0.25, targetPct: 0.5,
-    strategy: "1M_MICRO_MOMENTUM_BREAKOUT", mode: "TREND_HOLD", regime: "TREND_UP",
-    scoreComponents: ["1M_MOMENTUM","3M_CONFIRMATION","5M_CONFIRMATION","10M_RANGE_BREAKOUT","MICRO_EMA_CONFIRMATION"],
+    strategy: "5M_TREND_CONTINUATION+BREAKOUT_RETEST", mode: "TREND_HOLD", regime: "TREND_UP",
+    scoreComponents: ["5M_EMA_TREND","5M_RANGE_BREAKOUT","5M_BREAKOUT_RETEST","VOLUME_CONFIRMATION"],
   },
   forecast: { available: true, medianReturnPct: 0.22, components: { return5mPct: 0.15, return15mPct: 0.22, return60mPct: 0.35 } },
   market: { spreadBps: 3, topDepthUsd: 8000, volume: 5000000, funding: 0.00001, premiumBps: 2, oiChangePct: 4 },
@@ -28,7 +28,7 @@ assert.ok(opposingForecast.vetoes.includes("FORECAST_STRONGLY_OPPOSES_ENTRY"));
 
 const losingStrategyHistory = evaluateSignalQuality({
   ...base,
-  strategyStats: { "1M_MICRO_MOMENTUM_BREAKOUT": { sampleCount: 30, expectancyR: 0.04, winRate: 0.31 } },
+  strategyStats: { "5M_TREND_CONTINUATION+BREAKOUT_RETEST": { sampleCount: 30, expectancyR: 0.04, winRate: 0.31 } },
 });
 assert.equal(losingStrategyHistory.allowed, false);
 assert.ok(losingStrategyHistory.vetoes.includes("STRATEGY_SHADOW_EXPECTANCY_NOT_POSITIVE"));

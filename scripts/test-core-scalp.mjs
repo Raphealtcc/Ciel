@@ -12,25 +12,25 @@ assert.ok(source.includes('this.lastXyzQntRefreshAt = Number(values[25]) || 0;')
 assert.ok(source.includes('this.historyBootstrapDone = values[26] === true;'), "history bootstrap completion flag must restore from its own slot");
 assert.ok(source.includes('this.lastHistoryBootstrapAt = Number(values[27]) || 0;'), "history bootstrap timestamp must restore from its own slot");
 assert.ok(!source.includes("processedCandidateSymbols"), "trend candidates must not reserve a symbol before scalp evaluation");
-assert.ok(source.includes('candidate.mode === "CORE_PULLBACK_SCALP" || candidate.mode === "CORE_TREND_CONTINUATION" ? "ciel:advisor:review:core:"'), "local core strategies use a separate KV cooldown");
+assert.ok(source.includes('candidate.mode === "TREND_PULLBACK_ENTRY" || candidate.mode === "TREND_BREAKOUT_RETEST" ? "ciel:advisor:review:core:"'), "local core strategies use a separate KV cooldown");
 assert.ok(source.includes('"ciel:advisor:review:ai:" + candidate.symbol'), "Gemini-reviewed strategies use a separate KV cooldown");
-assert.ok(source.includes('const isScalpMode = candidate.mode === "RANGE_SCALP" || candidate.mode === "CORE_PULLBACK_SCALP" || candidate.mode === "CORE_TREND_CONTINUATION";'), "5m continuation shares the local scalp review path");
+assert.ok(source.includes('const isScalpMode = false;'), "5m continuation shares the local scalp review path");
 assert.ok(source.includes("if (!isScalpMode) { if(forecastChecks>=6) continue;"), "trend review budget must not starve deterministic scalp candidates");
-assert.ok(source.includes('const cooldownMs = candidate.mode === "CORE_PULLBACK_SCALP" || candidate.mode === "CORE_TREND_CONTINUATION" ? 3 * 6e4 : trendCooldownMs;'), "deterministic core pullback scalps and 5m continuation use the short local cooldown; Gemini-reviewed modes retain the configured trend cooldown");
+assert.ok(source.includes('const cooldownMs = candidate.mode === "TREND_PULLBACK_ENTRY" || candidate.mode === "TREND_BREAKOUT_RETEST" ? 3 * 6e4 : trendCooldownMs;'), "deterministic core pullback scalps and 5m continuation use the short local cooldown; Gemini-reviewed modes retain the configured trend cooldown");
 assert.ok(source.includes("1M_SWING_REVERSAL+RECLAIM"), "counter-trend reversal detector must be present");
 const blockedReview = source.match(/if \(reviewed\.verdict === "REJECT" \|\| reviewed\.verdict === "WAIT" && !waitFallback\) \{([\s\S]*?)\n    \}/);
 assert.ok(blockedReview && /continue;/.test(blockedReview[1]) && !/return;/.test(blockedReview[1]), "a blocked candidate must not abort the whole advisor cycle");
 assert.ok(source.includes('interval: "1m"'));
-assert.ok(source.includes('mode:"CORE_PULLBACK_SCALP"'));
+assert.ok(source.includes('mode:"TREND_HOLD",holdMinutes:180'));
 assert.ok(source.includes('"5M_TREND_FILTER","1M_PULLBACK","1M_RECLAIM","VOLUME_CONFIRMATION"'));
 assert.ok(source.includes('requiredPaperMargin === null'));
-assert.ok(source.includes('candidate.mode === "CORE_PULLBACK_SCALP"'));
+assert.ok(source.includes('candidate.strategy === "5M_TREND+1M_PULLBACK+RECLAIM"'));
 
-const start = source.indexOf("function analyzeCorePullbackScalp");
+const start = source.indexOf("function analyzeTrendPullbackEntry");
 const end = source.indexOf("async function runAdvisorCycle", start);
 assert.ok(start >= 0 && end > start, "Core scalp analyzer must be present before the advisor cycle");
 const context = vm.createContext({ __name() {} });
-vm.runInContext(source.slice(start, end) + "\nglobalThis.analyze = analyzeCorePullbackScalp;", context);
+vm.runInContext(source.slice(start, end) + "\nglobalThis.analyze = analyzeTrendPullbackEntry;", context);
 const analyze = context.analyze;
 
 const coreScalpCall = 'if (now - this.lastCoreScalpCandleAt >= 55e3) background.push(this.writeCoreScalpCandles(now));';
@@ -72,7 +72,7 @@ for (let j=0;j<pullback.length;j++) Object.assign(validLong[25+j],pullback[j]);
 const longSignal = analyze("BTC",validLong,five,now);
 assert.ok(longSignal, "valid closed-candle long pullback/reclaim should trigger");
 assert.equal(longSignal.side,"LONG");
-assert.equal(longSignal.mode,"CORE_PULLBACK_SCALP");
+assert.equal(longSignal.mode,"TREND_HOLD");
 assert.ok(longSignal.stopPct>0 && longSignal.stopPct<=0.45, "long stop must fit the risk ceiling");
 
 const mirror = (rows) => rows.map((c) => ({
@@ -85,7 +85,7 @@ const mirror = (rows) => rows.map((c) => ({
 const shortSignal = analyze("SOL", mirror(validLong), mirror(five), now);
 assert.ok(shortSignal, "valid closed-candle short pullback/reclaim should trigger");
 assert.equal(shortSignal.side, "SHORT");
-assert.equal(shortSignal.mode, "CORE_PULLBACK_SCALP");
+assert.equal(shortSignal.mode, "TREND_HOLD");
 assert.ok(shortSignal.stopPct > 0 && shortSignal.stopPct <= 0.45, "short stop must fit the risk ceiling");
 
 
