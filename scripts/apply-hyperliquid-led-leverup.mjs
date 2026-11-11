@@ -47,15 +47,6 @@ const replacement = `  async scheduled(_event, env, ctx) {
         await env.CIEL_STATE.put("ciel:leverup:position-manager:last-error", JSON.stringify({ at: now, error: detail }), { expirationTtl: 3600 }).catch(() => void 0);
       }
     })());
-    ctx.waitUntil((async () => {
-      const liveOverride = await readTradingControl(env, "ciel:control:live-enabled", null).catch(() => null);
-      const liveMode = String(liveOverride ?? env?.LEVERUP_LIVE_TRADING).toLowerCase() === "true" && String(env?.LEVERUP_KILL_SWITCH).toLowerCase() === "false";
-      if (liveMode) return;
-      try {
-        const response = await feedStub2(env).fetch("https://feed/ensure", { method: "POST" });
-        if (!response.ok) { const body = await response.text(); console.error("Hyperliquid feed ensure returned HTTP " + response.status + ": " + body.slice(0, 500)); }
-      } catch (error) { console.error("Hyperliquid feed ensure failed: " + String(error).slice(0, 500)); }
-    })());
   }`;
 
 source = source.slice(0, start) + replacement + source.slice(end + 4);

@@ -34,7 +34,7 @@ assert.ok(d1FallbackGuard > 0 && d1FallbackQuery > d1FallbackGuard, "5m candle h
 
 assert.ok(source.includes("this.liveMarketInputs(now), this.state.storage, this.coreScalpCandles, this.coreTrendCandles"), "the feed must pass both persistent candle caches to the advisor");
 const scheduledStart = source.indexOf("async scheduled(_event, env, ctx)");
-const scheduledEnd = source.indexOf("\\n  }\\n};", scheduledStart);
+const scheduledEnd = source.indexOf("\n  }\n};", scheduledStart);
 const scheduled = source.slice(scheduledStart, scheduledEnd);
 assert.ok(scheduled.includes('feedStub2(env).fetch("https://feed/ensure"'), "the Hyperliquid signal feed must be ensured by cron");
 assert.ok(!scheduled.includes("if (liveMode) return;"), "live trading must not disable the Hyperliquid signal feed");
