@@ -22,7 +22,7 @@ const oldLoop = [
   "          if (fallback.length >= 40) existing.five = fallback;",
   "          coreScalpData.set(symbol, existing);",
   "        }"
-].join("\\n");
+].join("\n");
 
 const newLoop = [
   "        let persistedCoreTrendCandles = false;",
@@ -37,9 +37,9 @@ const newLoop = [
   "          coreScalpData.set(symbol, existing);",
   "        }",
   "        if (persistedCoreTrendCandles && paperStorage?.put) {",
-  "          await paperStorage.put(\\"coreTrendCandles\\", coreTrendCandles).catch(() => void 0);",
+  "          await paperStorage.put(\"coreTrendCandles\", coreTrendCandles).catch(() => void 0);",
   "        }"
-].join("\\n");
+].join("\n");
 
 once(oldLoop, newLoop, "persist D1 fallback candles into Durable Object storage");
 await writeFile(file, source);
