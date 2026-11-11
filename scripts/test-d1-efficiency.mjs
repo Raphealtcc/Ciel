@@ -62,7 +62,7 @@ const candleEvidenceEnd = source.indexOf("async function review(", candleEvidenc
 const candleEvidenceSource = source.slice(candleEvidenceStart, candleEvidenceEnd);
 assert.ok(candleEvidenceStart >= 0 && candleEvidenceEnd > candleEvidenceStart && !candleEvidenceSource.includes("FROM market_candle_hourly_stats"), "candidate candle evidence must use the Durable Object cache, not per-symbol D1 reads");
 assert.ok(!source.includes("SELECT created_at_ms FROM advisor_ai_audit WHERE symbol=?"), "advisor review cooldown must not scan the D1 audit table");
-assert.ok(source.includes("ciel:advisor:review:core:") && source.includes("ciel:advisor:review:ai:"), "mode-specific review cooldowns must use KV");
+assert.ok(source.includes("ciel:advisor:review:trend:") && !source.includes("ciel:advisor:review:core:") && !source.includes("ciel:advisor:review:ai:"), "trend-only review cooldowns must use one KV key without extra D1 or per-mode lookups");
 assert.ok(!source.includes("SELECT created_at_ms,entry_price FROM advisor_positions WHERE symbol=? AND side=? AND strategy=?"), "duplicate signal checks must not read D1 per candidate");
 assert.ok(source.includes("candidateCount:candidates.length"), "scan diagnostics must count discovered candidates");
 assert.ok(!source.includes("SELECT symbol,mid_price,ts_ms FROM market_samples WHERE symbol=? AND ts_ms>=? ORDER BY ts_ms DESC LIMIT 200"), "advisor scans must use Durable Object price history, not a D1 fallback");
