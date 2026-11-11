@@ -13,13 +13,13 @@ function once(source, before, after, label) {
 }
 
 worker = once(worker,
-  '    const isScalpMode = candidate.mode === "RANGE_SCALP" || candidate.mode === "CORE_PULLBACK_SCALP";',
-  '    if (!isTemporaryMarketAllowed(candidate.symbol)) continue;\n    const isScalpMode = candidate.mode === "RANGE_SCALP" || candidate.mode === "CORE_PULLBACK_SCALP";',
+  '    const isScalpMode = candidate.mode === "RANGE_SCALP" || candidate.mode === "CORE_PULLBACK_SCALP" || candidate.mode === "CORE_TREND_CONTINUATION";',
+  '    if (!isTemporaryMarketAllowed(candidate.symbol)) continue;\n    const isScalpMode = candidate.mode === "RANGE_SCALP" || candidate.mode === "CORE_PULLBACK_SCALP" || candidate.mode === "CORE_TREND_CONTINUATION";',
   "restrict Gemini candidate reviews to the six enabled markets");
 worker = once(worker,
   "  return [...restrictTemporaryMarketUniverse([...new Set([\"BTC\",\"ETH\",\"SOL\",\"BNB\",\"HYPE\",\"ZEC\", ...parsed])]), \"MON\"]; ",
-  "  return [...restrictTemporaryMarketUniverse([...new Set(parsed)]), \"MON\"]; ",
-  "restrict the Hyperliquid watchlist to BTC, ETH, SOL and BNB");
+  "  return [...restrictTemporaryMarketUniverse([...new Set([\"BTC\",\"ETH\",\"SOL\",\"BNB\",\"HYPE\",\"ZEC\", ...parsed])]), \"MON\"]; ",
+  "keep all six enabled markets in the Hyperliquid watchlist");
 
 worker = once(worker,
   'async function openPaperTrade(storage, params) {\n  if (!storage) return { opened: false, reason: "Durable Object paper storage is unavailable." };',
@@ -63,4 +63,4 @@ native = once(native,
   "restrict LeverUp native sampling to the six enabled markets");
 await writeFile(nativePath, native);
 
-console.log("Applied temporary six-market universe: BTC, ETH, SOL, BNB. Existing-position management is unchanged.");
+console.log("Applied six-market universe: BTC, ETH, SOL, BNB, HYPE and ZEC. Existing-position management is unchanged.");
