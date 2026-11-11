@@ -12,8 +12,9 @@ assert.ok(source.includes('this.lastXyzQntRefreshAt = Number(values[25]) || 0;')
 assert.ok(source.includes('this.historyBootstrapDone = values[26] === true;'), "history bootstrap completion flag must restore from its own slot");
 assert.ok(source.includes('this.lastHistoryBootstrapAt = Number(values[27]) || 0;'), "history bootstrap timestamp must restore from its own slot");
 assert.ok(!source.includes("processedCandidateSymbols"), "trend candidates must not reserve a symbol before scalp evaluation");
-assert.ok(source.includes("model='CIEL deterministic core scalp guard'"), "core scalp cooldown must be mode-specific");
-assert.ok(source.includes("model NOT IN ('CIEL Statistical Ensemble v1','CIEL Statistical Ensemble v1 + technical gate','CIEL deterministic range guard','CIEL deterministic core scalp guard','CIEL deterministic core trend continuation guard'"), "trend cooldown must ignore scalp and pre-review gate rows");
+assert.ok(source.includes('candidate.mode === "CORE_PULLBACK_SCALP" || candidate.mode === "CORE_TREND_CONTINUATION" ? "ciel:advisor:review:core:"'), "local core strategies use a separate KV cooldown");
+assert.ok(source.includes('"ciel:advisor:review:ai:" + candidate.symbol'), "Gemini-reviewed strategies use a separate KV cooldown");
+assert.ok(source.includes('const isScalpMode = candidate.mode === "RANGE_SCALP" || candidate.mode === "CORE_PULLBACK_SCALP" || candidate.mode === "CORE_TREND_CONTINUATION";'), "5m continuation shares the local scalp review path");
 assert.ok(source.includes("if (!isScalpMode) { if(forecastChecks>=6) continue;"), "trend review budget must not starve deterministic scalp candidates");
 assert.ok(source.includes('const cooldownMs = candidate.mode === "CORE_PULLBACK_SCALP" || candidate.mode === "CORE_TREND_CONTINUATION" ? 3 * 6e4 : trendCooldownMs;'), "deterministic core pullback scalps and 5m continuation use the short local cooldown; Gemini-reviewed modes retain the configured trend cooldown");
 assert.ok(source.includes("1M_SWING_REVERSAL+RECLAIM"), "counter-trend reversal detector must be present");
