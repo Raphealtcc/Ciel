@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
 const source = await readFile("reconstructed/patched-worker.js", "utf8");
+const integrationPatch = await readFile("scripts/apply-leverup-integration.mjs", "utf8");
 const methodStart = source.indexOf("  async writeCoreScalpCandles(now) {");
 const methodEnd = source.indexOf("  async writeHistory(rows, alerts, now) {", methodStart);
 assert.ok(methodStart >= 0 && methodEnd > methodStart, "core scalp candle writer must exist");
@@ -60,7 +61,7 @@ assert.ok(source.includes("candidateCount:candidates.length"), "scan diagnostics
 assert.ok(!source.includes("SELECT symbol,mid_price,ts_ms FROM market_samples WHERE symbol=? AND ts_ms>=? ORDER BY ts_ms DESC LIMIT 200"), "advisor scans must use Durable Object price history, not a D1 fallback");
 assert.ok(source.includes("ciel:advisor:proposal-expiry:last-run") && source.includes("now - expirySweepAt >= 5 * 60e3"), "proposal expiry D1 updates must be throttled to five minutes");
 assert.ok(source.includes("ciel:d1:fallback:5m:") && source.includes("now - last >= 30 * 60e3"), "LeverUp 5m D1 fallback must be throttled per symbol to 30 minutes");
-assert.ok(source.includes("ORDER BY open_ts_ms DESC") && source.includes("open_ts_ms<=?"), "LeverUp 5m fallback must use the existing symbol/interval/open_ts D1 index");
+assert.ok(integrationPatch.includes("ORDER BY open_ts_ms DESC") && integrationPatch.includes("open_ts_ms<=?"), "LeverUp 5m fallback must use the existing symbol/interval/open_ts D1 index");
 assert.ok(source.includes("noSetupSymbols"), "scan diagnostics must identify markets with no technical setup");
 assert.ok(source.includes("CIEL_ADVISOR_SCAN"), "successful scans must emit structured scan-health logs");
 assert.ok(source.includes("CIEL_ADVISOR_REJECT"), "rejected candidates must emit structured rejection reasons");
