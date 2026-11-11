@@ -61,6 +61,7 @@ function adaptiveCandidateMultiplier(profile,candidate) {
 __name(adaptiveCandidateMultiplier,"adaptiveCandidateMultiplier");
 
 function analyzeMicroMomentumContinuation(symbol,rows,now){
+  if(!["BTC","ETH","SOL","BNB","HYPE","ZEC"].includes(String(symbol||"").toUpperCase()))return null;
   const points=(Array.isArray(rows)?rows:[]).map(row=>({t:Number(row.ts_ms),p:Number(row.mid_price)}))
     .filter(point=>point.t>0&&point.p>0&&Number.isFinite(point.t)&&Number.isFinite(point.p)).sort((a,b)=>a.t-b.t).slice(-40);
   if(points.length<12)return null;
@@ -95,12 +96,12 @@ once(signature,learningHelpers+"\nfunction analyzeCoreTrendContinuation(symbol, 
 
 once(
   "  const symbols = configuredWatchSymbols(env.WATCH_SYMBOLS);",
-  '  const symbols = [...new Set(["BTC","ETH","SOL", ...configuredWatchSymbols(env.WATCH_SYMBOLS)])];',
+  '  const symbols = [...new Set(["BTC","ETH","SOL","BNB","HYPE","ZEC", ...configuredWatchSymbols(env.WATCH_SYMBOLS)])];',
   "keep BTC ETH SOL in the scan even when WATCH_SYMBOLS omits them"
 );
 once(
   "  const candidates = [];\n  for (const sym of symbols) {",
-  '  const candidates = [];\n  const scanDiagnostics = [];\n  const coreMarketSet = new Set(["BTC","ETH","SOL"]);\n  const orderedSymbols = symbols.slice().sort((a,b) => Number(coreMarketSet.has(b))-Number(coreMarketSet.has(a)) || a.localeCompare(b));\n  for (const sym of orderedSymbols) {',
+  '  const candidates = [];\n  const scanDiagnostics = [];\n  const coreMarketSet = new Set(["BTC","ETH","SOL"]);\n  const coreScalpMarketSet = new Set(["BTC","ETH","SOL","BNB","HYPE","ZEC"]);\n  const orderedSymbols = symbols.slice().sort((a,b) => Number(coreMarketSet.has(b))-Number(coreMarketSet.has(a)) || a.localeCompare(b));\n  for (const sym of orderedSymbols) {',
   "evaluate core markets first without removing other watchlist markets"
 );
 once(
@@ -124,11 +125,11 @@ const newCandidateBuild = `    const beforeCount = candidates.length;
     const confidenceFloor = setting(env.ADVISORY_MIN_CONFIDENCE,0.72,0.5,0.95);
     const signal = baseSignal && baseSignal.confidence >= confidenceFloor ? baseSignal : analyzeMicroMomentumContinuation(sym,marketRows,now);
     const isCore = coreMarketSet.has(sym);
+    const isScalpEligible = coreScalpMarketSet.has(sym);
     if (signal && signal.confidence >= confidenceFloor && (!isCore || signal.mode === "TREND_HOLD" || signal.mode === "RANGE_SCALP")) candidates.push(signal);
     else if (isCore) scanDiagnostics.push({symbol:sym,strategy:"TREND_HOLD",reason:signal ? "BELOW_CONFIDENCE_THRESHOLD" : "NO_VALID_TREND_SIGNAL"});
     if (!signal) scanDiagnostics.push({symbol:sym,strategy:"1M_MICRO_MOMENTUM_BREAKOUT",reason:"NO_CONFIRMED_3M_5M_10M_RANGE_BREAKOUT"});
-    if (!signal) scanDiagnostics.push({symbol:sym,strategy:"1M_MICRO_MOMENTUM_BREAKOUT",reason:"NO_CONFIRMED_3M_5M_10M_RANGE_BREAKOUT"});
-    if (isCore) {
+    if (isScalpEligible) {
       const candles = coreScalpData.get(sym);
       if (!candles || candles.one.length < 25 || candles.five.length < 40) {
         scanDiagnostics.push({symbol:sym,strategy:"CORE_PULLBACK_SCALP",reason:"INSUFFICIENT_CLOSED_CANDLE_HISTORY"});
@@ -168,13 +169,8 @@ once(
   "prioritize core markets and apply learned outcome weights to ranking only"
 );
 once(
-  '  const candidateSymbols = new Set(candidates.map((x) => x.symbol));\n  const noSetupSymbols = symbols.filter((symbol) => symbol !== "MON" && !candidateSymbols.has(symbol));\n  const scanSnapshot = {at:now,scanStatus:candidates.length ? "CANDIDATES_FOUND" : "NO_TECHNICAL_SETUP",watchCount:symbols.length,scannedSymbols:symbols.filter((symbol) => symbol !== "MON"),historySymbols:hist.size,candleLevelSymbols:candleStructureRows.size,coreMarkets:["BTC","ETH","SOL"],preferredGroup,adaptiveLearning:{closedTradeCount:adaptiveLearning.closedTradeCount,byStrategy:adaptiveLearning.byStrategy},candidateCount:candidates.length,noSetupSymbols,scanDiagnostics:scanDiagnostics.slice(-120),candidates:candidates.map((x)=>({symbol:x.symbol,side:x.side,strategy:x.strategy,mode:x.mode,regime:x.regime,score:x.confidence,adaptiveScore:x.adaptiveScore,adaptiveMultiplier:x.adaptiveMultiplier,rsi:x.rsi,cci:x.cci}))};\n  for (const rejection of scanDiagnostics.slice(-120)) console.info("CIEL_ADVISOR_REJECT " + JSON.stringify(rejection));\n  await env.CIEL_STATE.put("ciel:advisor:last-scan", JSON.stringify(scanSnapshot), {expirationTtl:86400}).catch(()=>void 0);\n  console.info("CIEL_ADVISOR_SCAN " + JSON.stringify(scanSnapshot));',
-  '  await env.CIEL_STATE.put("ciel:advisor:last-scan", JSON.stringify({at:now,watchCount:symbols.length,historySymbols:hist.size,coreMarkets:["BTC","ETH","SOL"],preferredGroup,adaptiveLearning:{closedTradeCount:adaptiveLearning.closedTradeCount,byStrategy:adaptiveLearning.byStrategy},scanDiagnostics:scanDiagnostics.slice(-120),candidates:candidates.map((x)=>({symbol:x.symbol,side:x.side,strategy:x.strategy,mode:x.mode,regime:x.regime,score:x.confidence,adaptiveScore:x.adaptiveScore,adaptiveMultiplier:x.adaptiveMultiplier,rsi:x.rsi,cci:x.cci}))}), {expirationTtl:86400}).catch(()=>void 0);',
-  "persist bounded scan diagnostics and learning summary in existing KV state"
-);
-once(
   "  let forecastChecks = 0;\n  for (const candidate of candidates) {",
-  '  let forecastChecks=0,coreForecastChecks=0,otherForecastChecks=0;\n  let liveEntrySubmittedThisCycle=false,proposalCountThisCycle=0;\n  const maxProposalsPerCycle=3;\n  const coreTrendCandidateCount=candidates.filter((candidate)=>coreMarketSet.has(candidate.symbol)&&candidate.mode!=="RANGE_SCALP"&&candidate.mode!=="CORE_PULLBACK_SCALP").length;\n  for (const candidate of candidates) {',
+  "  const candidateSymbols = new Set(candidates.map((x) => x.symbol));\n  const noSetupSymbols = symbols.filter((symbol) => symbol !== \"MON\" && !candidateSymbols.has(symbol));\n  const scanSnapshot = {at:now,scanStatus:candidates.length ? \"CANDIDATES_FOUND\" : \"NO_TECHNICAL_SETUP\",watchCount:symbols.length,scannedSymbols:symbols.filter((symbol) => symbol !== \"MON\"),historySymbols:hist.size,candleLevelSymbols:candleStructureRows.size,coreMarkets:[\"BTC\",\"ETH\",\"SOL\"],scalpMarkets:[\"BTC\",\"ETH\",\"SOL\",\"BNB\",\"HYPE\",\"ZEC\"],preferredGroup,adaptiveLearning:{closedTradeCount:adaptiveLearning.closedTradeCount,byStrategy:adaptiveLearning.byStrategy},candidateCount:candidates.length,noSetupSymbols,scanDiagnostics:scanDiagnostics.slice(-120),candidates:candidates.map((x)=>({symbol:x.symbol,side:x.side,strategy:x.strategy,mode:x.mode,regime:x.regime,score:x.confidence,adaptiveScore:x.adaptiveScore,adaptiveMultiplier:x.adaptiveMultiplier,rsi:x.rsi,cci:x.cci}))};\n  for (const rejection of scanDiagnostics.slice(-30)) console.info(\"CIEL_ADVISOR_REJECT \" + JSON.stringify(rejection));\n  await env.CIEL_STATE.put(\"ciel:advisor:last-scan\", JSON.stringify(scanSnapshot), {expirationTtl:86400}).catch(()=>void 0);\n  console.info(\"CIEL_ADVISOR_SCAN \" + JSON.stringify({at:now,scanStatus:scanSnapshot.scanStatus,watchCount:scanSnapshot.watchCount,candidateCount:scanSnapshot.candidateCount,noSetupSymbols:scanSnapshot.noSetupSymbols,diagnosticCount:scanDiagnostics.length}));\n  let forecastChecks=0,coreForecastChecks=0,otherForecastChecks=0;\n  let liveEntrySubmittedThisCycle=false,proposalCountThisCycle=0;\n  const maxProposalsPerCycle=3;\n  const coreTrendCandidateCount=candidates.filter((candidate)=>coreMarketSet.has(candidate.symbol)&&candidate.mode!==\"RANGE_SCALP\"&&candidate.mode!==\"CORE_PULLBACK_SCALP\").length;\n  for (const candidate of candidates) {",
   "reserve forecast-review capacity for other watchlist markets"
 );
 once(
@@ -297,4 +293,4 @@ function patchGeminiMultiProjectFailover() {
 patchGeminiMultiProjectFailover();
 
 await writeFile(file,source);
-console.log("Adaptive core-market patch complete: BTC/ETH/SOL lead the scan, all other configured markets remain eligible, paper outcomes adjust ranking only after eight closed samples, and no D1 writes or risk-limit changes are introduced.");
+console.log("Adaptive market patch complete: BTC/ETH/SOL retain primary priority; BTC/ETH/SOL/BNB/HYPE/ZEC receive scalp and 5m continuation coverage; other configured markets remain eligible; bounded learning affects ranking only.");
