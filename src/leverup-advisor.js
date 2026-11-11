@@ -482,7 +482,7 @@ export async function runLeverUpDiagnostics({ env, now = Date.now(), dependencie
         signatureDigest: signed.signatureDigest, intentDigest: signed.intentDigest };
     } catch (error) { signing = { status: "FAILED", reason: errorMessage(error) }; }
   }
-  const tokenLabels = { WMON: LEVERUP_TOKENS.WMON, LVMON: LEVERUP_TOKENS.LVMON,
+  const tokenLabels = { LVMON: LEVERUP_TOKENS.LVMON,
     USDC: LEVERUP_TOKENS.USDC, LVUSD: LEVERUP_TOKENS.LVUSD };
   const balancesAndAllowances = Object.fromEntries(Object.entries(tokenLabels).map(([label, token]) => {
     const state = snapshot.accountTokenStates?.[String(token).toLowerCase()];

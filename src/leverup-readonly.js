@@ -730,10 +730,8 @@ export function buildMarketOpenPlan({
   const isLong = side === "LONG";
   const tokenIn = String(tokenInAddress).toLowerCase();
   const isNativeMon = tokenIn === "0x0000000000000000000000000000000000000000";
-  // WMON-backed 1CT market opens require LVMON in the lvToken field.
-  // Keep native MON and LVMON-input routes distinct; do not substitute LV governance token.
-  // Both supported ERC-20 routes use LVMON in the lvToken field:
-  // WMON -> LVMON conversion, or direct LVMON -> LVMON collateral.
+  // LeverUp market opens use LVMON directly as collateral. Do not substitute
+  // WMON or the LV governance token for the LVMON collateral input.
   const lvToken = LEVERUP_TOKENS.LVMON;
   const marginRaw = parseUnits(String(desiredMarginMon), 18);
   const maxTradeRaw = parseUnits(String(maxTradeMarginMon), 18);
@@ -999,7 +997,7 @@ export async function readLeverUpAccountSnapshot({
     .map((item) => item.feeToken);
   const [accountTokenStates, agentAuthorization, lastAgentNonce, nativeMonBalance] = traderAddress
     ? await Promise.all([
-      readTokenBalancesAndAllowances(traderAddress, [LEVERUP_TOKENS.WMON, LEVERUP_TOKENS.LVMON, LEVERUP_TOKENS.USDC, LEVERUP_TOKENS.LVUSD, ...feeTokens], { publicClient }),
+      readTokenBalancesAndAllowances(traderAddress, [LEVERUP_TOKENS.LVMON, LEVERUP_TOKENS.USDC, LEVERUP_TOKENS.LVUSD, ...feeTokens], { publicClient }),
       agentAddress ? readAgentAuthorization(traderAddress, agentAddress, { publicClient }) : Promise.resolve(null),
       agentAddress ? readLastAgentNonce(traderAddress, agentAddress, { publicClient }) : Promise.resolve(null),
       publicClient.getBalance({ address: traderAddress }),

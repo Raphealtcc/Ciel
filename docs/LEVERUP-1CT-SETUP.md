@@ -3,10 +3,10 @@
 ## Current implementation status
 
 - `src/leverup-1ct.js` implements LeverUp 1CT action encoding, EIP-712 signing, fee-token selection, intent submission, and status polling.
-- `src/leverup-advisor.js` now constructs market-open plans with WMON collateral, not native MON.
+- `src/leverup-advisor.js` now constructs market-open plans with LVMON collateral, not native MON.
 - `executeLeverUpEntry` in `src/leverup-coordinator.js` routes production entries through the hosted-agent 1CT path. It checks the authorized agent's market-open permission, refreshes the oracle price, reads a fresh nonce, applies portfolio risk checks, and submits through the LeverUp relayer.
 - The hosted-agent key is used only to sign restricted trading intents. The trader key is used only for exact ERC-20 approvals when `LEVERUP_AUTO_APPROVE=true` and live execution is explicitly enabled.
-- WMON collateral and the selected 1CT fee token are checked and approved for the required exact amounts. The D1 intent claim is created before submission; ambiguous network outcomes remain `UNCERTAIN` and are not automatically replayed.
+- LVMON collateral and the selected 1CT fee token are checked and approved for the required exact amounts. The D1 intent claim is created before submission; ambiguous network outcomes remain `UNCERTAIN` and are not automatically replayed.
 - Full closes, partial closes, and purge already use the 1CT intent path. The legacy direct-native helper remains in the source for regression coverage but is no longer called by the production entry coordinator.
 - Dry-run mode locally signs the hosted-agent EIP-712 intent and checks the WMON-based risk budget. It does not approve tokens, submit an intent, or place a trade.
 - This hosted-agent change is on the feature branch `fix/leverup-hosted-agent-entry` in MR !27. It has not been merged or deployed. The currently deployed Worker therefore does not yet contain this change.
@@ -63,7 +63,7 @@ The additive migrations `0002_leverup_execution_ledger.sql` and `0003_leverup_ex
 - WMON: `0x3bd359C1119dA7Da1D913D1C4D2B7c461115433A` (18 decimals).
 - LVMON: `0x91b81bfbe3A747230F0529Aa28d8b2Bc898E6D56` (18 decimals).
 - 1CT accepts ERC-20 collateral only. MON must be wrapped to WMON before use.
-- The trader must approve the Diamond for WMON collateral and for each enabled 1CT fee token actually selected. Approval is separate from agent authorization.
+- The trader must approve the Diamond for LVMON collateral and for each enabled 1CT fee token actually selected. Approval is separate from agent authorization.
 - The 1CT execution fee configuration is fetched from `/v2/trading/anti-ddos-config` and refreshed/cached for 60 seconds. Fee-token selection must include the trade's own WMON spend when WMON is also the fee token.
 - Intended agent permissions are restricted to market open (bit 0), market close (bit 1), and partial close (bit 9). Do not grant wildcard/ALL permissions. Verify the exact onchain authorization before any execution.
 
@@ -78,7 +78,7 @@ Every entry preflight must capture, at one onchain block where possible:
 - Pair open/close fee configuration and long/short holding fee rates.
 - Current signed funding rate from `getMarketInfoV2`.
 - Current 1CT anti-DDOS fee configuration and fee-token balance/allowance.
-- Trader WMON balance/allowance and current agent authorization/permissions.
+- Trader LVMON balance/allowance and current agent authorization/permissions.
 
 Cost formulas used for projections:
 
@@ -91,15 +91,15 @@ Cost formulas used for projections:
 
 ## Important unresolved input
 
-The Worker no longer invents a protocol collateral-ratio value. It uses the operator-provided minimum collateral schedule: $0.43 at 50x, $0.23 at 100x, linearly interpolated for 50x–100x, and $0.23 as the conservative floor above 100x. The amount is scaled proportionally to the live global minimum notional, then converted to WMON using LeverUp's live MON/USD oracle. The equivalent ratio is derived only to satisfy the existing sizing interface. Live market tier, notional, price, balance, fee, and margin checks remain mandatory. These are operator-supplied operating minimums, not a claim that LeverUp publishes a fixed collateral ratio.
+The Worker no longer invents a protocol collateral-ratio value. It uses the operator-provided minimum collateral schedule: $0.43 at 50x, $0.23 at 100x, linearly interpolated for 50x–100x, and $0.23 as the conservative floor above 100x. The amount is scaled proportionally to the live global minimum notional, then converted to LVMON using LeverUp's live MON/USD oracle. The equivalent ratio is derived only to satisfy the existing sizing interface. Live market tier, notional, price, balance, fee, and margin checks remain mandatory. These are operator-supplied operating minimums, not a claim that LeverUp publishes a fixed collateral ratio.
 
-The venue minimum notional is read from the live contract, not hardcoded. Minimum WMON collateral is calculated from the current MON/USD price, selected leverage, and verified WMON collateral ratio. The total 50 MON ceiling is not a per-trade allocation. The current per-trade margin ceiling is 25 MON, with 25 MON reserved.
+The venue minimum notional is read from the live contract, not hardcoded. Minimum LVMON collateral is calculated from the current MON/USD price, selected leverage, and verified LVMON collateral ratio. The total 50 MON ceiling is not a per-trade allocation. The current per-trade margin ceiling is 30 MON, with 30 MON reserved.
 
 ## Remaining verification / activation sequence
 
 1. Restore GitLab CI capacity and run the full branch test suite; the current pipelines are blocked by `ci_quota_exceeded` before test execution.
 2. Confirm the latest Cloudflare Worker build contains MR !27 after merge, while leaving live activation controls unchanged.
-3. Run the protected read-only diagnostics and confirm the trader/agent addresses, agent permissions, fresh nonce, WMON balance, WMON Diamond allowance, selected fee-token balance/allowance, and D1 ledger are all valid.
+3. Run the protected read-only diagnostics and confirm the trader/agent addresses, agent permissions, fresh nonce, WMON balance, LVMON Diamond allowance, selected fee-token balance/allowance, and D1 ledger are all valid.
 4. Run hosted-agent dry-run signing and confirm it produces a valid local EIP-712 signature without submitting an intent.
-5. Only after the above checks pass, separately authorize any required WMON/fee-token approval transactions and a controlled live test. Do not treat a successful deploy or dry-run signature as proof of a filled trade.
+5. Only after the above checks pass, separately authorize any required LVMON/fee-token approval transactions and a controlled live test. Do not treat a successful deploy or dry-run signature as proof of a filled trade.
 

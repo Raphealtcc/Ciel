@@ -45,7 +45,7 @@ const helper = `async function handleLeverUpPreflightCommand(env, text) {
     "Trader signing: " + String(result?.traderSigning?.status || "UNKNOWN"),
     "Agent signing: " + String(result?.signing?.status || "UNKNOWN"),
     "Agent authorization: " + (auth.authorized ? "YES" : "NO") + " (open " + Boolean(auth.canMarketOpen) + ", close " + Boolean(auth.canMarketClose) + ", partial " + Boolean(auth.canPartialClose) + ")",
-    "WMON balance/allowance: " + (balances.WMON ? "read" : "UNAVAILABLE"),
+    "LVMON balance/allowance: " + (balances.LVMON ? "read" : "UNAVAILABLE"),
     "Native MON gas ready: " + (result?.nativeMonGasReady ? "YES" : "NO"),
     "Coordinator: SKIPPED (single-market command)",
     "Orders submitted: NO",
