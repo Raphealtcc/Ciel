@@ -48,7 +48,7 @@ assert.ok(source.includes("BENCHMARK_PRICE_SYMBOLS.has(row.symbol) || persistAll
 assert.ok(!source.includes("FROM market_candle_hourly_stats WHERE symbol IN"), "advisor scan must not read hourly structure aggregates from D1");
 assert.ok(!source.includes("FROM market_candle_hourly_stats WHERE symbol=?"), "candidate evidence must not issue per-symbol hourly D1 reads");
 assert.ok(!source.includes("SELECT created_at_ms FROM advisor_ai_audit WHERE symbol=?"), "advisor review cooldown must not scan the D1 audit table");
-assert.ok(source.includes("ciel:advisor:review:last:"), "per-symbol review cooldown must use KV");
+assert.ok(source.includes("ciel:advisor:review:core:") && source.includes("ciel:advisor:review:ai:"), "mode-specific review cooldowns must use KV");
 assert.ok(source.includes("candidateCount:candidates.length"), "scan diagnostics must count discovered candidates");
 assert.ok(source.includes("noSetupSymbols"), "scan diagnostics must identify markets with no technical setup");
 assert.ok(source.includes("CIEL_ADVISOR_SCAN"), "successful scans must emit structured scan-health logs");
@@ -62,10 +62,11 @@ const trendWriterEnd = source.indexOf("  async hydrateHistoryFromD1(now) {", tre
 assert.ok(trendWriterStart >= 0 && trendWriterEnd > trendWriterStart, "native 5m snapshot writer must exist");
 const trendWriter = source.slice(trendWriterStart, trendWriterEnd);
 assert.ok(trendWriter.includes("this.coreTrendCandles[symbol]"), "native 5m core candles must be merged into DO state");
+assert.ok(source.includes('const symbols = ["BTC", "ETH", "SOL", "BNB", "HYPE", "ZEC"]'), "one-minute DO candle capture must include all six enabled markets");
 assert.ok(trendWriter.includes("now - 24 * 60 * 60 * 1e3"), "cold-start cache must bootstrap 24 hours of 5m candles once");
 assert.ok(trendWriter.includes(".slice(-288)"), "the DO must retain 24 hours of 5m candles");
-assert.ok(trendWriter.includes('["BTC","ETH","SOL","BNB"].includes(symbol)'), "the 5m structure cache must include all four enabled markets");
-assert.ok(source.includes('new Set(["BTC", "ETH", "MON", "SOL", "BNB"])'), "native 5m candle snapshots must include BNB");
+assert.ok(trendWriter.includes('["BTC","ETH","SOL","BNB","HYPE","ZEC"].includes(symbol)'), "the 5m structure cache must include all six enabled markets");
+assert.ok(source.includes('new Set(["BTC", "ETH", "MON", "SOL", "BNB", "HYPE", "ZEC"])'), "native 5m candle snapshots must include all six enabled markets");
 assert.ok(trendWriter.includes('this.state.storage.put("coreTrendCandles", this.coreTrendCandles)'), "native 5m cache must persist across DO restarts");
 assert.ok(trendWriter.includes("INSERT OR REPLACE INTO market_candles"), "native 5m history must remain archived in D1");
 
