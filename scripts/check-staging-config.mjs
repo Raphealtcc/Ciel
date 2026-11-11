@@ -36,7 +36,7 @@ assert.equal(config.vars.LEVERUP_RESERVE_MON, "30", "production reserve must ret
 assert.equal(config.vars.LEVERUP_MAX_TRADE_MARGIN_MON, "30", "production trade margin must retain the approved 30 MON cap");
 assert.equal(config.vars.LEVERUP_MAX_CONCURRENT_POSITIONS, "2");
 assert.equal(config.vars.LEVERUP_MAX_DAILY_LOSS_MON, "200");
-assert.equal(config.vars.LEVERUP_MAX_DRAWDOWN_MON, "60");
+assert.equal(config.vars.LEVERUP_MAX_DRAWDOWN_MON, "200");
 assert.equal(config.vars.LEVERUP_MAX_AGGREGATE_STOP_RISK_MON, "200");
 assert.equal(config.vars.LEVERUP_COLLATERAL_100X_USD, "0.23");
 assert.equal(config.vars.LEVERUP_COLLATERAL_50X_USD, "0.43");
