@@ -344,13 +344,19 @@ replaceExactlyOnce(
 );
 replaceExactlyOnce(
   'if(cached&&cached.schemaVersion===2&&cached.localDay===today&&cached.hourStats)return await present(cached,true);',
-  'if(cached&&cached.schemaVersion===2&&cached.localDay===today&&cached.hourStats&&(Number(cached.historyDays)>=5||now-Number(cached.computedAt||0)<60*60*1000))return await present(cached,true);',
-  "refresh intraday BUILDING_HISTORY cache hourly until five complete days exist"
+  'if(cached&&cached.schemaVersion===2&&cached.localDay===today&&cached.hourStats&&(Number(cached.historyDays)>=5||now-Number(cached.computedAt||0)<24*60*60*1000))return await present(cached,true);',
+  "refresh intraday BUILDING_HISTORY cache daily until five complete days exist"
 );
 
 
 
 
+
+replaceExactlyOnce(
+  'const q=await env.DB.prepare("SELECT ts_ms,mid_price FROM market_samples WHERE symbol=? AND ts_ms>=? ORDER BY ts_ms DESC LIMIT 10080").bind(symbol,now-7*86400000).all();',
+  'const q=await env.DB.prepare("SELECT ts_ms,mid_price FROM market_samples WHERE symbol=? AND ts_ms>=? ORDER BY ts_ms DESC LIMIT 7200").bind(symbol,now-5*86400000).all();',
+  "bound intraday pattern D1 reads to five days of history",
+);
 
 const snapshotStart = source.indexOf("  snapshot() {");
 const snapshotEnd = source.indexOf("  async onSocketMessage", snapshotStart);

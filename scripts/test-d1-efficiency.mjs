@@ -46,6 +46,8 @@ assert.ok(candlesRoute.includes("FROM market_samples WHERE symbol=?"), "the publ
 assert.ok(source.includes("const persistAllSamples = Math.floor(now / (6 * 60 * 1e3))"), "watchlist D1 samples must retain their current six-minute persistence cadence");
 assert.ok(source.includes("BENCHMARK_PRICE_SYMBOLS.has(row.symbol) || persistAllSamples"), "one-minute benchmark samples and wider-watchlist samples must both remain");
 assert.ok(!source.includes("FROM market_candle_hourly_stats WHERE symbol IN"), "advisor scan must not read hourly structure aggregates from D1");
+assert.ok(source.includes("LIMIT 7200") && source.includes("now-5*86400000"), "intraday D1 history reads must be capped to five days");
+assert.ok(source.includes("24*60*60*1000"), "intraday BUILDING_HISTORY cache must refresh at most daily");
 assert.ok(!source.includes("FROM market_candle_hourly_stats WHERE symbol=?"), "candidate evidence must not issue per-symbol hourly D1 reads");
 assert.ok(!source.includes("SELECT created_at_ms FROM advisor_ai_audit WHERE symbol=?"), "advisor review cooldown must not scan the D1 audit table");
 assert.ok(source.includes("ciel:advisor:review:core:") && source.includes("ciel:advisor:review:ai:"), "mode-specific review cooldowns must use KV");
