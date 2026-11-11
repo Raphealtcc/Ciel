@@ -84,7 +84,7 @@ const replacement = `function analyzeCoreTrendContinuation(symbol, fiveMinuteRow
     symbol,side,entry:last.c,stopPct,targetPct,confidence,
     scoreComponents:["5M_EMA_TREND","5M_HIGHER_HIGHS_HIGHER_LOWS","5M_MACD_MOMENTUM","5M_RSI_MOMENTUM","5M_BREAKOUT_RETEST","5M_VOLUME_CONFIRMATION"],
     scoreModel:"core-5m-chart-confluence-v2",strategy:"5M_STRUCTURE+EMA+MACD+RSI+BREAKOUT_RETEST",
-    regime:side==="LONG"?"TREND_UP":"TREND_DOWN",mode:"CORE_TREND_CONTINUATION",holdMinutes:60,
+    regime:side==="LONG"?"TREND_UP":"TREND_DOWN",mode:"TREND_HOLD",holdMinutes:180,
     rsi,bounce:null,cci:null,stochRsi:null,rangePositionPct:null,
     chartEvidence:{higherHighs,higherLows,lowerHighs,lowerLows,ema9:fast,ema21:slow,macdHistogram:histogram,priorMacdHistogram:priorHistogram,rsi,breakoutLevel:side==="LONG"?resistance:support,averageVolume,breakoutVolume:breakout.v,retestVolume:last.v},
     reason:"Closed 5m candles confirm swing structure, EMA9/EMA21 direction, MACD momentum, RSI regime, a volume-backed range break and a successful retest. Mixed evidence is rejected."
@@ -93,4 +93,4 @@ const replacement = `function analyzeCoreTrendContinuation(symbol, fiveMinuteRow
 __name(analyzeCoreTrendContinuation,"analyzeCoreTrendContinuation");`;
 source = source.slice(0,start) + replacement + source.slice(after);
 await writeFile(file,source);
-console.log("Enhanced existing 5m continuation detector; scalp and trend-hold detectors were not changed.");
+console.log("Enhanced the trend-only 5m breakout-retest detector; all retained entries use TREND_HOLD.");
