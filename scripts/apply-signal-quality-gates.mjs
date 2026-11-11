@@ -74,11 +74,14 @@ const runIndexAfterHelper = source.indexOf(runSig);
 const runBodyInsertAt = runIndexAfterHelper + runSig.length;
 source = source.slice(0, runBodyInsertAt) + newline + "  const strategyShadowStats = await updateAdvisorShadowOutcomes(env, now);" + newline + source.slice(runBodyInsertAt);
 console.log("Applied signal-quality patch: evaluate unfilled recommendations and learn gross shadow expectancy");
-once(
-  '"Technical: " + score + "/100 ÃÂÃÂ· " + String(s?.strategy || "ÃÂ¢ÃÂÃÂ"),',
-  '"Technical: " + score + "/100 ÃÂÃÂ· " + String(s?.strategy || "ÃÂ¢ÃÂÃÂ"),' + String.fromCharCode(10) + '"Signal quality: " + Number(s?.signalQualityScore || 0) + "/100 ÃÂÃÂ· evidence score, not win probability",',
-  "show the evidence-quality score on each Telegram recommendation"
-);
+const technicalScoreAnchor = '"Technical: " + score + "/100';
+const technicalScoreAt = source.indexOf(technicalScoreAnchor);
+if (technicalScoreAt < 0 || source.indexOf(technicalScoreAnchor, technicalScoreAt + technicalScoreAnchor.length) >= 0) throw new Error("Could not locate a unique technical score line for quality annotation.");
+const technicalScoreLineStart = source.lastIndexOf(newline, technicalScoreAt) + 1;
+const technicalScoreLineEnd = source.indexOf(newline, technicalScoreAt);
+if (technicalScoreLineEnd < 0 || !source.slice(technicalScoreLineStart, technicalScoreLineEnd).includes("String(s?.strategy")) throw new Error("Technical score line format changed; refusing to patch the wrong Telegram message.");
+source = source.slice(0, technicalScoreLineEnd) + newline + '  "Signal quality: " + Number(s?.signalQualityScore || 0) + "/100 evidence score, not win probability",' + source.slice(technicalScoreLineEnd);
+console.log("Applied signal-quality patch: show the evidence-quality score on each Telegram recommendation");
 
 const duplicateAnchor = '    const quality = await getMarketEvidence(env, candidate.symbol, now, liveEvidence?.[candidate.symbol]);';
 const duplicateReplacement = `    const duplicateSignalKey = "ciel:advisor:duplicate:v1:" + candidate.symbol + ":" + candidate.side + ":" + String(candidate.strategy || candidate.mode || "UNKNOWN");
