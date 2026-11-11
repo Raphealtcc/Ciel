@@ -15,6 +15,13 @@ function replaceRegexOnce(text, pattern, replacement, label) {
   return text.replace(pattern, replacement);
 }
 
+source = replaceOnce(
+  source,
+  '    this.orderFlow = values[22] || {};\n    this.coreScalpCandles = values[22] || {};\n    this.coreTrendCandles = values[23] || {};\n    this.xyzQntMid = values[24] || null;\n    this.lastXyzQntRefreshAt = Number(values[25]) || 0;\n    this.historyBootstrapDone = values[26] === true;\n    this.lastHistoryBootstrapAt = Number(values[27]) || 0;',
+  '    this.orderFlow = values[22] || {};\n    this.coreScalpCandles = values[23] || {};\n    this.coreTrendCandles = values[24] || {};\n    this.xyzQntMid = values[25] || null;\n    this.lastXyzQntRefreshAt = Number(values[26]) || 0;\n    this.historyBootstrapDone = values[27] === true;\n    this.lastHistoryBootstrapAt = Number(values[28]) || 0;',
+  "fix Durable Object state restore indexes",
+);
+
 const methodStart = source.indexOf("  async writeCoreScalpCandles(now) {");
 const methodEnd = source.indexOf("  async writeHistory(rows, alerts, now) {", methodStart);
 if (methodStart < 0 || methodEnd <= methodStart) throw new Error("Core scalp candle writer boundaries missing.");

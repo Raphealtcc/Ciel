@@ -10,6 +10,10 @@ assert.match(worker, /slice\(-240\)/);
 assert.match(worker, /VENUE_MAX_LEVERAGE_BELOW_CONFIGURED_MINIMUM/);
 assert.match(worker, /oneMinuteCandleCounts/);
 assert.match(worker, /reviewCompletedAt: now/);
+assert.match(worker, /this\\.coreScalpCandles = values\\[23\\] \\|\\| \\{\\}/);
+assert.match(worker, /this\\.coreTrendCandles = values\\[24\\] \\|\\| \\{\\}/);
+assert.match(worker, /this\\.lastHistoryBootstrapAt = Number\\(values\\[28\\]\\) \\|\\| 0/);
+assert.doesNotMatch(worker, /this\\.coreScalpCandles = values\\[22\\]/);
 assert.doesNotMatch(worker, /startTime:\s*now\s*-\s*75\s*\*\s*(?:60e3|6e4)/);
 
 assert.match(coordinator, /payload_json IS NOT \?/);
