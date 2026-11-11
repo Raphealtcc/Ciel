@@ -10,8 +10,8 @@ function once(before, after, label) {
 }
 
 once(
-  "if (now - last >= 30 * 6e4) fallbackEligible.push(symbol);",
-  "if (now - last >= 5 * 6e4) fallbackEligible.push(symbol);",
+  "if (now - last >= 30 * 60e3) fallbackEligible.push(symbol);",
+  "if (now - last >= 5 * 60e3) fallbackEligible.push(symbol);",
   "retry missing 5m history after five minutes"
 );
 once(
