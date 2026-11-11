@@ -100,15 +100,15 @@ assert.ok(source.includes("function analyzeCoreTrendContinuation"));
 
 assert.ok(source.includes("5M_TREND_CONTINUATION+BREAKOUT_RETEST"));
 assert.ok(source.includes("5M_STRUCTURE+EMA+MACD+RSI+BREAKOUT_RETEST"));
-assert.ok(source.includes("corePullbackScalp: modeStats(\"TREND_PULLBACK_ENTRY\")"));
-assert.ok(source.includes("coreTrendContinuation: modeStats(\"TREND_BREAKOUT_RETEST\")"));
+assert.ok(source.includes('const strategyStats = { trendHold: modeStats("TREND_HOLD") }'));
+assert.ok(!source.includes("strategyStats.rangeScalp") && !source.includes("strategyStats.corePullbackScalp") && !source.includes("strategyStats.coreTrendContinuation"));
 assert.ok(source.includes('"PULLBACK_RECLAIM_VOLUME_OR_FRESHNESS_GATE"'));
 assert.ok(source.includes("coreForecastChecks>=Math.min(3,coreTrendCandidateCount)")&&source.includes("otherForecastChecks>=6-Math.min(3,coreTrendCandidateCount)"));
 assert.ok(source.includes('paperStorage.put("ciel:adaptive-learning:v1"'));
 assert.ok(source.includes("advisorScanRaw"));
 assert.ok(source.includes("advisorScan") && source.includes("feed:"), "protected diagnostics must include advisor scan data and feed status");
-assert.ok(source.includes("Core pullback scalps: "));
-assert.ok(source.includes("5m trend continuation: "));
+assert.ok(!source.includes("Core pullback scalps: "));
+assert.ok(!source.includes("5m trend continuation: "));
 const helperScopeStart=source.indexOf('__name(analyse, "analyse");');
 const helperScopeEnd=source.indexOf("async function review(",helperScopeStart);
 assert.ok(helperScopeStart>=0&&helperScopeEnd>helperScopeStart);
@@ -121,4 +121,4 @@ assert.ok(source.includes("LOCAL_TREND_BREAKOUT_RETEST"));
 
 assert.ok(!source.includes('paperStorage.put("ciel:adaptive-learning:v1").bind'));
 
-console.log("PASS: bounded adaptive learning, core-market scheduling, separate /profits strategy buckets, and 5m breakout-retest long/short gates.");
+console.log("PASS: bounded adaptive learning, core-market scheduling, trend-only /profits performance, and 5m breakout-retest long/short gates.");
