@@ -50,8 +50,8 @@ class FakeD1 {
         }
         if (sql.startsWith("DELETE FROM leverup_execution_intents")) { db.rows.delete(values[0]); return { meta: { changes: 1 } }; }
         if (sql.startsWith("UPDATE leverup_execution_intents SET")) {
-          const fields = [...sql.matchAll(/([a-z_]+) = \?/g)].map((m) => m[1]);
-          const signalId = values[values.length - 1];
+          const fields = [...sql.slice("UPDATE leverup_execution_intents SET ".length, sql.indexOf(" WHERE signal_id = ?")).matchAll(/([a-z_]+) = \?/g)].map((m) => m[1]);
+          const signalId = values[fields.length];
           const row = db.rows.get(signalId);
           if (!row) return { meta: { changes: 0 } };
           fields.forEach((field,i) => { row[field] = values[i]; });
