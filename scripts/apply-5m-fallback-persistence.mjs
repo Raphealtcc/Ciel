@@ -14,6 +14,16 @@ once(
   "if (now - last >= 5 * 6e4) fallbackEligible.push(symbol);",
   "retry missing 5m history after five minutes"
 );
+once(
+  \`const rows = coreScalpData.get(symbol)?.five || [];
+    const latest = Number(rows[rows.length - 1]?.close_ts_ms || 0);
+    return rows.length < 40 || now - latest > 7 * 60 * 1e3;\`,
+  \`const rows = coreScalpData.get(symbol)?.five || [];
+    const validRows = rows.filter((row) => Number(row.close_ts_ms) > 0 && [row.open_price, row.high_price, row.low_price, row.close_price].every((value) => Number(value) > 0));
+    const latest = Number(validRows[validRows.length - 1]?.close_ts_ms || 0);
+    return validRows.length < 40 || now - latest > 7 * 60 * 1e3;\`,
+  "retry fallback when the DO cache has fewer than 40 valid OHLC candles"
+);
 
 const oldLoop = [
   "        for (const symbol of fallbackEligible) {",
