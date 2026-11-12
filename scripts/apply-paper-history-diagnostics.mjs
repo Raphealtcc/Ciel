@@ -11,7 +11,13 @@ function once(text, before, after, label) {
 }
 
 source = once(source,
-  "const recentClosed = closedTrades.slice(0, includeHistory ? 250 : 5).map((trade) => ({",
+  "function getPaperSummary(storage, prices, now, lastTickAt) {",
+  "function getPaperSummary(storage, prices, now, lastTickAt, includeHistory = false) {",
+  "add opt-in history parameter to paper summary",
+);
+
+source = once(source,
+  "const recentClosed = closedTrades.slice(0, 5).map((trade) => ({",
   `const historyTrades = includeHistory
     ? closedTrades.slice().sort((a, b) => Number(b.closedAtMs) - Number(a.closedAtMs)).slice(0, 250)
     : closedTrades.slice(0, 5);
@@ -79,8 +85,8 @@ source = once(source,
 );
 
 source = once(source,
-  '    if (path === "/paper/profits") {\n      try {\n        const includeHistory = new URL(request.url).searchParams.get("history") === "1";',
-  '    if (path === "/paper/history") {\n      try {\n        const summary = await getPaperSummary(this.state.storage, this.latest, Date.now(), this.lastTickAt, true);\n        return json({ ok: true, ...summary });\n      } catch (error) {\n        const detail = String(error).slice(0, 500);\n        console.error("CIEL paper history DO route failed: " + detail);\n        return json({ ok: false, error: "PAPER_HISTORY_ROUTE_FAILED", detail }, 500);\n      }\n    }\n    if (path === "/paper/profits") {\n      try {\n        const includeHistory = new URL(request.url).searchParams.get("history") === "1";',
+  '    if (path === "/paper/profits") {\n      try {\n        const summary = await getPaperSummary(this.state.storage, this.latest, Date.now(), this.lastTickAt);',
+  '    if (path === "/paper/history") {\n      try {\n        const summary = await getPaperSummary(this.state.storage, this.latest, Date.now(), this.lastTickAt, true);\n        return json({ ok: true, ...summary });\n      } catch (error) {\n        const detail = String(error).slice(0, 500);\n        console.error("CIEL paper history DO route failed: " + detail);\n        return json({ ok: false, error: "PAPER_HISTORY_ROUTE_FAILED", detail }, 500);\n      }\n    }\n    if (path === "/paper/profits") {\n      try {\n        const summary = await getPaperSummary(this.state.storage, this.latest, Date.now(), this.lastTickAt);',
   "add dedicated paper history Durable Object route",
 );
 
