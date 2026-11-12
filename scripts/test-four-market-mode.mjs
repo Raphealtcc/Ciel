@@ -23,4 +23,4 @@ assert.ok(worker.includes('new Set(["BTC", "ETH", "MON", "SOL", "BNB", "HYPE", "
 assert.ok(worker.includes("if (!isTemporaryMarketAllowed(candidate.symbol)) continue;"));
 const recovered=await readFile("recovered-src/symbols.js.part-001","utf8");
 assert.ok(recovered.includes("HYPE: 50") && recovered.includes("ZEC: 25"));
-console.log("PASS: six-market allowlist covers advisor, Gemini, paper and LeverUp paths.");
+console.log("PASS: eight-market allowlist covers advisor, Gemini, paper and LeverUp paths.");

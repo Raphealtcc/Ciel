@@ -59,8 +59,8 @@ const nativeImport = 'import { restrictTemporaryMarketUniverse } from "./market-
 if (!native.includes(nativeImport)) native = nativeImport + "\n" + native;
 native = once(native,
   '  const watch = [...new Set(watchValues.map(upper).filter(Boolean))];',
-  '  const watch = restrictTemporaryMarketUniverse(["BTC", "ETH", "SOL", "BNB", "HYPE", "ZEC", ...watchValues.map(upper)]);',
+  '  const watch = restrictTemporaryMarketUniverse(["BTC", "ETH", "SOL", "BNB", "HYPE", "ZEC", "ADA", "PUMP", ...watchValues.map(upper)]);',
   "restrict LeverUp native sampling to the eight enabled markets");
 await writeFile(nativePath, native);
 
-console.log("Applied eight-market universe: BTC, ETH, SOL, BNB, HYPE and ZEC. Existing-position management is unchanged.");
+console.log("Applied eight-market universe: BTC, ETH, SOL, BNB, HYPE, ZEC, ADA and PUMP. Existing-position management is unchanged.");

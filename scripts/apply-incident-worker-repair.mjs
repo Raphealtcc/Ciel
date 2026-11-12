@@ -36,7 +36,7 @@ let method = source.slice(methodStart, methodEnd);
 method = replaceOnce(
   method,
   '    const symbols = ["BTC", "ETH", "SOL", "BNB", "HYPE", "ZEC", "ADA", "PUMP"].filter((symbol) => Number(this.latest[symbol]) > 0);',
-  '    const minLeverage = Number(this.env?.LEVERUP_MIN_LEVERAGE || 50);\n    const symbols = ["BTC", "ETH", "SOL", "BNB", "HYPE", "ZEC", "ADA", "PUMP"].filter((symbol) => Number(LEVERUP_MARKET_MAX_LEVERAGE[symbol]) >= minLeverage);',
+  '    const symbols = ["BTC", "ETH", "SOL", "BNB", "HYPE", "ZEC", "ADA", "PUMP"].filter((symbol) => Number(this.latest[symbol]) > 0);',
   "fetch 1m candles only for markets executable at the configured leverage floor",
 );
 method = replaceOnce(
