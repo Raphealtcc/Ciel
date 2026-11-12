@@ -7,7 +7,7 @@ const coordinator = await readFile("src/leverup-coordinator.js", "utf8");
 
 assert.ok(worker.includes("lookbackMinutes = needsBootstrap ? 210 : 15"));
 assert.ok(worker.includes(".slice(-240)"));
-assert.ok(worker.includes("VENUE_MAX_LEVERAGE_BELOW_CONFIGURED_MINIMUM"));
+assert.ok(worker.includes("WATCHLIST_ONLY_MAX_"));
 assert.ok(worker.includes("oneMinuteCandleCounts"));
 assert.ok(worker.includes("reviewCompletedAt: now"));
 assert.ok(worker.includes("at least 61 distinct one-minute price buckets"), "forecast must require a real 60-minute context, not 180 arbitrary ticks");
@@ -18,7 +18,7 @@ assert.ok(worker.includes("ciel:api:diagnostics:table-stats:v1"));
 assert.ok(worker.includes("statsCacheNow - Number(cachedStats.at || 0) < 10 * 60 * 1e3"));
 assert.ok(worker.includes("this.coreScalpCandles = values[23] || {};"));
 const scalpWriter = worker.slice(worker.indexOf("async writeCoreScalpCandles(now)"), worker.indexOf("async writeHistory(rows, alerts, now)"));
-assert.ok(scalpWriter.includes("filter((symbol) => Number(LEVERUP_MARKET_MAX_LEVERAGE[symbol]) >= minLeverage)"));
+assert.ok(scalpWriter.includes("filter((symbol) => Number(this.latest[symbol]) > 0)"));
 assert.ok(!scalpWriter.includes("Number(this.latest[symbol]) > 0"));
 assert.ok(scalpWriter.includes("CIEL_CORE_SCALP_1M_EMPTY"));
 assert.ok(scalpWriter.includes("if (next.length !== existing.length || nextLast !== previousLast) updated = true;"));

@@ -12,67 +12,50 @@ function once(before, after, label) {
 
 const learningHelpers = `
 function buildAdaptiveLearningProfile(trades, now) {
-  const closed = (Array.isArray(trades) ? trades : [])
-    .filter((trade) => trade && trade.status === "CLOSED" &&
-      Number(trade.closedAtMs) > 0 && Number(trade.closedAtMs) >= now - 90 * 86400e3 &&
-      Number.isFinite(Number(trade.grossPnlMon)) && Number(trade.marginMon) > 0)
-    .sort((a,b) => Number(a.closedAtMs)-Number(b.closedAtMs)).slice(-300);
+  const closed = (Array.isArray(trades) ? trades : []).filter((trade) => trade && trade.status === "CLOSED" && Number.isFinite(Number(trade.closedAtMs)) && now - Number(trade.closedAtMs) <= 90 * 86400000).sort((a, b) => Number(a.closedAtMs) - Number(b.closedAtMs)).slice(-300);
   const buckets = new Map();
-  function add(key, trade) { if (!buckets.has(key)) buckets.set(key, []); buckets.get(key).push(trade); }
+  const add = (key, trade) => { if (!buckets.has(key)) buckets.set(key, []); buckets.get(key).push(trade); };
   for (const trade of closed) {
-    const symbol = String(trade.symbol || "UNKNOWN").toUpperCase();
-    const mode = String(trade.mode || "LEGACY");
-    add("strategy:" + mode, trade);
-    add("market:" + symbol + "|" + mode, trade);
+    const symbol = String(trade.symbol || "UNKNOWN").toUpperCase(), mode = String(trade.mode || "LEGACY").toUpperCase(), strategy = String(trade.strategy || mode).toUpperCase(), side = String(trade.side || "UNKNOWN").toUpperCase(), regime = String(trade.regime || "UNKNOWN").toUpperCase();
+    add("mode:" + mode, trade); add("strategy:" + strategy, trade); add("market:" + symbol + "|" + strategy, trade); add("side:" + side, trade); add("regime:" + regime, trade);
   }
-  function summarize(rows) {
-    const count = rows.length;
-    const wins = rows.filter((trade) => Number(trade.grossPnlMon) > 0).length;
-    const losses = rows.filter((trade) => Number(trade.grossPnlMon) < 0).length;
-    const pnlMon = rows.reduce((sum, trade) => sum + Number(trade.grossPnlMon), 0);
-    const expectancyPct = rows.reduce((sum, trade) => sum + Number(trade.grossPnlMon) / Number(trade.marginMon) * 100, 0) / Math.max(1,count);
-    const smoothedWinRate = (wins + 2) / (count + 4);
-    const sampleWeight = Math.min(1,count/20);
-    const winAdjustment = Math.max(-0.06,Math.min(0.06,(smoothedWinRate-0.5)*0.24));
-    const expectancyAdjustment = Math.max(-0.04,Math.min(0.04,expectancyPct*0.01));
-    const multiplier = count < 8 ? 1 : Math.max(0.9,Math.min(1.1,1+sampleWeight*(winAdjustment+expectancyAdjustment)));
-    return {trades:count,wins,losses,winRate:count?wins/count:0,pnlMon,expectancyPct,multiplier,
-      avgBestFavorableMovePct:rows.reduce((sum,trade)=>sum+(Number(trade.bestFavorableMovePct)||0),0)/Math.max(1,count),
-      closeReasons:rows.reduce((out,trade)=>{const reason=String(trade.closeReason||"UNKNOWN");out[reason]=(out[reason]||0)+1;return out;},{})};
-  }
-  const byStrategy={},bySymbolStrategy={};
-  for (const [key,rows] of buckets) {
-    const summary=summarize(rows.slice(-40));
-    if(key.startsWith("strategy:"))byStrategy[key.slice(9)]=summary;
-    else bySymbolStrategy[key.slice(7)]=summary;
-  }
-  const latest=closed[closed.length-1];
-  const fingerprint=closed.length+":"+(latest?latest.closedAtMs+":"+latest.signalId:"empty");
-  return {version:1,updatedAtMs:now,sampleWindowDays:90,closedTradeCount:closed.length,fingerprint,byStrategy,bySymbolStrategy};
+  const summarize = (rows) => {
+    const count = rows.length, wins = rows.filter((trade) => Number(trade.grossPnlMon ?? trade.pnlMon ?? 0) > 0).length;
+    const realizedPnlMon = rows.reduce((sum, trade) => sum + (Number(trade.grossPnlMon ?? trade.pnlMon) || 0), 0), totalMarginMon = rows.reduce((sum, trade) => sum + Math.max(0, Number(trade.marginMon) || 0), 0);
+    const expectancyPct = totalMarginMon > 0 ? realizedPnlMon / totalMarginMon * 100 : 0, smoothedWinRate = (wins + 2) / (count + 4), sampleWeight = Math.min(1, count / 20);
+    const winAdjustment = Math.max(-0.03, Math.min(0.03, (smoothedWinRate - 0.5) * 0.10)), expectancyAdjustment = Math.max(-0.12, Math.min(0.12, expectancyPct * 0.04));
+    const multiplier = count < 8 ? 1 : Math.max(0.85, Math.min(1.15, 1 + (winAdjustment + expectancyAdjustment) * sampleWeight));
+    const closeReasons = {}; for (const trade of rows) { const reason = String(trade.closeReason || "UNKNOWN"); closeReasons[reason] = (closeReasons[reason] || 0) + 1; }
+    return { trades: count, wins, losses: count - wins, winRate: count ? wins / count : 0, realizedPnlMon: Number(realizedPnlMon.toFixed(6)), totalMarginMon: Number(totalMarginMon.toFixed(6)), expectancyPct: Number(expectancyPct.toFixed(6)), multiplier: Number(multiplier.toFixed(6)), avgBestFavorableMovePct: count ? rows.reduce((sum, trade) => sum + (Number(trade.bestFavorableMovePct) || 0), 0) / count : 0, closeReasons };
+  };
+  const byStrategy = {}, bySymbolStrategy = {}, byMode = {}, bySide = {}, byRegime = {};
+  for (const [key, rows] of buckets) { const summary = summarize(key.startsWith("side:") || key.startsWith("regime:") ? rows.slice(-60) : rows.slice(-40)); if (key.startsWith("strategy:")) byStrategy[key.slice(9)] = summary; else if (key.startsWith("market:")) bySymbolStrategy[key.slice(7)] = summary; else if (key.startsWith("mode:")) byMode[key.slice(5)] = summary; else if (key.startsWith("side:")) bySide[key.slice(5)] = summary; else if (key.startsWith("regime:")) byRegime[key.slice(7)] = summary; }
+  const latest = closed[closed.length - 1], fingerprint = closed.length + ":" + String(latest?.closedAtMs || 0) + ":" + String(latest?.signalId || "");
+  return { version: 2, updatedAtMs: now, sampleWindowDays: 90, closedTradeCount: closed.length, fingerprint, byStrategy, bySymbolStrategy, byMode, bySide, byRegime };
 }
-__name(buildAdaptiveLearningProfile,"buildAdaptiveLearningProfile");
-
-function adaptiveCandidateMultiplier(profile,candidate) {
-  const symbol=String(candidate.symbol||"").toUpperCase(),mode=String(candidate.mode||"LEGACY");
-  const specific=profile?.bySymbolStrategy?.[symbol+"|"+mode],strategy=profile?.byStrategy?.[mode];
-  const selected=specific&&specific.trades>=8?specific:strategy;
-  return selected&&selected.trades>=8?Math.max(0.9,Math.min(1.1,Number(selected.multiplier)||1)):1;
+__name(buildAdaptiveLearningProfile, "buildAdaptiveLearningProfile");
+function adaptiveCandidateMultiplier(profile, candidate) {
+  const symbol = String(candidate?.symbol || "").toUpperCase(), mode = String(candidate?.mode || "LEGACY").toUpperCase(), strategy = String(candidate?.strategy || mode).toUpperCase(), side = String(candidate?.side || "UNKNOWN").toUpperCase(), regime = String(candidate?.regime || "UNKNOWN").toUpperCase();
+  const specific = profile?.bySymbolStrategy?.[symbol + "|" + strategy], strategyStats = profile?.byStrategy?.[strategy], modeStats = profile?.byMode?.[mode];
+  const selected = specific && specific.trades >= 8 ? specific : strategyStats && strategyStats.trades >= 8 ? strategyStats : modeStats, factors = [];
+  if (selected && selected.trades >= 8) factors.push(Number(selected.multiplier) || 1);
+  const sideStats = profile?.bySide?.[side]; if (sideStats && sideStats.trades >= 8) factors.push(Number(sideStats.multiplier) || 1);
+  const regimeStats = profile?.byRegime?.[regime]; if (regimeStats && regimeStats.trades >= 8) factors.push(Number(regimeStats.multiplier) || 1);
+  return Math.max(0.85, Math.min(1.15, factors.reduce((product, factor) => product * factor, 1)));
 }
-__name(adaptiveCandidateMultiplier,"adaptiveCandidateMultiplier");
-
-
-`;
+__name(adaptiveCandidateMultiplier, "adaptiveCandidateMultiplier");
+`;;
 const signature="async function runAdvisorCycle(env, prices, now, lastTickAt, priceHistory, liveEvidence, paperStorage, coreScalpCandles = {}, coreTrendCandles = {}) {";
 once(signature,learningHelpers+"\nfunction analyzeCoreTrendContinuation(symbol, fiveMinuteRows, now) {\n  const rows=(Array.isArray(fiveMinuteRows)?fiveMinuteRows:[]).map(row=>({\n    t:Number(row.close_ts_ms||row.open_ts_ms+300e3),o:Number(row.open_price),h:Number(row.high_price),\n    l:Number(row.low_price),c:Number(row.close_price),v:Number(row.volume)||0\n  })).filter(c=>c.t>0&&[c.o,c.h,c.l,c.c].every(v=>Number.isFinite(v)&&v>0)).sort((a,b)=>a.t-b.t);\n  if(rows.length<40)return null;\n  const last=rows[rows.length-1],breakout=rows[rows.length-2];\n  if(now-last.t>7*60e3||last.t>now+15e3)return null;\n  const ema=(values,period)=>{if(values.length<period)return NaN;const k=2/(period+1);let v=values[0];for(let i=1;i<values.length;i++)v=values[i]*k+v*(1-k);return v;};\n  const closes=rows.map(c=>c.c),fast=ema(closes.slice(-30),9),slow=ema(closes.slice(-30),21),priorFast=ema(closes.slice(-31,-1),9);\n  if(![fast,slow,priorFast].every(Number.isFinite))return null;\n  const atrRows=rows.slice(-15),atr=atrRows.reduce((s,c)=>s+c.h-c.l,0)/atrRows.length;\n  if(!(atr>0))return null;\n  const base=rows.slice(-25,-5),resistance=Math.max(...base.map(c=>c.h)),support=Math.min(...base.map(c=>c.l));\n  const avgVol=rows.slice(-21,-1).reduce((s,c)=>s+c.v,0)/20;\n  if(avgVol>0&&last.v<avgVol*0.65)return null;\n  let side=null,pivot=0,level=0;\n  if(fast>slow&&fast>priorFast&&breakout.c>resistance+atr*0.05&&last.l<=resistance+atr*0.35&&last.l>=resistance-atr*0.35&&last.c>resistance&&last.c>last.o){\n    side=\"LONG\";level=resistance;pivot=Math.min(last.l,breakout.l);\n  } else if(fast<slow&&fast<priorFast&&breakout.c<support-atr*0.05&&last.h>=support-atr*0.35&&last.h<=support+atr*0.35&&last.c<support&&last.c<last.o){\n    side=\"SHORT\";level=support;pivot=Math.max(last.h,breakout.h);\n  }\n  if(!side)return null;\n  const raw=side===\"LONG\"?(last.c-pivot+atr*0.1)/last.c*100:(pivot-last.c+atr*0.1)/last.c*100;\n  const stopPct=Math.max(0.12,raw);\n  if(!(stopPct<=0.45))return null;\n  const targetPct=Math.max(0.3,stopPct*1.8);\n  const confidence=Math.min(0.86,0.75+Math.min(0.06,Math.abs(last.c-last.o)/last.c*0.1)+(avgVol<=0||last.v>=avgVol?0.02:0));\n  return {symbol,side,entry:last.c,stopPct,targetPct,confidence,scoreComponents:[\"5M_EMA_TREND\",\"5M_RANGE_BREAKOUT\",\"5M_BREAKOUT_RETEST\",\"VOLUME_CONFIRMATION\"],scoreModel:\"core-5m-breakout-retest-v1\",strategy:\"5M_TREND_CONTINUATION+BREAKOUT_RETEST\",regime:side===\"LONG\"?\"TREND_UP\":\"TREND_DOWN\",mode:\"TREND_BREAKOUT_RETEST\",holdMinutes:60,rsi:null,bounce:null,cci:null,stochRsi:null,rangePositionPct:null,reason:\"Closed 5m candles confirm EMA9/EMA21 trend, a prior 20-candle range breakout, and a retest that holds the broken level with volume confirmation.\"};\n}\n__name(analyzeCoreTrendContinuation,\"analyzeCoreTrendContinuation\");\n"+signature,"add bounded paper learning and 5m trend-continuation helpers");
 
 once(
   "  const symbols = configuredWatchSymbols(env.WATCH_SYMBOLS);",
-  '  const symbols = [...new Set(["BTC","ETH","SOL","BNB","HYPE","ZEC", ...configuredWatchSymbols(env.WATCH_SYMBOLS)])];',
+  '  const symbols = [...new Set(["BTC","ETH","SOL","BNB","HYPE","ZEC","ADA","PUMP", ...configuredWatchSymbols(env.WATCH_SYMBOLS)])];',
   "keep BTC ETH SOL in the scan even when WATCH_SYMBOLS omits them"
 );
 once(
   "  const candidates = [];\n  for (const sym of symbols) {",
-  '  const candidates = [];\n  const scanDiagnostics = [];\n  const coreMarketSet = new Set(["BTC","ETH","SOL"]);\n  const trendEntryMarketSet = new Set(["BTC","ETH","SOL","BNB","HYPE","ZEC"]);\n  const orderedSymbols = symbols.slice().sort((a,b) => Number(coreMarketSet.has(b))-Number(coreMarketSet.has(a)) || a.localeCompare(b));\n  for (const sym of orderedSymbols) {',
+  '  const candidates = [];\n  const scanDiagnostics = [];\n  const coreMarketSet = new Set(["BTC","ETH","SOL"]);\n  const trendEntryMarketSet = new Set(["BTC","ETH","SOL","BNB","HYPE","ZEC","ADA","PUMP"]);\n  const orderedSymbols = symbols.slice().sort((a,b) => Number(coreMarketSet.has(b))-Number(coreMarketSet.has(a)) || a.localeCompare(b));\n  for (const sym of orderedSymbols) {',
   "evaluate core markets first without removing other watchlist markets"
 );
 once(
@@ -141,7 +124,7 @@ once(
 
 once(
   '  candidates.sort((x, y) => eventIntel?.marketImpact === "BROAD_RISK_OFF" ? Number(y.side === "SHORT") - Number(x.side === "SHORT") || y.confidence - x.confidence : y.confidence - x.confidence);',
-  '  const adaptiveLearning = buildAdaptiveLearningProfile(paperState?.trades || [], now);\n  for (const candidate of candidates) { candidate.adaptiveMultiplier=adaptiveCandidateMultiplier(adaptiveLearning,candidate); candidate.adaptiveScore=Number(candidate.confidence)*candidate.adaptiveMultiplier; }\n  if (paperStorage) { const priorLearning=await paperStorage.get("ciel:adaptive-learning:v1").catch(()=>null); if(priorLearning?.fingerprint!==adaptiveLearning.fingerprint) await paperStorage.put("ciel:adaptive-learning:v1",adaptiveLearning).catch((error)=>console.error("Adaptive paper-learning persistence failed: "+String(error).slice(0,160))); }\n  const preferredGroup = Math.floor(now / (5 * 60e3)) % 3 === 2 ? "WATCHLIST" : "CORE";\n  candidates.sort((x,y)=>Number((coreMarketSet.has(y.symbol)===(preferredGroup==="CORE")))-Number((coreMarketSet.has(x.symbol)===(preferredGroup==="CORE"))) || (eventIntel?.marketImpact==="BROAD_RISK_OFF"?Number(y.side==="SHORT")-Number(x.side==="SHORT"):0) || Number(y.adaptiveScore||y.confidence)-Number(x.adaptiveScore||x.confidence) || Number(y.confidence)-Number(x.confidence));',
+  '  const adaptiveLearning = buildAdaptiveLearningProfile(paperState?.trades || [], now);\n  for (const candidate of candidates) { candidate.adaptiveMultiplier=adaptiveCandidateMultiplier(adaptiveLearning,candidate); candidate.adaptiveScore=Number(candidate.confidence)*candidate.adaptiveMultiplier; }\n  if (paperStorage) { const priorLearning=await paperStorage.get("ciel:adaptive-learning:v2").catch(()=>null); if(priorLearning?.fingerprint!==adaptiveLearning.fingerprint) await paperStorage.put("ciel:adaptive-learning:v2",adaptiveLearning).catch((error)=>console.error("Adaptive paper-learning persistence failed: "+String(error).slice(0,160))); }\n  const preferredGroup = Math.floor(now / (5 * 60e3)) % 3 === 2 ? "WATCHLIST" : "CORE";\n  candidates.sort((x,y)=>Number((coreMarketSet.has(y.symbol)===(preferredGroup==="CORE")))-Number((coreMarketSet.has(x.symbol)===(preferredGroup==="CORE"))) || (eventIntel?.marketImpact==="BROAD_RISK_OFF"?Number(y.side==="SHORT")-Number(x.side==="SHORT"):0) || Number(y.adaptiveScore||y.confidence)-Number(x.adaptiveScore||x.confidence) || Number(y.confidence)-Number(x.confidence));',
   "prioritize core markets and apply learned outcome weights to ranking only"
 );
 once(

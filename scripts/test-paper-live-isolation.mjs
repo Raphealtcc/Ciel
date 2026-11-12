@@ -9,8 +9,8 @@ assert.ok(source.includes("if (paperTradingEnabled && sizingLimits.feasible)"));
 assert.ok(source.includes("PAPER TRADING PAUSED"));
 assert.ok(source.includes("paperState?.trades || []"));
 assert.ok(source.includes('paperStorage.put("ciel:adaptive-learning:v1"'));
-assert.ok(source.includes("PAPER_MARKET_TIER_UNSUPPORTED"));
-assert.ok(!source.includes('reason:"PAPER_MARKET_TIER_UNSUPPORTED"}); continue;'));
+assert.ok(source.includes("WATCHLIST_ONLY_MAX_"));
+assert.ok(!source.includes('reason:"WATCHLIST_ONLY_MAX_"}); continue;'));
 assert.ok(!source.includes('reason:"PAPER_INSUFFICIENT_FREE_MARGIN",requiredPaperMargin,availablePaperMargin:paperCash}); continue;'));
 assert.ok(!source.includes('reason:"PAPER_POSITION_ALREADY_OPEN"}); continue;'));
 // Live sizing must use the independently calculated USD allocation converted

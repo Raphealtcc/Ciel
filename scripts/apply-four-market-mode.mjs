@@ -15,15 +15,15 @@ function once(source, before, after, label) {
 worker = once(worker,
   '    const isScalpMode = false;',
   '    if (!isTemporaryMarketAllowed(candidate.symbol)) continue;\n    const isScalpMode = false;',
-  "restrict trend candidate reviews to the six enabled markets");
+  "restrict trend candidate reviews to the eight enabled markets");
 worker = once(worker,
   "  return [...new Set(parsed)].slice(0, 100);",
   "  return [...restrictTemporaryMarketUniverse([...new Set([\"BTC\",\"ETH\",\"SOL\",\"BNB\",\"HYPE\",\"ZEC\", ...parsed])]), \"MON\"]; ",
-  "keep all six enabled markets in the Hyperliquid watchlist");
+  "keep all eight enabled markets in the Hyperliquid watchlist");
 
 worker = once(worker,
   'async function openPaperTrade(storage, params) {\n  if (!storage) return { opened: false, reason: "Durable Object paper storage is unavailable." };',
-  'async function openPaperTrade(storage, params) {\n  if (!["BTC","ETH","SOL","BNB","HYPE","ZEC"].includes(String(params?.symbol || "").trim().toUpperCase())) return { opened: false, reason: "Market is outside the enabled six-market universe. Unsupported symbol." };\n  if (!storage) return { opened: false, reason: "Durable Object paper storage is unavailable." };',
+  'async function openPaperTrade(storage, params) {\n  if (!["BTC","ETH","SOL","BNB","HYPE","ZEC","ADA","PUMP"].includes(String(params?.symbol || "").trim().toUpperCase())) return { opened: false, reason: "Market is outside the enabled eight-market universe. Unsupported symbol." };\n  if (!storage) return { opened: false, reason: "Durable Object paper storage is unavailable." };',
   "hard-block non-core paper entries");
 
 worker = once(worker,
@@ -38,7 +38,7 @@ worker = once(worker,
 
 worker = once(worker,
   '    if (!proposal) return { handled: true, removeButtons: true, reply: "This proposal has expired or is no longer pending." };',
-  '    if (!proposal) return { handled: true, removeButtons: true, reply: "This proposal has expired or is no longer pending." };\n    if (!isTemporaryMarketAllowed(proposal.symbol)) return { handled: true, removeButtons: true, reply: "This proposal is outside the enabled six-market universe." };',
+  '    if (!proposal) return { handled: true, removeButtons: true, reply: "This proposal has expired or is no longer pending." };\n    if (!isTemporaryMarketAllowed(proposal.symbol)) return { handled: true, removeButtons: true, reply: "This proposal is outside the enabled eight-market universe." };',
   "reject stale non-core Telegram proposal buttons");
 
 await writeFile(workerPath, worker);
@@ -49,7 +49,7 @@ const advisorImport = 'import { isTemporaryMarketAllowed } from "./market-univer
 if (!advisor.includes(advisorImport)) advisor = advisorImport + "\n" + advisor;
 advisor = once(advisor,
   '  if (!candidate?.symbol) return result("BLOCKED", "CIEL candidate symbol is missing.");',
-  '  if (!candidate?.symbol) return result("BLOCKED", "CIEL candidate symbol is missing.");\n  if (!isTemporaryMarketAllowed(candidate.symbol)) return result("BLOCKED_TEMPORARY_MARKET_UNIVERSE", "Only BTC, ETH, SOL, BNB, HYPE and ZEC are eligible for new LeverUp entries.");',
+  '  if (!candidate?.symbol) return result("BLOCKED", "CIEL candidate symbol is missing.");\n  if (!isTemporaryMarketAllowed(candidate.symbol)) return result("BLOCKED_TEMPORARY_MARKET_UNIVERSE", "Only BTC, ETH, SOL, BNB, HYPE, ZEC, ADA and PUMP are eligible for new LeverUp entries.");',
   "hard-block non-core live and manual LeverUp entries");
 await writeFile(advisorPath, advisor);
 
@@ -60,7 +60,7 @@ if (!native.includes(nativeImport)) native = nativeImport + "\n" + native;
 native = once(native,
   '  const watch = [...new Set(watchValues.map(upper).filter(Boolean))];',
   '  const watch = restrictTemporaryMarketUniverse(["BTC", "ETH", "SOL", "BNB", "HYPE", "ZEC", ...watchValues.map(upper)]);',
-  "restrict LeverUp native sampling to the six enabled markets");
+  "restrict LeverUp native sampling to the eight enabled markets");
 await writeFile(nativePath, native);
 
-console.log("Applied six-market universe: BTC, ETH, SOL, BNB, HYPE and ZEC. Existing-position management is unchanged.");
+console.log("Applied eight-market universe: BTC, ETH, SOL, BNB, HYPE and ZEC. Existing-position management is unchanged.");

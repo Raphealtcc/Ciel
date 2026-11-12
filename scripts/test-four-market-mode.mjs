@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { isTemporaryMarketAllowed, restrictTemporaryMarketUniverse, TEMPORARY_MARKET_ALLOWLIST } from "../src/market-universe.js";
 import { prepareLeverUpAdvisorPlan } from "../src/leverup-advisor.js";
 
-const enabled = ["BTC", "ETH", "SOL", "BNB", "HYPE", "ZEC"];
+const enabled = ["BTC", "ETH", "SOL", "BNB", "HYPE", "ZEC", "ADA", "PUMP"];
 assert.deepEqual(TEMPORARY_MARKET_ALLOWLIST, enabled);
 assert.deepEqual(restrictTemporaryMarketUniverse(["BTC", "XRP", "eth", "SOL", "BNB", "HYPE", "ZEC", "DOGE", "BTC"]), enabled);
 for (const symbol of enabled) assert.equal(isTemporaryMarketAllowed(symbol), true);
@@ -15,11 +15,11 @@ assert.ok(native.includes('restrictTemporaryMarketUniverse(["BTC", "ETH", "SOL",
 const worker=await readFile("reconstructed/patched-worker.js","utf8");
 assert.ok(worker.includes("restrictTemporaryMarketUniverse([...new Set"));
 assert.ok(worker.includes('return [...restrictTemporaryMarketUniverse([...new Set(["BTC","ETH","SOL","BNB","HYPE","ZEC", ...parsed])]), "MON"];'));
-assert.ok(worker.includes("Market is outside the enabled six-market universe. Unsupported symbol."));
+assert.ok(worker.includes("Market is outside the enabled eight-market universe. Unsupported symbol."));
 assert.ok(worker.includes("rows.results = (rows.results || []).filter((position) => isTemporaryMarketAllowed(position.symbol))"));
 assert.ok(worker.includes("isTemporaryMarketAllowed(p.symbol)"));
-assert.ok(worker.includes("outside the enabled six-market universe"));
-assert.ok(worker.includes('new Set(["BTC", "ETH", "MON", "SOL", "BNB", "HYPE", "ZEC"])'));
+assert.ok(worker.includes("outside the enabled eight-market universe"));
+assert.ok(worker.includes('new Set(["BTC", "ETH", "MON", "SOL", "BNB", "HYPE", "ZEC", "ADA", "PUMP"])'));
 assert.ok(worker.includes("if (!isTemporaryMarketAllowed(candidate.symbol)) continue;"));
 const recovered=await readFile("recovered-src/symbols.js.part-001","utf8");
 assert.ok(recovered.includes("HYPE: 50") && recovered.includes("ZEC: 25"));

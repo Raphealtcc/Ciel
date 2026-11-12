@@ -35,8 +35,8 @@ if (methodStart < 0 || methodEnd <= methodStart) throw new Error("Core scalp can
 let method = source.slice(methodStart, methodEnd);
 method = replaceOnce(
   method,
-  '    const symbols = ["BTC", "ETH", "SOL", "BNB", "HYPE", "ZEC"].filter((symbol) => Number(this.latest[symbol]) > 0);',
-  '    const minLeverage = Number(this.env?.LEVERUP_MIN_LEVERAGE || 50);\n    const symbols = ["BTC", "ETH", "SOL", "BNB", "HYPE", "ZEC"].filter((symbol) => Number(LEVERUP_MARKET_MAX_LEVERAGE[symbol]) >= minLeverage);',
+  '    const symbols = ["BTC", "ETH", "SOL", "BNB", "HYPE", "ZEC", "ADA", "PUMP"].filter((symbol) => Number(this.latest[symbol]) > 0);',
+  '    const minLeverage = Number(this.env?.LEVERUP_MIN_LEVERAGE || 50);\n    const symbols = ["BTC", "ETH", "SOL", "BNB", "HYPE", "ZEC", "ADA", "PUMP"].filter((symbol) => Number(LEVERUP_MARKET_MAX_LEVERAGE[symbol]) >= minLeverage);',
   "fetch 1m candles only for markets executable at the configured leverage floor",
 );
 method = replaceOnce(
@@ -72,14 +72,14 @@ source = source.slice(0, methodStart) + method + source.slice(methodEnd);
 source = replaceOnce(
   source,
   '    if (!isTemporaryMarketAllowed(candidate.symbol)) continue;\n    const isScalpMode =',
-  '    if (!isTemporaryMarketAllowed(candidate.symbol)) continue;\n    const venueMaxLeverage = Number(LEVERUP_MARKET_MAX_LEVERAGE[candidate.symbol]);\n    const configuredMinLeverage = Number(env?.LEVERUP_MIN_LEVERAGE || 50);\n    if (Number.isFinite(venueMaxLeverage) && venueMaxLeverage < configuredMinLeverage) {\n      scanDiagnostics.push({ symbol: candidate.symbol, reason: "VENUE_MAX_LEVERAGE_BELOW_CONFIGURED_MINIMUM", venueMaxLeverage, configuredMinLeverage });\n      continue;\n    }\n    const isScalpMode =',
+  '    if (!isTemporaryMarketAllowed(candidate.symbol)) continue;\n    const venueMaxLeverage = Number(LEVERUP_MARKET_MAX_LEVERAGE[candidate.symbol]);\n    const configuredMinLeverage = Number(env?.LEVERUP_MIN_LEVERAGE || 50);\n    if (Number.isFinite(venueMaxLeverage) && venueMaxLeverage < configuredMinLeverage) {\n      scanDiagnostics.push({ symbol: candidate.symbol, reason: "WATCHLIST_ONLY_MAX_" + venueMaxLeverage + "X_BELOW_" + configuredMinLeverage + "X_ENTRY_FLOOR", venueMaxLeverage, configuredMinLeverage });\n    }\n    const isScalpMode =',
   "do not send below-floor markets to review or execution",
 );
 
 source = replaceOnce(
   source,
-  'candleLevelSymbols:candleStructureRows.size,coreMarkets:["BTC","ETH","SOL"],trendEntryMarkets:["BTC","ETH","SOL","BNB","HYPE","ZEC"],preferredGroup,',
-  'candleLevelSymbols: candleStructureRows.size, oneMinuteCandleCounts: Object.fromEntries(Object.entries(coreScalpCandles || {}).map(([symbol, rows]) => [symbol, Array.isArray(rows) ? rows.length : 0])), fiveMinuteCandleCounts: Object.fromEntries(Object.entries(coreTrendCandles || {}).map(([symbol, rows]) => [symbol, Array.isArray(rows) ? rows.length : 0])), coreMarkets: ["BTC", "ETH", "SOL"], trendEntryMarkets: ["BTC", "ETH", "SOL", "BNB", "HYPE", "ZEC"], unsupportedLeverageMarkets: symbols.filter((symbol) => Number.isFinite(Number(LEVERUP_MARKET_MAX_LEVERAGE[symbol])) && Number(LEVERUP_MARKET_MAX_LEVERAGE[symbol]) < Number(env?.LEVERUP_MIN_LEVERAGE || 50)), preferredGroup,',
+  'candleLevelSymbols:candleStructureRows.size,coreMarkets:["BTC","ETH","SOL"],trendEntryMarkets:["BTC","ETH","SOL","BNB","HYPE","ZEC","ADA","PUMP"],preferredGroup,',
+  'candleLevelSymbols: candleStructureRows.size, oneMinuteCandleCounts: Object.fromEntries(Object.entries(coreScalpCandles || {}).map(([symbol, rows]) => [symbol, Array.isArray(rows) ? rows.length : 0])), fiveMinuteCandleCounts: Object.fromEntries(Object.entries(coreTrendCandles || {}).map(([symbol, rows]) => [symbol, Array.isArray(rows) ? rows.length : 0])), coreMarkets: ["BTC", "ETH", "SOL"], trendEntryMarkets: ["BTC", "ETH", "SOL", "BNB", "HYPE", "ZEC", "ADA", "PUMP"], unsupportedLeverageMarkets: symbols.filter((symbol) => Number.isFinite(Number(LEVERUP_MARKET_MAX_LEVERAGE[symbol])) && Number(LEVERUP_MARKET_MAX_LEVERAGE[symbol]) < Number(env?.LEVERUP_MIN_LEVERAGE || 50)), preferredGroup,',
   "record per-symbol candle coverage and unsupported leverage markets",
 );
 

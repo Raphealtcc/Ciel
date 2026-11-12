@@ -29,18 +29,25 @@ const context=vm.createContext({
 vm.runInContext(source.slice(helperStart,advisorStart)+"\nglobalThis.learningTests={buildAdaptiveLearningProfile,adaptiveCandidateMultiplier,analyzeCoreTrendContinuation};",context);
 const {buildAdaptiveLearningProfile,adaptiveCandidateMultiplier,analyzeCoreTrendContinuation}=context.learningTests;
 const now=1800000000000;
-const trade=(i,pnl,mode="TREND_HOLD",symbol="BTC")=>({status:"CLOSED",closedAtMs:now-i*60000,signalId:"s"+i,symbol,mode,grossPnlMon:pnl,marginMon:10,bestFavorableMovePct:Math.max(0,pnl),closeReason:pnl>0?"TAKE_PROFIT":"STOP_LOSS"});
+const weakRecent=buildAdaptiveLearningProfile(Array.from({length:24},(_,i)=>trade(i,-2,"TREND_HOLD","BTC","MULTI_MARKET_LEVEL_SWEEP_RECLAIM","SHORT","LEVEL_REVERSAL")),now);
+assert.ok(weakRecent.byStrategy.MULTI_MARKET_LEVEL_SWEEP_RECLAIM && weakRecent.bySide.SHORT && weakRecent.byRegime.LEVEL_REVERSAL);
+const weakFactor=adaptiveCandidateMultiplier(weakRecent,{symbol:"BTC",mode:"TREND_HOLD",strategy:"MULTI_MARKET_LEVEL_SWEEP_RECLAIM",side:"SHORT",regime:"LEVEL_REVERSAL"});
+assert.ok(weakFactor<0.9 && weakFactor>=0.85);
+const strongRecent=buildAdaptiveLearningProfile(Array.from({length:24},(_,i)=>trade(i,2,"TREND_HOLD","PUMP","TREND+MOMENTUM+BREAKOUT","LONG","TREND_UP")),now);
+const strongFactor=adaptiveCandidateMultiplier(strongRecent,{symbol:"PUMP",mode:"TREND_HOLD",strategy:"TREND+MOMENTUM+BREAKOUT",side:"LONG",regime:"TREND_UP"});
+assert.ok(strongFactor>1.05 && strongFactor<=1.15);
+const trade=(i,pnl,mode="TREND_HOLD",symbol="BTC",strategy=mode,side="LONG",regime="TREND_UP")=>({status:"CLOSED",closedAtMs:now-i*60000,signalId:"s"+i,symbol,mode,strategy,side,regime,grossPnlMon:pnl,marginMon:10,bestFavorableMovePct:Math.max(0,pnl),closeReason:pnl>0?"TAKE_PROFIT":"STOP_LOSS"});
 const insufficient=buildAdaptiveLearningProfile(Array.from({length:7},(_,i)=>trade(i,1)),now);
 assert.equal(adaptiveCandidateMultiplier(insufficient,{symbol:"BTC",mode:"TREND_HOLD"}),1);
 const profitable=buildAdaptiveLearningProfile(Array.from({length:20},(_,i)=>trade(i,1)),now);
 const good=adaptiveCandidateMultiplier(profitable,{symbol:"BTC",mode:"TREND_HOLD"});
-assert.ok(good>1&&good<=1.1);
+assert.ok(good>1&&good<=1.15);
 const losing=buildAdaptiveLearningProfile(Array.from({length:20},(_,i)=>trade(i,-1)),now);
 const bad=adaptiveCandidateMultiplier(losing,{symbol:"BTC",mode:"TREND_HOLD"});
-assert.ok(bad<1&&bad>=0.9);
-assert.ok(source.includes('["BTC","ETH","SOL","BNB","HYPE","ZEC", ...configuredWatchSymbols(env.WATCH_SYMBOLS)]'));
+assert.ok(bad<1&&bad>=0.85);
+assert.ok(source.includes('["BTC","ETH","SOL","BNB","HYPE","ZEC","ADA","PUMP", ...configuredWatchSymbols(env.WATCH_SYMBOLS)]'));
 assert.ok(source.includes("orderedSymbols"));
-assert.ok(source.includes('const trendEntryMarketSet = new Set(["BTC","ETH","SOL","BNB","HYPE","ZEC"])'));
+assert.ok(source.includes('const trendEntryMarketSet = new Set(["BTC","ETH","SOL","BNB","HYPE","ZEC","ADA","PUMP"])'));
 assert.ok(!source.includes("signal.confidence >= minimumConfidence"));
 assert.ok(!source.includes("scalp.confidence >= minimumConfidence"));
 assert.ok(!source.includes("continuation.confidence >= minimumConfidence"));
@@ -52,7 +59,7 @@ assert.ok(source.includes('const preferredGroup = Math.floor(now / (5 * 60e3)) %
 assert.ok(source.includes('signal.mode === "TREND_HOLD"'));
 assert.ok(source.includes("1M_SWING_REVERSAL+RECLAIM"));
 assert.ok(source.includes("var CYCLE = 6e4;"));
-assert.ok(source.includes('coreMarkets:["BTC","ETH","SOL"],trendEntryMarkets:["BTC","ETH","SOL","BNB","HYPE","ZEC"],preferredGroup'));
+assert.ok(source.includes('coreMarkets:["BTC","ETH","SOL"],trendEntryMarkets:["BTC","ETH","SOL","BNB","HYPE","ZEC","ADA","PUMP"],preferredGroup'));
 assert.ok(source.includes("scanDiagnostics:scanDiagnostics.slice(-120)"));
 assert.ok(source.includes('"INSUFFICIENT_CLOSED_CANDLE_HISTORY"'));
 
@@ -104,7 +111,7 @@ assert.ok(source.includes('const strategyStats = { trendHold: modeStats("TREND_H
 assert.ok(!source.includes("strategyStats.rangeScalp") && !source.includes("strategyStats.corePullbackScalp") && !source.includes("strategyStats.coreTrendContinuation"));
 assert.ok(source.includes('"PULLBACK_RECLAIM_VOLUME_OR_FRESHNESS_GATE"'));
 assert.ok(source.includes("coreForecastChecks>=Math.min(3,coreTrendCandidateCount)")&&source.includes("otherForecastChecks>=6-Math.min(3,coreTrendCandidateCount)"));
-assert.ok(source.includes('paperStorage.put("ciel:adaptive-learning:v1"'));
+assert.ok(source.includes('paperStorage.put("ciel:adaptive-learning:v2"'));
 assert.ok(source.includes("advisorScanRaw"));
 assert.ok(source.includes("advisorScan") && source.includes("feed:"), "protected diagnostics must include advisor scan data and feed status");
 assert.ok(!source.includes("Core pullback scalps: "));
@@ -119,7 +126,7 @@ assert.ok(topLevelHelpers.includes("function getCandleStructureEvidence("),"cand
 assert.ok(source.includes("CIEL deterministic trend continuation guard"));
 assert.ok(source.includes("LOCAL_TREND_BREAKOUT_RETEST"));
 
-assert.ok(!source.includes('paperStorage.put("ciel:adaptive-learning:v1").bind'));
+assert.ok(!source.includes('paperStorage.put("ciel:adaptive-learning:v2").bind'));
 
 console.log("PASS: bounded adaptive learning, core-market scheduling, trend-only /profits performance, and 5m breakout-retest long/short gates.");
 

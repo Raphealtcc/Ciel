@@ -33,7 +33,7 @@ once(
     if (now - this.lastCoreScalpCandleAt < 55e3) return;
     const isInitialRefresh = this.lastCoreScalpCandleAt === 0;
     this.lastCoreScalpCandleAt = now;
-    const symbols = ["BTC", "ETH", "SOL", "BNB", "HYPE", "ZEC"].filter((symbol) => Number(this.latest[symbol]) > 0);
+    const symbols = ["BTC", "ETH", "SOL", "BNB", "HYPE", "ZEC", "ADA", "PUMP"].filter((symbol) => Number(this.latest[symbol]) > 0);
     const statements = [];
     for (let offset = 0; offset < symbols.length; offset += 3) {
       await Promise.all(symbols.slice(offset, offset + 3).map(async (symbol) => {
@@ -198,7 +198,7 @@ once(
   '  const eventIntel = await runMarketEventIntelligence(env, hist, symbols, now);',
   `  const eventIntel = await runMarketEventIntelligence(env, hist, symbols, now);
   const coreScalpData = new Map();
-  const coreScalpSymbols = ["BTC","ETH","SOL","BNB","HYPE","ZEC"].filter((symbol) => symbols.includes(symbol));
+  const coreScalpSymbols = ["BTC","ETH","SOL","BNB","HYPE","ZEC","ADA","PUMP"].filter((symbol) => symbols.includes(symbol));
   const coreCandleResults = await Promise.all(coreScalpSymbols.map(async (symbol) => {
     const [one, five] = await Promise.all([
       env.DB.prepare("SELECT open_ts_ms,close_ts_ms,open_price,high_price,low_price,close_price,volume FROM market_candles WHERE symbol=? AND interval='1m' AND close_ts_ms<=? ORDER BY open_ts_ms DESC LIMIT 60").bind(symbol,now).all(),
@@ -322,8 +322,8 @@ once(
 );
 
 once(
-  'fullyConfirmed\n      ? (localRangeReview ? "✅ Local range, statistical forecast and market-quality gates support this scalp; Gemini was intentionally skipped." : "✅ Forecast envelope and Gemini review support this direction.")',
-  'fullyConfirmed\n      ? (localCoreScalpReview ? "✅ Closed-candle pullback/reclaim, statistical forecast and market-quality gates support this scalp; Gemini was intentionally skipped." : localRangeReview ? "✅ Local range, statistical forecast and market-quality gates support this scalp; Gemini was intentionally skipped." : "✅ Forecast envelope and Gemini review support this direction.")',
+  'fullyConfirmed\n      ? (localRangeReview ? "â Local range, statistical forecast and market-quality gates support this scalp; Gemini was intentionally skipped." : "â Forecast envelope and Gemini review support this direction.")',
+  'fullyConfirmed\n      ? (localCoreScalpReview ? "â Closed-candle pullback/reclaim, statistical forecast and market-quality gates support this scalp; Gemini was intentionally skipped." : localRangeReview ? "â Local range, statistical forecast and market-quality gates support this scalp; Gemini was intentionally skipped." : "â Forecast envelope and Gemini review support this direction.")',
   "show core scalp's actual confirmation evidence",
 );
 
