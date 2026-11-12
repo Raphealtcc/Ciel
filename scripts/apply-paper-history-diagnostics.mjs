@@ -107,8 +107,8 @@ if (apiCount !== 1) throw new Error("paper history API route: expected one inser
 source = source.replace(apiAnchor, apiRoute + apiAnchor);
 
 source = once(source,
-  "    strategyStats\n  };",
-  "    strategyStats,\n    ...(includeHistory ? { historyAnalysis } : {})\n  };",
+  "openTrades, recentClosed, strategyStats",
+  "openTrades, recentClosed, strategyStats, ...(includeHistory ? { historyAnalysis } : {})",
   "include aggregate paper history analysis in opt-in response",
 );
 
