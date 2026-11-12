@@ -932,7 +932,7 @@ export async function notifyLeverUpClosedTrade(env, closed, settlement, entry) {
   const sign = (v) => (v > 0n ? "+" : "") + (Number(v) / (10 ** marginDecimals)).toFixed(3);
   const exitPrice = (Number(settlement.closePriceRaw) / 1e18).toFixed(6);
   const lines = [
-    "🔴 CIEL LIVE TRADE CLOSED",
+    "ð´ CIEL LIVE TRADE CLOSED",
     side + " " + symbol + " | " + reason,
     "Executed exit $" + exitPrice + " | P&L " + sign(net) + " " + marginLabel,
     "Return on margin: " + (roi === null ? "n/a" : (roi >= 0 ? "+" : "") + roi.toFixed(2) + "%") + " | signal " + String(entry?.signalId || "not linked"),
@@ -1104,6 +1104,21 @@ function pairMatchesPurgeSymbol(pair, symbol) {
   return values.some((value) => normalizeLeverUpPurgeSymbol(value) === symbol);
 }
 
+export function resolveLeverUpPositionSymbol({ position = {}, apiPositions = [], entries = [], pairView = null } = {}) {
+  const hash = String(position?.positionHash || "").toLowerCase(), base = String(position?.pairBase || "").toLowerCase();
+  const apiPosition = (Array.isArray(apiPositions) ? apiPositions : []).find((row) => {
+    const rowHash = String(row?.positionHash || row?.position_hash || "").toLowerCase(), rowBase = String(row?.pairBase || row?.pair?.base || row?.base || "").toLowerCase();
+    return (hash && rowHash === hash) || (base && rowBase === base);
+  });
+  const entry = (Array.isArray(entries) ? entries : []).find((row) => {
+    const rowHash = String(row?.positionHash || row?.position_hash || "").toLowerCase(), rowBase = String(row?.pairBase || row?.plan?.preflight?.pairBase || row?.plan?.pairBase || "").toLowerCase();
+    return (hash && rowHash === hash) || (base && rowBase === base);
+  });
+  const values = [position?.symbol, position?.pairSymbol, position?.purgeSymbol, apiPosition?.symbol, apiPosition?.pairSymbol, apiPosition?.pairName, apiPosition?.pair?.symbol, apiPosition?.pair?.name, apiPosition?.baseToken?.symbol, entry?.candidate?.symbol, entry?.signal?.symbol, entry?.plan?.preflight?.symbol, entry?.plan?.symbol, entry?.symbol, pairView?.symbol, pairView?.pairSymbol, pairView?.pairName, pairView?.name, pairView?.ticker, pairView?.baseSymbol, pairView?.baseToken?.symbol];
+  for (const value of values) { const symbol = normalizeLeverUpPurgeSymbol(value); if (symbol && !/^0X[0-9A-F]{40}$/.test(symbol) && !["USD","USDT","USDC"].includes(symbol)) return symbol; }
+  return null;
+}
+
 export async function purgeLeverUpPositions({ env, db, symbol = null, now = Date.now(), dependencies = {} }) {
   const requestedSymbol = normalizeLeverUpPurgeSymbol(symbol);
   if (symbol && !requestedSymbol) return { status: "INVALID_SYMBOL", checked: 0, submitted: 0 };
@@ -1264,10 +1279,12 @@ export async function runLeverUpPositionManager({ env, db, now = Date.now(), dep
     Promise.all(pairBases.map(async (base) => [base, await (dependencies.readPositions || readPositionsV4)(traderAddress, base, { publicClient: client })])),
     Promise.all(pairBases.map(async (base) => [base, await (dependencies.readPair || readPairByBaseV4)(base, { publicClient: client })])),
   ]);
+  const pairMap = new Map(pairViews);
   const positionMap = new Map();
   for (const [base, rows] of positionsByPair) for (const row of rows || []) {
     const position = normalizePositionAccrual(row);
-    positionMap.set(position.positionHash.toLowerCase(), { ...position, pairBase: base });
+    const symbol = resolveLeverUpPositionSymbol({ position: { ...position, pairBase: base }, apiPositions, entries, pairView: pairMap.get(base) });
+    positionMap.set(position.positionHash.toLowerCase(), { ...position, pairBase: base, ...(symbol ? { symbol, pairSymbol: symbol, purgeSymbol: symbol } : {}) });
   }
   // If the indexer has not published the opened position yet, associate only a unique
   // on-chain pair+side match with its submitted CIEL entry. Ambiguous matches stay untouched.
@@ -1291,7 +1308,6 @@ export async function runLeverUpPositionManager({ env, db, now = Date.now(), dep
       payload: { ...entry, closedAt: now, closeReconciledByOnchainPositionRead: true },
     });
   }
-  const pairMap = new Map(pairViews);
   const feeTokens = (antiDdos.config || []).filter((x) => x.enabled && x.feeToken).map((x) => x.feeToken);
   const balances = await (dependencies.readBalances || readTokenBalancesAndAllowances)(traderAddress, feeTokens, { publicClient: client });
   let submitted = 0, snapshots = 0, evaluated = 0, adaptiveUpdatesBlocked = 0, closePermissionBlocked = 0, aiReviewed = 0, aiCloseSignals = 0, positionsMissingPairView = 0, positionsMissingOraclePrice = 0, geminiConfiguredKeyCount = 0;
@@ -1421,5 +1437,5 @@ export async function runLeverUpPositionManager({ env, db, now = Date.now(), dep
   }
   const settlements = await reconcileClosedSettlements({ env, db, now, dependencies })
     .catch((error) => ({ error: String(error?.message || error).slice(0, 200) }));
-  return { status: liveEnabled(env) ? "LIVE_MONITORING" : "READ_ONLY_MONITORING", checked: evaluated, submitted, snapshots, adaptiveUpdatesBlocked, closePermissionBlocked, aiReviewed, aiCloseSignals, aiReviewStatusCounts, aiReviewFailures, geminiConfiguredKeyCount, positionsMissingPairView, positionsMissingOraclePrice, canMarketClose: Boolean(auth.canMarketClose), canUpdateTpSl: Boolean(auth.canUpdateTpSl), openPositionCount: positionMap.size, pairBasesChecked: pairBases.length, reconciliation, settlements };
+  return { status: liveEnabled(env) ? "LIVE_MONITORING" : "READ_ONLY_MONITORING", checked: evaluated, submitted, snapshots, adaptiveUpdatesBlocked, closePermissionBlocked, aiReviewed, aiCloseSignals, aiReviewStatusCounts, aiReviewFailures, geminiConfiguredKeyCount, positionsMissingPairView, positionsMissingOraclePrice, canMarketClose: Boolean(auth.canMarketClose), canUpdateTpSl: Boolean(auth.canUpdateTpSl), openPositionCount: positionMap.size, positions: [...positionMap.values()].map((position) => ({ symbol: position.symbol || position.pairSymbol || position.purgeSymbol || null, side: position.isLong ? "LONG" : "SHORT", positionHash: position.positionHash, pairBase: position.pairBase })), pairBasesChecked: pairBases.length, reconciliation, settlements };
 }

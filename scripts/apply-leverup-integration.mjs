@@ -44,12 +44,12 @@ if (!source.includes("function compactCielSetupMessage(")) {
     ? "Forecast 5m: " + median.toFixed(3) + "% (" + lower.toFixed(3) + " to " + upper.toFixed(3) + "%)"
     : "Forecast: unavailable";
   return [
-    (review === "APPROVE" ? "📈 " : "🟡 ") + String(p?.side || "—") + " " + String(p?.symbol || "—") + " · " + mode,
-    "Signal: " + String(p?.id || "—") + " · PROPOSED",
-    levelLabel + ": Entry $" + fmt(displayedEntry) + " · SL $" + fmt(displayedStop) + " · TP $" + fmt(displayedTarget),
-    "Technical: " + score + "/100 · " + String(s?.strategy || "—"),
+    (review === "APPROVE" ? "ð " : "ð¡ ") + String(p?.side || "â") + " " + String(p?.symbol || "â") + " Â· " + mode,
+    "Signal: " + String(p?.id || "â") + " Â· PROPOSED",
+    levelLabel + ": Entry $" + fmt(displayedEntry) + " Â· SL $" + fmt(displayedStop) + " Â· TP $" + fmt(displayedTarget),
+    "Technical: " + score + "/100 Â· " + String(s?.strategy || "â"),
     forecastLine,
-    "Review: " + review + " · hold ≤" + Number(s?.holdMinutes || (mode === "RANGE" ? 12 : 180)) + "m"
+    "Review: " + review + " Â· hold â¤" + Number(s?.holdMinutes || (mode === "RANGE" ? 12 : 180)) + "m"
   ].join("\\n");
 }
 `;
@@ -254,7 +254,7 @@ const oneTimeMarketDiagnosticRoute = `    if (url.pathname === "/_internal/lever
 `;
 once(
   '  if (cmd === "/profits") {',
-  '  if (cmd === "/profits") {\n    const liveOverride = await env?.CIEL_STATE?.get("ciel:control:live-enabled").catch(() => null);\n    const liveMode = String(liveOverride ?? env?.LEVERUP_LIVE_TRADING).toLowerCase() === "true" && String(env?.LEVERUP_KILL_SWITCH).toLowerCase() === "false";\n    if (liveMode) {\n      try { await notify(env, await buildLeverUpProfitReport({ env })); }\n      catch (error) { await notify(env, "🔴 LIVE PROFITS UNAVAILABLE — no paper figures were substituted. " + String(error?.message || error).slice(0, 240)); }\n      return true;\n    }',
+  '  if (cmd === "/profits") {\n    const liveOverride = await env?.CIEL_STATE?.get("ciel:control:live-enabled").catch(() => null);\n    const liveMode = String(liveOverride ?? env?.LEVERUP_LIVE_TRADING).toLowerCase() === "true" && String(env?.LEVERUP_KILL_SWITCH).toLowerCase() === "false";\n    if (liveMode) {\n      try { await notify(env, await buildLeverUpProfitReport({ env })); }\n      catch (error) { await notify(env, "ð´ LIVE PROFITS UNAVAILABLE â no paper figures were substituted. " + String(error?.message || error).slice(0, 240)); }\n      return true;\n    }',
   "route /profits to the live LeverUp settlement ledger whenever live execution is enabled",
 );
 
@@ -338,7 +338,7 @@ once(
             await env.CIEL_STATE.put(diagnosticKey + ":checkedAt", String(now), { expirationTtl: 3600 });
           }
           const lifecycle = await runLeverUpPositionManager({ env, db: env.DB, now });
-          await env.CIEL_STATE.put("ciel:leverup:position-manager:last-run", JSON.stringify({ at: now, status: lifecycle.status, checked: lifecycle.checked || 0, submitted: lifecycle.submitted || 0, adaptiveUpdatesBlocked: lifecycle.adaptiveUpdatesBlocked || 0, closePermissionBlocked: lifecycle.closePermissionBlocked || 0, canMarketClose: lifecycle.canMarketClose ?? null, canUpdateTpSl: lifecycle.canUpdateTpSl ?? null, openPositionCount: lifecycle.openPositionCount ?? 0, positionsMissingPairView: lifecycle.positionsMissingPairView || 0, positionsMissingOraclePrice: lifecycle.positionsMissingOraclePrice || 0, aiReviewed: lifecycle.aiReviewed || 0, aiCloseSignals: lifecycle.aiCloseSignals || 0, aiReviewStatusCounts: lifecycle.aiReviewStatusCounts || {}, aiReviewFailures: lifecycle.aiReviewFailures || [], geminiConfiguredKeyCount: lifecycle.geminiConfiguredKeyCount || 0, discoveryError: lifecycle.discoveryError || null, reconciliation: lifecycle.reconciliation?.status || null }), { expirationTtl: 3600 });
+          await env.CIEL_STATE.put("ciel:leverup:position-manager:last-run", JSON.stringify({ at: now, status: lifecycle.status, checked: lifecycle.checked || 0, submitted: lifecycle.submitted || 0, adaptiveUpdatesBlocked: lifecycle.adaptiveUpdatesBlocked || 0, closePermissionBlocked: lifecycle.closePermissionBlocked || 0, canMarketClose: lifecycle.canMarketClose ?? null, canUpdateTpSl: lifecycle.canUpdateTpSl ?? null, openPositionCount: lifecycle.openPositionCount ?? 0, positions: lifecycle.positions || [], positionsMissingPairView: lifecycle.positionsMissingPairView || 0, positionsMissingOraclePrice: lifecycle.positionsMissingOraclePrice || 0, aiReviewed: lifecycle.aiReviewed || 0, aiCloseSignals: lifecycle.aiCloseSignals || 0, aiReviewStatusCounts: lifecycle.aiReviewStatusCounts || {}, aiReviewFailures: lifecycle.aiReviewFailures || [], geminiConfiguredKeyCount: lifecycle.geminiConfiguredKeyCount || 0, discoveryError: lifecycle.discoveryError || null, reconciliation: lifecycle.reconciliation?.status || null }), { expirationTtl: 3600 });
           if (lifecycle.adaptiveUpdatesBlocked) console.warn("LeverUp adaptive TP/SL updates blocked by missing agent permission: " + lifecycle.adaptiveUpdatesBlocked);
           if (lifecycle.closePermissionBlocked) console.error("LeverUp position closes blocked by missing agent close permission: " + lifecycle.closePermissionBlocked);
           if (lifecycle.status === "BLOCKED_POSITION_DISCOVERY") console.error("LeverUp position management blocked: position indexer unavailable; no false empty-position state assumed.");

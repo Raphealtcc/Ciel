@@ -10,7 +10,7 @@ const storage = {
 let calls = 0;
 const result = await reviewLeverUpPositionWithGemini({
   env: { GEMINI_API_KEYS: "bad-key,good-key", GEMINI_MODEL: "test-model", CIEL_STATE: storage },
-  position: { positionHash: "0x" + "ab".repeat(32), isLong: true, entryPriceRaw: "100", stopLossRaw: "90", takeProfitRaw: "120" },
+  position: { positionHash: "0x" + "ab".repeat(32), symbol: "BTC", isLong: true, entryPriceRaw: "100", stopLossRaw: "90", takeProfitRaw: "120" },
   currentPriceRaw: "110",
   adaptive: { closeScore: 3, trendPct: -0.2, momentumPct: -0.1 },
   state: { history: [{ at: 1, price: "100" }] },
@@ -33,13 +33,19 @@ assert.equal(result.status, "REVIEWED");
 assert.equal(result.action, "REVERSE");
 assert.equal(result.confidence, 91);
 assert.equal(result.keyIndexUsed, 2);
-assert.equal(writes.get("ciel:gemini:key-cursor"), "0");
+assert.equal(writes.get("ciel:leverup:gemini-position:key-cursor"), "0");
+assert.equal(writes.has("ciel:gemini:key-cursor"), false);
 const savedReview = JSON.parse(writes.get("ciel:leverup:gemini-review:last"));
 assert.equal(savedReview.status, "REVIEWED");
 assert.equal(savedReview.action, "REVERSE");
 assert.equal(savedReview.configuredKeyCount, 2);
 assert.equal(savedReview.keyIndexUsed, 2);
-assert.equal(savedReview.symbol, "UNKNOWN");
+assert.equal(savedReview.symbol, "BTC");
+assert.equal(savedReview.side, "LONG");
+const reviewHistory = JSON.parse(writes.get("ciel:leverup:gemini-review:history:v1"));
+assert.equal(reviewHistory.length, 1);
+assert.equal(reviewHistory[0].symbol, "BTC");
+assert.equal(reviewHistory[0].side, "LONG");
 const cooldownResult = await reviewLeverUpPositionWithGemini({
   env: { GEMINI_API_KEYS: "bad-key,good-key", GEMINI_MODEL: "test-model", CIEL_STATE: storage },
   position: { positionHash: "0x" + "ab".repeat(32), isLong: true },
@@ -48,6 +54,7 @@ const cooldownResult = await reviewLeverUpPositionWithGemini({
 });
 assert.equal(cooldownResult.status, "COOLDOWN");
 assert.equal(calls, 2);
+assert.equal(JSON.parse(writes.get("ciel:leverup:gemini-review:history:v1")).length, 1, "cooldown responses must not be stored as actual Gemini decisions");
 assert.ok(writes.has("ciel:leverup:gemini-review:cooldown:v1:" + "0x" + "ab".repeat(32)));
 
 let failedCalls = 0;

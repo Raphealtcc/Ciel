@@ -15,8 +15,12 @@ const rollingDrawdown = calculateLeverUpRollingDrawdown([
 assert.equal(rollingDrawdown, 35, "older losses must age out of the 48-hour drawdown window");
 assert.equal(LEVERUP_RISK_DEFAULTS.maxRollingDrawdownMon, 20);
 assert.equal(LEVERUP_RISK_DEFAULTS.maxAggregateStopRiskMon, 20);
-import { prepareLeverUpExecution, reconcileLeverUpIntent, collectLeverUpPairBases, refreshLeverUpMarketOpenPlan, validateLeverUpTransferBalances, submitLeverUpNativeOnchainEntry, notifyLeverUpClosedTrade, evaluateLeverUpPositionAction, selectLeverUpPositionAction } from "../src/leverup-coordinator.js";
+import { prepareLeverUpExecution, reconcileLeverUpIntent, collectLeverUpPairBases, refreshLeverUpMarketOpenPlan, validateLeverUpTransferBalances, submitLeverUpNativeOnchainEntry, notifyLeverUpClosedTrade, evaluateLeverUpPositionAction, selectLeverUpPositionAction, resolveLeverUpPositionSymbol } from "../src/leverup-coordinator.js";
 import { privateKeyToAccount } from "viem/accounts";
+const symbolHash = "0x" + "ab".repeat(32);
+assert.equal(resolveLeverUpPositionSymbol({position:{positionHash:symbolHash,pairBase:"0x"+"12".repeat(20)},entries:[{positionHash:symbolHash,candidate:{symbol:"ZEC/USDT"}}]}),"ZEC");
+assert.equal(resolveLeverUpPositionSymbol({position:{positionHash:symbolHash,pairBase:"0x"+"12".repeat(20)},apiPositions:[{positionHash:symbolHash,symbol:"ADA/USDC"}]}),"ADA");
+assert.equal(resolveLeverUpPositionSymbol({position:{positionHash:symbolHash,pairBase:"0x"+"12".repeat(20)},pairView:{symbol:"PUMP/USD"}}),"PUMP");
 const holdTestPosition = {
   positionHash: "0x" + "ab".repeat(32), qtyRaw: "1000", entryPriceRaw: "100",
   stopLossRaw: "90", takeProfitRaw: "110", timestamp: 1000, earliestCloseTime: "0", isLong: true,
