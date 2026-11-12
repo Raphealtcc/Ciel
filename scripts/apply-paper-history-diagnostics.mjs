@@ -17,7 +17,13 @@ source = once(source,
 );
 
 source = once(source,
-  "const recentClosed = closedTrades.slice(0, 5).map((trade) => ({",
+  `const recentClosed = closedTrades.slice(0, 5).map((trade) => ({
+    signalId: trade.signalId, symbol: trade.symbol, side: trade.side,
+    mode: trade.mode || "LEGACY", regime: trade.regime || null,
+    leverage: trade.leverage, marginMon: trade.marginMon, entryPrice: trade.entryPrice,
+    exitPrice: trade.exitPrice, closeReason: trade.closeReason, pnlMon: trade.grossPnlMon,
+    pnlUsd: trade.grossPnlUsd, returnOnMarginPct: trade.returnOnMarginPct, closedAtMs: trade.closedAtMs
+  }));`,
   `const historyTrades = includeHistory
     ? closedTrades.slice().sort((a, b) => Number(b.closedAtMs) - Number(a.closedAtMs)).slice(0, 250)
     : closedTrades.slice(0, 5);
@@ -81,7 +87,7 @@ source = once(source,
       worstTrades: recentClosed.slice().sort((a, b) => Number(a.pnlMon) - Number(b.pnlMon)).slice(0, 15)
     };
   })() : null;`,
-  "include bounded trade history and loss attribution",
+  "replace complete recentClosed mapping with bounded history and loss attribution",
 );
 
 source = once(source,
