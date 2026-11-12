@@ -3,8 +3,12 @@ import path from "node:path";
 
 const file = path.join(process.cwd(), "reconstructed", "patched-worker.js");
 let source = await readFile(file, "utf8");
-const importLine = 'import { writeTradingControls } from "../src/trading-controls.js";';
-if (!source.includes(importLine) && !source.includes('import { readTradingControl, writeTradingControls } from "../src/trading-controls.js";')) source = importLine + "\n" + source;
+const importLine = 'import { readTradingControl, writeTradingControls } from "../src/trading-controls.js";';
+const writeOnlyImport = 'import { writeTradingControls } from "../src/trading-controls.js";';
+const readOnlyImport = 'import { readTradingControl } from "../src/trading-controls.js";';
+if (source.includes(writeOnlyImport)) source = source.replace(writeOnlyImport, importLine);
+else if (source.includes(readOnlyImport)) source = source.replace(readOnlyImport, importLine);
+else if (!source.includes(importLine)) source = importLine + "\n" + source;
 
 const geminiStatusHelper = `async function handleGeminiStatusCommand(env, command) {
   if (command !== "/geministatus") return false;
@@ -31,21 +35,21 @@ const geminiStatusHelper = `async function handleGeminiStatusCommand(env, comman
   const livePositions = Array.isArray(manager?.positions) ? manager.positions : [];
   const paperOpen = Array.isArray(paper?.openTrades) ? paper.openTrades : [];
   const statusCounts = manager?.aiReviewStatusCounts && typeof manager.aiReviewStatusCounts === "object" ? Object.entries(manager.aiReviewStatusCounts).map(([key,value]) => key + "=" + value).join(", ") : "not recorded";
-  const recentLines = actualReviews.slice(0, 3).map((review) => time(review.at) + " — " + String(review.symbol || "UNKNOWN") + " " + String(review.side || "") + " — " + String(review.action || "HOLD") + " (" + String(review.confidence || 0) + "/100): " + String(review.reason || review.status || "").slice(0, 150));
-  const livePositionText = livePositions.length ? livePositions.map((position) => String(position.symbol || "UNKNOWN") + " " + String(position.side || "UNKNOWN") + " [" + String(position.positionHash || "").slice(0, 10) + "]").join(", ") : "No live LeverUp positions were found on the latest manager scan.";
+  const recentLines = actualReviews.slice(0, 3).map((review) => time(review.at) + " â " + String(review.symbol || "UNKNOWN") + " " + String(review.side || "") + " â " + String(review.action || "HOLD") + " (" + String(review.confidence || 0) + "/100): " + String(review.reason || review.status || "").slice(0, 150));
+  const livePositionText = livePositions.length ? livePositions.map((position) => String(position.symbol || "UNKNOWN") + " " + String(position.side || "UNKNOWN") + " [" + String(position.positionHash || "").slice(0, 10) + "]").join(", ") : (Number(manager?.openPositionCount) > 0 ? "Live positions were detected, but the symbol list is unavailable in the saved manager snapshot." : "No live LeverUp positions were found on the latest manager scan.");
   const paperText = paperOpen.length ? paperOpen.map((position) => String(position.symbol || "UNKNOWN") + " " + String(position.side || "UNKNOWN") + (Number.isFinite(Number(position.unrealizedPnlMon)) ? " (uPnL " + Number(position.unrealizedPnlMon).toFixed(3) + " MON)" : "")).join(", ") : "none open";
   const lines = [
     "GEMINI POSITION MANAGER STATUS",
     "Model: " + String(env.GEMINI_MODEL || "gemini-2.5-flash"),
     "Configured API keys: " + keys.length + " (values hidden)",
     "New live entries: " + (liveEntriesActive ? "ON" : "OFF"),
-    "Existing live-position manager: " + (managerActive ? "ACTIVE — monitors existing positions" : "READ-ONLY / DISABLED"),
+    "Existing live-position manager: " + (managerActive ? "ACTIVE â monitors existing positions" : "READ-ONLY / DISABLED"),
     "Manager heartbeat: " + (managerAge <= 2 * 60 * 1000 ? "FRESH" : (Number.isFinite(managerAge) ? "STALE" : "NOT RECORDED")) + " (" + age(manager?.at) + ")",
     "Last scan: " + String(manager?.status || "NOT RECORDED") + " | checked " + String(manager?.checked ?? "unknown") + " | open live positions " + String(manager?.openPositionCount ?? "unknown") + " | Gemini reviews " + String(manager?.aiReviewed ?? "unknown"),
     "Live positions: " + livePositionText,
     "Review status counts: " + statusCounts,
     "Last result: " + String(latestReview?.status || "NO ACTUAL REVIEW RECORDED") + " (" + age(latestReview?.at) + ")",
-    latestReview ? "Last actual Gemini decision: " + String(latestReview.symbol || "UNKNOWN") + " " + String(latestReview.side || "") + " — " + String(latestReview.action || "HOLD") + " (" + String(latestReview.confidence || 0) + "/100), " + time(latestReview.at) : "",
+    latestReview ? "Last actual Gemini decision: " + String(latestReview.symbol || "UNKNOWN") + " " + String(latestReview.side || "") + " â " + String(latestReview.action || "HOLD") + " (" + String(latestReview.confidence || 0) + "/100), " + time(latestReview.at) : "",
     latestReview?.reason ? "Gemini reasoning: " + String(latestReview.reason).slice(0, 220) : "",
     recentLines.length ? "Recent actual Gemini decisions:\\n" + recentLines.join("\\n") : "No actual Gemini position reviews have been saved yet.",
     "Paper open positions: " + paperText,
@@ -141,9 +145,9 @@ const dispatchReplacement = '  const command = (text.trim().split(/\\s+/, 1)[0] 
 if (source.includes(dispatch)) source = source.replace(dispatch, dispatchReplacement);
 else if (!source.includes("if (await handleTradingModeCommand(env, command)) return;")) throw new Error("Telegram command dispatch anchor mismatch");
 
-const helpAnchor = '      "/test â verify Telegram delivery",';
+const helpAnchor = '      "/test Ã¢ÂÂ verify Telegram delivery",';
 if (source.includes(helpAnchor)) source = source.replace(helpAnchor,
-  '      "/paperactive /paperdeactivate â toggle paper entries",\n      "/liveactive /livedeactivate â toggle live entries",\n      "/modes â show effective trading modes",\n      "/geministatus â Gemini keys, latest review and manager health",\n' + helpAnchor);
+  '      "/paperactive /paperdeactivate Ã¢ÂÂ toggle paper entries",\n      "/liveactive /livedeactivate Ã¢ÂÂ toggle live entries",\n      "/modes Ã¢ÂÂ show effective trading modes",\n      "/geministatus Ã¢ÂÂ Gemini keys, latest review and manager health",\n' + helpAnchor);
 
 await writeFile(file, source);
 console.log("Applied D1-backed Telegram trading-mode controls.");

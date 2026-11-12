@@ -18,7 +18,7 @@ worker = once(worker,
   "restrict trend candidate reviews to the eight enabled markets");
 worker = once(worker,
   "  return [...new Set(parsed)].slice(0, 100);",
-  "  return [...restrictTemporaryMarketUniverse([...new Set([\"BTC\",\"ETH\",\"SOL\",\"BNB\",\"HYPE\",\"ZEC\", ...parsed])]), \"MON\"]; ",
+  "  return [...restrictTemporaryMarketUniverse([...new Set([\"BTC\",\"ETH\",\"SOL\",\"BNB\",\"HYPE\",\"ZEC\",\"ADA\",\"PUMP\", ...parsed])]), \"MON\"]; ",
   "keep all eight enabled markets in the Hyperliquid watchlist");
 
 worker = once(worker,

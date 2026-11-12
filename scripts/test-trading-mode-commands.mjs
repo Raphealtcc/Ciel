@@ -38,6 +38,8 @@ assert.ok(worker.includes('Last result: '));
 assert.ok(worker.includes("Recent actual Gemini decisions"));
 assert.ok(worker.includes("Paper positions are not currently sent to Gemini"));
 assert.ok(worker.includes("No live LeverUp positions were found on the latest manager scan"));
+assert.ok(worker.includes("Live positions were detected, but the symbol list is unavailable"));
+assert.ok(worker.includes('import { readTradingControl, writeTradingControls } from "../src/trading-controls.js"'));
 assert.ok(worker.includes("ciel:leverup:gemini-review:history:v1"));
 assert.ok(worker.includes("feed/paper/profits"));
 assert.ok(worker.includes("This command will not bypass it"));

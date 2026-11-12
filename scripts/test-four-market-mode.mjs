@@ -11,7 +11,7 @@ for (const symbol of ["XRP", "MON", "DOGE", ""]) assert.equal(isTemporaryMarketA
 const blocked = await prepareLeverUpAdvisorPlan({env:{},candidate:{symbol:"XRP",side:"LONG"},reviewed:{verdict:"APPROVE"},signalId:"TEMP-ALLOWLIST-TEST",now:1_800_000_000_000});
 assert.equal(blocked.status,"BLOCKED_TEMPORARY_MARKET_UNIVERSE");
 const native=await readFile("src/leverup-native-feed.js","utf8");
-assert.ok(native.includes('restrictTemporaryMarketUniverse(["BTC", "ETH", "SOL", "BNB", "HYPE", "ZEC", ...watchValues.map(upper)])'));
+assert.ok(native.includes('restrictTemporaryMarketUniverse(["BTC", "ETH", "SOL", "BNB", "HYPE", "ZEC", "ADA", "PUMP", ...watchValues.map(upper)])'));
 const worker=await readFile("reconstructed/patched-worker.js","utf8");
 assert.ok(worker.includes("restrictTemporaryMarketUniverse([...new Set"));
 assert.ok(worker.includes('return [...restrictTemporaryMarketUniverse([...new Set(["BTC","ETH","SOL","BNB","HYPE","ZEC", ...parsed])]), "MON"];'));
