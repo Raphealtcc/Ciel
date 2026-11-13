@@ -114,5 +114,14 @@ var index_default = {
         return json2({ error: "Could not register Telegram webhook.", detail: String(error).slice(0, 180) }, 502);
       }
     }
+    if (url.pathname === "/internal/paper-reset" && request.method === "POST") {
+      const supplied = request.headers.get("x-ciel-reset-token") || "";
+      const expected = await env.CIEL_STATE.get("ciel:paper-reset-once-token");
+      if (!expected || supplied !== expected) return json2({ error: "Forbidden" }, 403);
+      await env.CIEL_STATE.delete("ciel:paper-reset-once-token");
+      const response = await feedStub2(env).fetch("https://feed/paper/reset", { method: "POST" });
+      const payload = await response.json().catch(() => ({}));
+      return json2(payload, response.status);
+    }
     if (url.pathname === "/telegram/webhook") {
       return 

@@ -200,6 +200,31 @@ var HyperliquidFeed = class {
     if (path === "/status" || path === "/markets") {
       return json(this.snapshot());
     }
+    if (path === "/paper/reset" && request.method === "POST") {
+      try {
+        let result;
+        await this.state.storage.transaction(async () => {
+          const previous = await this.state.storage.get(PAPER_ACCOUNT_KEY);
+          const closedTrades = Array.isArray(previous?.trades) ? previous.trades.filter((trade) => trade?.status === "CLOSED") : [];
+          const now = Date.now();
+          const state = freshPaperState(now);
+          state.trades = closedTrades.slice(0, 1000);
+          state.closedCount = 0;
+          state.wins = 0;
+          state.losses = 0;
+          state.breakeven = 0;
+          state.resetAtMs = now;
+          state.resetReason = "User-requested paper account restart";
+          await this.state.storage.put(PAPER_ACCOUNT_KEY, state);
+          result = { ok: true, startingBalanceMon: 100, availableBalanceMon: 100, openPositionsClosed: Array.isArray(previous?.trades) ? previous.trades.filter((trade) => trade?.status === "OPEN").length : 0, historicalClosedTradesPreserved: closedTrades.length, realizedPnlMon: 0 };
+        });
+        return json(result);
+      } catch (error) {
+        const detail = String(error).slice(0, 300);
+        console.error("CIEL paper reset failed: " + detail);
+        return json({ ok: false, error: "PAPER_RESET_FAILED", detail }, 500);
+      }
+    }
     if (path === "/paper/profits") {
       try {
         const summary = await getPaperSummary(this.state.storage, this.latest, Date.now(), this.lastTickAt);
