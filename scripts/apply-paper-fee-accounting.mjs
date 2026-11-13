@@ -88,6 +88,16 @@ once('"Gross Hyperliquid-mid paper result; LeverUp Pyth/pool fills, fees, fundin
 '"Net mark-based paper result after estimated 3 bps-per-side trading fees. Funding, holding fees, oracle costs, slippage, collateral CR, minimum-hold restrictions and liquidation remain excluded."',
 "replace gross-only paper disclaimer");
 
+once('const availableBalanceMon = Number(state.availableBalanceMon ?? state.startingBalanceMon ?? PAPER_STARTING_BALANCE_MON);',
+'let availableBalanceMon = Number(state.availableBalanceMon ?? state.startingBalanceMon ?? PAPER_STARTING_BALANCE_MON);',
+"allow fee migration to update the returned available balance");
+once('const totalPnlMon = allMarksAvailable ? Number(state.realizedPnlMon || 0) + unrealizedPnlMon : null;',
+'let totalPnlMon = allMarksAvailable ? Number(state.realizedPnlMon || 0) + unrealizedPnlMon : null;',
+"allow fee migration to update total paper P&L");
+once('const equityMon = totalPnlMon === null ? null : startingBalanceMon + totalPnlMon;',
+'let equityMon = totalPnlMon === null ? null : startingBalanceMon + totalPnlMon;',
+"allow fee migration to update paper equity");
+
 once(`  const closedTrades = (state.trades || []).filter((trade) => trade.status === "CLOSED");
   const modeStats = (mode) => {`,
 `  const closedTrades = (state.trades || []).filter((trade) => trade.status === "CLOSED");
@@ -130,6 +140,9 @@ once(`  const closedTrades = (state.trades || []).filter((trade) => trade.status
     state.breakeven = closedTrades.length - netWins - netLosses;
     state.updatedAtMs = now;
     await storage.put(PAPER_ACCOUNT_KEY, state);
+    availableBalanceMon = Number(state.availableBalanceMon);
+    totalPnlMon = allMarksAvailable ? Number(state.realizedPnlMon || 0) + unrealizedPnlMon : null;
+    equityMon = totalPnlMon === null ? null : startingBalanceMon + totalPnlMon;
   }
   const modeStats = (mode) => {`,
 "recalculate historical paper balance once without deleting trade history");

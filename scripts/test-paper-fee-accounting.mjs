@@ -23,6 +23,8 @@ const storage={async get(){return state;},async put(_key,value){Object.assign(st
 const summary=await context.feeTests.getPaperSummary(storage,{MON:0.2},now,now-1000);
 assert.ok(Math.abs(summary.realizedPnlMon-(-5.05868))<1e-9);
 assert.ok(Math.abs(summary.availableBalanceMon-94.94132)<1e-9);
+assert.ok(Math.abs(summary.totalPnlMon-(-5.05868))<1e-9);
+assert.ok(Math.abs(summary.equityMon-94.94132)<1e-9);
 assert.equal(summary.wins,0);
 assert.equal(summary.losses,1);
 assert.equal(state.trades[0].feeModelVersion,"LEVERUP_TAKER_3BPS_EACH_SIDE_V1");
