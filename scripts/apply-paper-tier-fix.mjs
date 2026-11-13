@@ -191,7 +191,10 @@ replaceExactlyOnce(
 );
 replaceExactlyOnce(
   '"Return JSON only: verdict APPROVE, REJECT or WAIT; reason under 240 characters; flags array.",',
-  '"Choose paperMarginMon between sizing.minMarginMon and sizing.maxMarginMon. Keep it at or near the minimum for partial confirmation, forecast uncertainty, mixed evidence or weak market quality. Increase it only when independent evidence agrees, the forecast envelope supports the direction, the Gemini verdict is APPROVE, and market quality is healthy. Never exceed the supplied maximum. This is margin sizing, not a win-probability estimate.",\n    "Assess the setup after the default 3 bps open and 3 bps close fees (0.06% price movement round trip). Prefer fee-adjusted reward/risk of at least 1.1; WAIT when net reward/risk is below 1.1 or the target barely covers fees. Do not judge the gross target/stop as if fees were zero.",\n    "Return JSON only: verdict APPROVE, REJECT or WAIT; reason under 240 characters; flags array; paperMarginMon number.",\n    "Paper sizing constraints in MON: " + JSON.stringify(sizing),',
+  `"Choose paperMarginMon between sizing.minMarginMon and sizing.maxMarginMon. Keep it at or near the minimum for partial confirmation, forecast uncertainty, mixed evidence or weak market quality. Increase it only when independent evidence agrees, the forecast envelope supports the direction, the Gemini verdict is APPROVE, and market quality is healthy. Never exceed the supplied maximum. This is margin sizing, not a win-probability estimate.",
+    "Assess the setup after the default 3 bps open and 3 bps close fees (0.06% price movement round trip). Prefer fee-adjusted reward/risk of at least 1.1; WAIT when net reward/risk is below 1.1 or the target barely covers fees. Do not judge the gross target/stop as if fees were zero.",
+    "Return JSON only: verdict APPROVE, REJECT or WAIT; reason under 240 characters; flags array; paperMarginMon number.",
+    "Paper sizing constraints in MON: " + JSON.stringify(sizing),`,
   "ask Gemini to choose margin within the deterministic venue and risk limits",
 );
 replaceExactlyOnce(
