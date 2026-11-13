@@ -40,7 +40,7 @@ once(`function paperTradePnl(trade, currentPrice, currentMonUsd) {
   const netMon = netUsd / monUsd;
   return { movePct, usd: netUsd, mon: netMon, grossUsd, grossMon, feeUsd, feeMon, netUsd, netMon, feeRate, roiPct: Number(trade.marginMon) > 0 ? netMon / Number(trade.marginMon) * 100 : 0, marginUsd, notionalUsd };
 }`,
-"deduct estimated 2.85 bps entry and exit fees from paper P&L");
+"deduct estimated 3 bps entry and exit fees from paper P&L");
 
 once(`        if (protection.trigger) {
           reason = "PROFIT_PROTECTION";
@@ -117,7 +117,7 @@ once(`  const closedTrades = (state.trades || []).filter((trade) => trade.status
       trade.feeUsd = historical.feeUsd;
       trade.netPnlMon = Math.max(-Number(trade.marginMon || 0), historical.netMon);
       trade.netPnlUsd = trade.netPnlMon * (Number(trade.exitMonUsd) || monUsd);
-      trade.feeModelVersion = "LEVERUP_TAKER_2_85BPS_EACH_SIDE_V1";
+      trade.feeModelVersion = "LEVERUP_TAKER_3BPS_EACH_SIDE_V1";
       trade.returnOnMarginPct = Number(trade.marginMon) > 0 ? trade.netPnlMon / Number(trade.marginMon) * 100 : 0;
     } else {
       trade.netPnlMon = Number(trade.grossPnlMon) || 0;
@@ -162,7 +162,7 @@ once('const pnl = matches.reduce((sum, trade) => sum + (Number(trade.grossPnlMon
 "report net strategy P&L");
 
 once('"Paper results use Hyperliquid mids, not LeverUp Pyth/pool fills. Fees, funding/holding fees, oracle costs, slippage, collateral CR, minimum-hold restrictions and liquidation are not simulated."',
-'"Paper results use Hyperliquid mids, not LeverUp Pyth/pool fills. Estimated 2.85 bps-per-side trading fees are deducted; funding/holding fees, oracle costs, slippage, collateral CR, minimum-hold restrictions and liquidation are not simulated."',
+'"Paper results use Hyperliquid mids, not LeverUp Pyth/pool fills. Estimated 3 bps-per-side trading fees are deducted; funding/holding fees, oracle costs, slippage, collateral CR, minimum-hold restrictions and liquidation are not simulated."',
 "update /profits cost disclosure");
 
 await writeFile(file, source);
