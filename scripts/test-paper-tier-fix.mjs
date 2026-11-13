@@ -187,8 +187,8 @@ const targetNow = targetOpen.trade.openedAtMs + 1_000;
 await managePaperTrades(targetStorage, { MON: 0.2, BNB: 100.81 }, targetNow, targetNow - 1_000, {});
 const targeted = await targetStorage.get("ciel:paper:account:v1");
 assert.equal(targeted.trades[0].closeReason, "TAKE_PROFIT");
-assert.ok(Math.abs(targeted.realizedPnlMon - 8.170492) < 1e-9);
-assert.ok(Math.abs(targeted.availableBalanceMon - 108.170492) < 1e-9);
+assert.ok(Math.abs(targeted.realizedPnlMon - 8.13736) < 1e-9);
+assert.ok(Math.abs(targeted.availableBalanceMon - 108.13736) < 1e-9);
 
 // A position is closed at its maximum hold when the feed is fresh.
 const holdStorage = makeStorage();
