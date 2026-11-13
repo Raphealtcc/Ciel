@@ -39,6 +39,8 @@ assert.ok(worker.includes('Configured API keys: '));
 assert.ok(worker.includes("getGeminiApiKeys(env)"), "Gemini status must count numbered and shared API key secrets");
 assert.ok(worker.includes("const geminiKeyCount = getGeminiApiKeys(env).length;"), "diagnostics must count the same Gemini key sources");
 assert.ok(worker.includes("function getGeminiApiKeys(env = {})"), "Worker must expose shared/numbered Gemini key discovery");
+assert.ok(worker.includes('env["GEMINI_API_KEY_" + index]'));
+assert.ok(worker.includes("JSON.parse(raw)"), "Gemini key parser must accept JSON-array and CSV secret formats");
 assert.ok(worker.includes('Last result: '));
 assert.ok(worker.includes("Recent actual Gemini decisions"));
 assert.ok(worker.includes("Paper positions are not currently sent to Gemini"));
