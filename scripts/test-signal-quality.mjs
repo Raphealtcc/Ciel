@@ -173,4 +173,7 @@ assert.ok(worker.includes("target_pct-0.06"));
 assert.ok(worker.includes("net of modeled 3 bps-per-side fees"));
 assert.ok(worker.includes("CASE WHEN strategy LIKE '%5M_TREND%PULLBACK%' THEN 180*60000"));
 assert.ok(worker.includes("WHEN strategy LIKE '%SWING_REVERSAL%' THEN 180*60000"));
+assert.ok(worker.includes("horizonMigrationKey"));
+assert.ok(worker.includes("SET exit_reason=NULL,exit_price=NULL,closed_at_ms=NULL"));
+assert.ok(worker.includes("holdMinutes:180"));
 console.log("PASS: quality gates, regime-aware evidence, same-setup suppression, 5m reversal confirmation and Worker integration.");
