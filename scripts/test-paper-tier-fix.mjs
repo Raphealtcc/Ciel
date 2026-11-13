@@ -178,7 +178,7 @@ const stopped = await stopStorage.get("ciel:paper:account:v1");
 assert.equal(stopped.trades[0].status, "CLOSED");
 assert.equal(stopped.trades[0].closeReason, "STOP_LOSS");
 assert.ok(Math.abs(stopped.realizedPnlMon - (-5.025746)) < 1e-9);
-assert.ok(Math.abs(stopped.availableBalanceMon - 94.94132) < 1e-9);
+assert.ok(Math.abs(stopped.availableBalanceMon - 94.974254) < 1e-9);
 
 // A take-profit close returns reserved margin plus gross P&L to free balance.
 const targetStorage = makeStorage();
