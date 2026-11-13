@@ -6,5 +6,7 @@ export function isTemporaryMarketAllowed(symbol) {
 }
 
 export function restrictTemporaryMarketUniverse(symbols) {
-  return [...new Set((Array.isArray(symbols) ? symbols : []).map((symbol) => String(symbol || "").trim().toUpperCase()).filter(isTemporaryMarketAllowed))];
+  const requested = new Set((Array.isArray(symbols) ? symbols : [])
+    .map((symbol) => String(symbol || "").trim().toUpperCase()).filter(isTemporaryMarketAllowed));
+  return TEMPORARY_MARKET_ALLOWLIST.filter((symbol) => requested.has(symbol));
 }
