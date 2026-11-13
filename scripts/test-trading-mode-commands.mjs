@@ -36,6 +36,8 @@ assert.ok(worker.includes("handlePaperBalanceCommand"));
 assert.ok(worker.includes("/paperbalance"));
 assert.ok(worker.includes('ciel:leverup:position-manager:last-run'));
 assert.ok(worker.includes('Configured API keys: '));
+assert.ok(worker.includes("getGeminiApiKeys(env)"), "Gemini status must count numbered and shared API key secrets");
+assert.ok(worker.includes('import { getGeminiApiKeys } from "../src/leverup-position-ai.js";'));
 assert.ok(worker.includes('Last result: '));
 assert.ok(worker.includes("Recent actual Gemini decisions"));
 assert.ok(worker.includes("Paper positions are not currently sent to Gemini"));
