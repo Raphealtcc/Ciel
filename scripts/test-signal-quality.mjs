@@ -47,8 +47,8 @@ assert.ok(opposingForecast.vetoes.includes("FORECAST_STRONGLY_OPPOSES_ENTRY"));
 
 const losingStrategyHistory = evaluateSignalQuality({
   ...base,
-  candidate: { ...base.candidate, holdMinutes: 60 },
-  strategyStats: { "5M_TREND_CONTINUATION+BREAKOUT_RETEST": { sampleCount: 30, expectancyR: 0.04, winRate: 0.31, horizonMinutes: 60 } },
+  candidate: { ...base.candidate, holdMinutes: 180 },
+  strategyStats: { "5M_TREND_CONTINUATION+BREAKOUT_RETEST": { sampleCount: 30, expectancyR: 0.04, winRate: 0.31, horizonMinutes: 180 } },
 });
 assert.equal(losingStrategyHistory.allowed, true, "weak historical expectancy must rank a strategy lower, not disable it wholesale");
 assert.ok(losingStrategyHistory.score < good.score);

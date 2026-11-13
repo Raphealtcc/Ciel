@@ -38,6 +38,8 @@ function candles(direction){
 const long=analyze("BTC",candles(1),now);
 const short=analyze("ETH",candles(-1),now);
 assert.equal(long?.side,"LONG","clear bullish structure should classify long");
+assert.equal(long?.mode,"TREND_HOLD");
+assert.equal(long?.holdMinutes,180);
 assert.equal(short?.side,"SHORT","clear bearish structure should classify short");
 assert.ok(long.scoreComponents.includes("5M_HIGHER_HIGHS_HIGHER_LOWS"));
 assert.ok(short.scoreComponents.includes("5M_MACD_MOMENTUM"));

@@ -215,7 +215,7 @@ export function evaluateSignalQuality({ candidate, forecast, market, eventIntel 
   // Shadow profiles are horizon-specific. Do not use a 12m/15m/60m
   // mid-price result to veto a 180m TREND_HOLD candidate.
   const shadowHorizonMinutes = strategy.includes("MICRO_MOMENTUM") ? 45 :
-    strategy.includes("CONTINUATION") ? 60 :
+    strategy.includes("CONTINUATION") ? 180 :
     strategy.includes("SWING_REVERSAL") ? 180 :
     strategy.includes("LEVEL_SWEEP") ? 180 :
     strategy.includes("5M_TREND") && strategy.includes("PULLBACK") ? 180 :
