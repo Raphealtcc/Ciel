@@ -37,6 +37,7 @@ assert.ok(worker.includes("/paperbalance"));
 assert.ok(worker.includes('ciel:leverup:position-manager:last-run'));
 assert.ok(worker.includes('Configured API keys: '));
 assert.ok(worker.includes("getGeminiApiKeys(env)"), "Gemini status must count numbered and shared API key secrets");
+assert.ok(worker.includes("const geminiKeyCount = getGeminiApiKeys(env).length;"), "diagnostics must count the same Gemini key sources");
 assert.ok(worker.includes("function getGeminiApiKeys(env = {})"), "Worker must expose shared/numbered Gemini key discovery");
 assert.ok(worker.includes('Last result: '));
 assert.ok(worker.includes("Recent actual Gemini decisions"));
