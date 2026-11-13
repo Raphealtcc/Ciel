@@ -54,11 +54,11 @@ const historyMapping = \`  const historyTrades = includeHistory
       ? (Number(trade.closedAtMs) - Number(trade.openedAtMs)) / 60000 : null
   }));
   const historyAnalysis = includeHistory ? (() => {
-    const priced = recentClosed.filter((trade) => trade.pnlMon !== null && trade.pnlMon !== undefined);
+    const pricedClosed = recentClosed.filter((trade) => trade.pnlMon !== null && trade.pnlMon !== undefined);
     const unavailable = recentClosed.filter((trade) => trade.feeDataUnavailable).length;
     const group = (field) => {
       const buckets = new Map();
-      for (const trade of priced) {
+      for (const trade of pricedClosed) {
         const key = String(trade[field] || "UNKNOWN");
         if (!buckets.has(key)) buckets.set(key, []);
         buckets.get(key).push(trade);
@@ -72,17 +72,17 @@ const historyMapping = \`  const historyTrades = includeHistory
         averageReturnOnMarginPct: rows.reduce((sum, trade) => sum + Number(trade.returnOnMarginPct || 0), 0) / Math.max(1, rows.length)
       })).sort((a, b) => a.totalPnlMon - b.totalPnlMon);
     };
-    const wins = priced.filter((trade) => Number(trade.pnlMon) > 0);
-    const losses = priced.filter((trade) => Number(trade.pnlMon) < 0);
+    const wins = pricedClosed.filter((trade) => Number(trade.pnlMon) > 0);
+    const losses = pricedClosed.filter((trade) => Number(trade.pnlMon) < 0);
     return {
       count: priced.length, totalClosed: recentClosed.length, feeDataUnavailableCount: unavailable,
       wins: wins.length, losses: losses.length,
-      totalPnlMon: priced.reduce((sum, trade) => sum + Number(trade.pnlMon || 0), 0),
+      totalPnlMon: pricedClosed.reduce((sum, trade) => sum + Number(trade.pnlMon || 0), 0),
       averageWinMon: wins.reduce((sum, trade) => sum + Number(trade.pnlMon), 0) / Math.max(1, wins.length),
       averageLossMon: losses.reduce((sum, trade) => sum + Number(trade.pnlMon), 0) / Math.max(1, losses.length),
       bySymbol: group("symbol"), bySide: group("side"), byMode: group("mode"),
       byRegime: group("regime"), byCloseReason: group("closeReason"),
-      worstTrades: priced.slice().sort((a, b) => Number(a.pnlMon) - Number(b.pnlMon)).slice(0, 15)
+      worstTrades: pricedClosed.slice().sort((a, b) => Number(a.pnlMon) - Number(b.pnlMon)).slice(0, 15)
     };
   })() : null;
 \`;
