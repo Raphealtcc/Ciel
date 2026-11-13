@@ -62,7 +62,7 @@ assert.ok(source.includes("var CYCLE = 6e4;"));
 assert.ok(source.includes('coreMarkets: ["BTC", "ETH", "SOL"]'));
 assert.ok(source.includes('trendEntryMarkets: ["BTC", "ETH", "SOL", "BNB", "HYPE", "ADA", "PUMP"]'));
 assert.ok(source.includes("preferredGroup"));
-assert.ok(source.includes("scanDiagnostics:scanDiagnostics.slice(-120)"));
+assert.ok(source.includes("scanDiagnostics: scanDiagnostics.slice(-120)"));
 assert.ok(source.includes('"INSUFFICIENT_CLOSED_CANDLE_HISTORY"'));
 
 function trendCandles(direction) {
