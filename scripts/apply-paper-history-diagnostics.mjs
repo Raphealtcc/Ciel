@@ -6,7 +6,8 @@ let source = await readFile(file, "utf8");
 
 function once(text, before, after, label) {
   const count = text.split(before).length - 1;
-  if (count === 0 && text.includes(after)) return text;\n  if (count !== 1) throw new Error(label + ": expected exactly one match, found " + count);
+  if (count === 0 && text.includes(after)) return text;
+  if (count !== 1) throw new Error(label + ": expected exactly one match, found " + count);
   return text.replace(before, after);
 }
 
