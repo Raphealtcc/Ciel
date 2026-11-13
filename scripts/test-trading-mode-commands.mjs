@@ -32,7 +32,7 @@ assert.ok(coordinator.includes('readTradingControl(env, "ciel:control:live-entry
 assert.ok(!coordinator.includes('env?.CIEL_STATE?.get("ciel:control:live-entry-enabled")'));
 assert.ok(coordinator.includes("BLOCKED_POSITION_DISCOVERY"));
 assert.ok(worker.includes('ciel:leverup:gemini-review:last'));
-assert.ok(worker.includes("handlePaperBalanceCommand"));
+assert.ok(worker.includes("handlePaperBalanceCommand"));\nassert.ok(worker.includes("Fee model: estimated 3 bps per side deducted"));
 assert.ok(worker.includes("/paperbalance"));
 assert.ok(worker.includes('ciel:leverup:position-manager:last-run'));
 assert.ok(worker.includes('Configured API keys: '));
