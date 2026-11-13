@@ -44,7 +44,11 @@ const good=adaptiveCandidateMultiplier(profitable,{symbol:"BTC",mode:"TREND_HOLD
 assert.ok(good>1&&good<=1.30);
 const losing=buildAdaptiveLearningProfile(Array.from({length:20},(_,i)=>trade(i,-1)),now);
 const bad=adaptiveCandidateMultiplier(losing,{symbol:"BTC",mode:"TREND_HOLD"});
-assert.ok(bad<1&&bad>=0.70);\nassert.ok(adaptiveStrategyPriority({strategy:"5M_TREND_CONTINUATION+BREAKOUT_RETEST"})>adaptiveStrategyPriority({strategy:"5M_TREND+1M_PULLBACK+RECLAIM"}));\nassert.ok(adaptiveStrategyPriority({strategy:"5M_TREND+1M_PULLBACK+RECLAIM"})>adaptiveStrategyPriority({strategy:"MULTI_MARKET_LEVEL_SWEEP_RECLAIM"}));\nassert.ok(adaptiveStrategyPriority({strategy:"MULTI_MARKET_LEVEL_SWEEP_RECLAIM"})>adaptiveStrategyPriority({strategy:"1M_MICRO_MOMENTUM_BREAKOUT"}));\nassert.ok(source.includes("candidate.strategyPriority=adaptiveStrategyPriority(candidate)"),"strategy performance preference must affect ranking only");
+assert.ok(bad<1&&bad>=0.70);
+assert.ok(adaptiveStrategyPriority({strategy:"5M_TREND_CONTINUATION+BREAKOUT_RETEST"})>adaptiveStrategyPriority({strategy:"5M_TREND+1M_PULLBACK+RECLAIM"}));
+assert.ok(adaptiveStrategyPriority({strategy:"5M_TREND+1M_PULLBACK+RECLAIM"})>adaptiveStrategyPriority({strategy:"MULTI_MARKET_LEVEL_SWEEP_RECLAIM"}));
+assert.ok(adaptiveStrategyPriority({strategy:"MULTI_MARKET_LEVEL_SWEEP_RECLAIM"})>adaptiveStrategyPriority({strategy:"1M_MICRO_MOMENTUM_BREAKOUT"}));
+assert.ok(source.includes("candidate.strategyPriority=adaptiveStrategyPriority(candidate)"),"strategy performance preference must affect ranking only");
 assert.ok(source.includes('["BTC","ETH","SOL","BNB","HYPE","ADA","PUMP", ...configuredWatchSymbols(env.WATCH_SYMBOLS)]'));
 assert.ok(source.includes("orderedSymbols"));
 assert.ok(source.includes('const trendEntryMarketSet = new Set(["BTC","ETH","SOL","BNB","HYPE","ADA","PUMP"])'));
