@@ -180,15 +180,15 @@ assert.equal(stopped.trades[0].closeReason, "STOP_LOSS");
 assert.ok(Math.abs(stopped.realizedPnlMon - (-5.025746)) < 1e-9);
 assert.ok(Math.abs(stopped.availableBalanceMon - 94.974254) < 1e-9);
 
-// A take-profit close returns reserved margin plus gross P&L to free balance.
+// A take-profit close returns reserved margin plus fee-adjusted net P&L to free balance.
 const targetStorage = makeStorage();
 const targetOpen = await openPaperTrade(targetStorage, params("BNB", "target-close"));
 const targetNow = targetOpen.trade.openedAtMs + 1_000;
 await managePaperTrades(targetStorage, { MON: 0.2, BNB: 100.81 }, targetNow, targetNow - 1_000, {});
 const targeted = await targetStorage.get("ciel:paper:account:v1");
 assert.equal(targeted.trades[0].closeReason, "TAKE_PROFIT");
-assert.ok(Math.abs(targeted.realizedPnlMon - 8.13736) < 1e-9);
-assert.ok(Math.abs(targeted.availableBalanceMon - 108.13736) < 1e-9);
+assert.ok(Math.abs(targeted.realizedPnlMon - 8.170492) < 1e-9);
+assert.ok(Math.abs(targeted.availableBalanceMon - 108.170492) < 1e-9);
 
 // A position is closed at its maximum hold when the feed is fresh.
 const holdStorage = makeStorage();
