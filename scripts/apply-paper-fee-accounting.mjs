@@ -31,7 +31,7 @@ once(`function paperTradePnl(trade, currentPrice, currentMonUsd) {
   const notionalUsd = marginUsd * Number(trade.leverage);
   const grossUsd = notionalUsd * movePct / 100;
   const exitNotionalUsd = notionalUsd * current / entry;
-  // LeverUp preflight snapshots report a 2.85 bps default open/close fee. Paper mode assumes no LV-token discount.
+  // LeverUp preflight snapshots report an effective 2.85 bps open/close fee; paper mode uses that measured rate.
   const feeRate = 0.000285;
   const feeUsd = Math.max(0, (notionalUsd + exitNotionalUsd) * feeRate);
   const grossMon = grossUsd / monUsd;
