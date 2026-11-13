@@ -32,7 +32,7 @@ assert.match(good.interpretation, /not a win probability/i);
 const missingForecast = evaluateSignalQuality({ ...base, forecast: { available: false, medianReturnPct: null } });
 assert.equal(missingForecast.allowed, true, "a missing statistical forecast should reduce confidence, not suppress a valid technical setup");
 assert.ok(missingForecast.score < good.score);
-assert.ok(missingForecast.threshold < good.threshold);
+assert.equal(missingForecast.threshold, good.threshold, "missing forecast lowers evidence score, not the strategy threshold");
 
 const missingDerivatives = evaluateSignalQuality({ ...base, market: { spreadBps: 3, topDepthUsd: 8000, volume: 5000000 } });
 assert.equal(missingDerivatives.allowed, true, "missing derivatives context should be a score penalty, not an automatic rejection");
