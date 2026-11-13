@@ -37,6 +37,11 @@ assert.ok(weakFactor<0.9 && weakFactor>=0.70);
 const strongRecent=buildAdaptiveLearningProfile(Array.from({length:24},(_,i)=>trade(i,2,"TREND_HOLD","PUMP","TREND+MOMENTUM+BREAKOUT","LONG","TREND_UP")),now);
 const strongFactor=adaptiveCandidateMultiplier(strongRecent,{symbol:"PUMP",mode:"TREND_HOLD",strategy:"TREND+MOMENTUM+BREAKOUT",side:"LONG",regime:"TREND_UP"});
 assert.ok(strongFactor>1.05 && strongFactor<=1.30);
+const marketOnlyPenalty = adaptiveCandidateMultiplier({
+  bySymbol: { SOL: { trades: 24, multiplier: 0.72 } },
+  bySymbolStrategy: {}, byStrategy: {}, byMode: {}, bySide: {}, byRegime: {},
+}, { symbol: "SOL", mode: "TREND_HOLD", strategy: "5M_TREND+1M_PULLBACK+RECLAIM", side: "LONG", regime: "TREND_UP" });
+assert.ok(marketOnlyPenalty < 0.8, "net market-level losses must lower ranking without blocking the market");
 const insufficient=buildAdaptiveLearningProfile(Array.from({length:7},(_,i)=>trade(i,1)),now);
 assert.equal(adaptiveCandidateMultiplier(insufficient,{symbol:"BTC",mode:"TREND_HOLD"}),1);
 const profitable=buildAdaptiveLearningProfile(Array.from({length:20},(_,i)=>trade(i,1)),now);
@@ -131,7 +136,7 @@ assert.ok(source.includes("LOCAL_TREND_BREAKOUT_RETEST"));
 
 assert.ok(!source.includes('paperStorage.put("ciel:adaptive-learning:v2").bind'));
 
-assert.ok(source.includes("candidate.strategy") && source.includes("profile?.bySide?.[side]") && source.includes("profile?.byRegime?.[regime]"));
+assert.ok(source.includes("candidate.strategy") && source.includes("profile?.bySymbol?.[symbol]") && source.includes("profile?.bySide?.[side]") && source.includes("profile?.byRegime?.[regime]"));
 console.log("PASS: recent strategy/side/regime learning adjusts ranking only; all seven markets remain eligible.");
 
 assert.ok(source.includes("const baseSignals = [analyzeCandleLevelReversal"), "both base signal generators must be evaluated independently");

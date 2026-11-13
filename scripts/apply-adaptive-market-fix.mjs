@@ -17,7 +17,7 @@ function buildAdaptiveLearningProfile(trades, now) {
   const add = (key, trade) => { if (!buckets.has(key)) buckets.set(key, []); buckets.get(key).push(trade); };
   for (const trade of closed) {
     const symbol = String(trade.symbol || "UNKNOWN").toUpperCase(), mode = String(trade.mode || "LEGACY").toUpperCase(), strategy = String(trade.strategy || mode).toUpperCase(), side = String(trade.side || "UNKNOWN").toUpperCase(), regime = String(trade.regime || "UNKNOWN").toUpperCase();
-    add("mode:" + mode, trade); add("strategy:" + strategy, trade); add("market:" + symbol + "|" + strategy, trade); add("side:" + side, trade); add("regime:" + regime, trade);
+    add("mode:" + mode, trade); add("strategy:" + strategy, trade); add("market:" + symbol + "|" + strategy, trade); add("symbol:" + symbol, trade); add("side:" + side, trade); add("regime:" + regime, trade);
   }
   const summarize = (rows) => {
     const count = rows.length, wins = rows.filter((trade) => Number(trade.netPnlMon ?? trade.grossPnlMon ?? trade.pnlMon ?? 0) > 0).length;
@@ -28,17 +28,17 @@ function buildAdaptiveLearningProfile(trades, now) {
     const closeReasons = {}; for (const trade of rows) { const reason = String(trade.closeReason || "UNKNOWN"); closeReasons[reason] = (closeReasons[reason] || 0) + 1; }
     return { trades: count, wins, losses: count - wins, winRate: count ? wins / count : 0, realizedPnlMon: Number(realizedPnlMon.toFixed(6)), totalMarginMon: Number(totalMarginMon.toFixed(6)), expectancyPct: Number(expectancyPct.toFixed(6)), multiplier: Number(multiplier.toFixed(6)), avgBestFavorableMovePct: count ? rows.reduce((sum, trade) => sum + (Number(trade.bestFavorableMovePct) || 0), 0) / count : 0, closeReasons };
   };
-  const byStrategy = {}, bySymbolStrategy = {}, byMode = {}, bySide = {}, byRegime = {};
-  for (const [key, rows] of buckets) { const summary = summarize(key.startsWith("side:") || key.startsWith("regime:") ? rows.slice(-60) : rows.slice(-40)); if (key.startsWith("strategy:")) byStrategy[key.slice(9)] = summary; else if (key.startsWith("market:")) bySymbolStrategy[key.slice(7)] = summary; else if (key.startsWith("mode:")) byMode[key.slice(5)] = summary; else if (key.startsWith("side:")) bySide[key.slice(5)] = summary; else if (key.startsWith("regime:")) byRegime[key.slice(7)] = summary; }
+  const byStrategy = {}, bySymbolStrategy = {}, bySymbol = {}, byMode = {}, bySide = {}, byRegime = {};
+  for (const [key, rows] of buckets) { const summary = summarize(key.startsWith("side:") || key.startsWith("regime:") ? rows.slice(-60) : rows.slice(-40)); if (key.startsWith("strategy:")) byStrategy[key.slice(9)] = summary; else if (key.startsWith("market:")) bySymbolStrategy[key.slice(7)] = summary; else if (key.startsWith("symbol:")) bySymbol[key.slice(7)] = summary; else if (key.startsWith("mode:")) byMode[key.slice(5)] = summary; else if (key.startsWith("side:")) bySide[key.slice(5)] = summary; else if (key.startsWith("regime:")) byRegime[key.slice(7)] = summary; }
   const latest = closed[closed.length - 1], fingerprint = closed.length + ":" + String(latest?.closedAtMs || 0) + ":" + String(latest?.signalId || "");
-  return { version: 2, updatedAtMs: now, sampleWindowDays: 90, closedTradeCount: closed.length, fingerprint, byStrategy, bySymbolStrategy, byMode, bySide, byRegime };
+  return { version: 3, updatedAtMs: now, sampleWindowDays: 90, closedTradeCount: closed.length, fingerprint, byStrategy, bySymbolStrategy, bySymbol, byMode, bySide, byRegime };
 }
 __name(buildAdaptiveLearningProfile, "buildAdaptiveLearningProfile");
 function adaptiveCandidateMultiplier(profile, candidate) {
   const symbol = String(candidate?.symbol || "").toUpperCase(), mode = String(candidate?.mode || "LEGACY").toUpperCase(), strategy = String(candidate?.strategy || mode).toUpperCase(), side = String(candidate?.side || "UNKNOWN").toUpperCase(), regime = String(candidate?.regime || "UNKNOWN").toUpperCase();
-  const specific = profile?.bySymbolStrategy?.[symbol + "|" + strategy], strategyStats = profile?.byStrategy?.[strategy], modeStats = profile?.byMode?.[mode];
+  const specific = profile?.bySymbolStrategy?.[symbol + "|" + strategy], marketStats = profile?.bySymbol?.[symbol], strategyStats = profile?.byStrategy?.[strategy], modeStats = profile?.byMode?.[mode];
   const selected = specific && specific.trades >= 8 ? specific : strategyStats && strategyStats.trades >= 8 ? strategyStats : modeStats, factors = [];
-  if (selected && selected.trades >= 8) factors.push(Number(selected.multiplier) || 1);
+  if (marketStats && marketStats.trades >= 8) factors.push(Number(marketStats.multiplier) || 1);\n  if (selected && selected.trades >= 8) factors.push(Number(selected.multiplier) || 1);
   const sideStats = profile?.bySide?.[side]; if (sideStats && sideStats.trades >= 8) factors.push(Number(sideStats.multiplier) || 1);
   const regimeStats = profile?.byRegime?.[regime]; if (regimeStats && regimeStats.trades >= 8) factors.push(Number(regimeStats.multiplier) || 1);
   return Math.max(0.70, Math.min(1.30, factors.reduce((product, factor) => product * factor, 1)));
