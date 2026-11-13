@@ -1,5 +1,5 @@
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
-const finite = (value) => Number.isFinite(Number(value)) ? Number(value) : null;
+const finite = (value) => value === null || value === undefined || value === "" ? null : Number.isFinite(Number(value)) ? Number(value) : null;
 
 const REQUIRED_COMPONENTS = Object.freeze({
   "MULTI_MARKET_LEVEL_SWEEP_RECLAIM": ["LEVEL_RECLAIM","3M_REVERSAL","5M_CONFIRMATION"],
