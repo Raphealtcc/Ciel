@@ -12,8 +12,8 @@ const modules = [
   ["cloudflare-forecast.js", 4425],
   ["advisor.js", 125157],
   ["telegram.js", 13973],
-  ["hyperliquid_feed.js", 51590],
-  ["index.js", 26022],
+  ["hyperliquid_feed.js", 52929],
+  ["index.js", 26624],
 ];
 
 await mkdir(path.join(output, "src"), { recursive: true });
@@ -49,7 +49,7 @@ if (preamble.length !== 391) {
 }
 
 const worker = preamble + recoveredModules.join("");
-if (worker.length !== 223205) {
+if (worker.length !== 225146) {
   throw new Error(`Integrity check failed for full Worker: expected 223205, got ${worker.length}`);
 }
 
