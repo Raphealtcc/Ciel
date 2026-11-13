@@ -18,7 +18,7 @@ worker = once(worker,
   "restrict trend candidate reviews to the all eligible 50x+ markets excluding ZEC");
 worker = once(worker,
   "  return [...new Set(parsed)].slice(0, 100);",
-  "  return [...restrictTemporaryMarketUniverse([...new Set([\"BTC\",\"ETH\",\"SOL\",\"BNB\",\"HYPE\",\"ADA\",\"PUMP\", ...parsed])]), \"MON\"]; ",
+  "  return [...restrictTemporaryMarketUniverse([...new Set([\"BTC\",\"ETH\",\"SOL\",\"BNB\",\"HYPE\",\"XRP\",\"ONDO\",\"KPEPE\",\"TRX\",\"AAVE\",\"ADA\",\"DOGE\",\"LINK\",\"PUMP\",\"SEI\",\"SUI\",\"UNI\",\"VIRTUAL\", ...parsed])]), \"MON\"]; ",
   "keep all all eligible 50x+ markets excluding ZEC in the Hyperliquid watchlist");
 
 worker = once(worker,
@@ -59,8 +59,8 @@ const nativeImport = 'import { restrictTemporaryMarketUniverse } from "./market-
 if (!native.includes(nativeImport)) native = nativeImport + "\n" + native;
 native = once(native,
   '  const watch = [...new Set(watchValues.map(upper).filter(Boolean))];',
-  '  const watch = restrictTemporaryMarketUniverse(["BTC", "ETH", "SOL", "BNB", "HYPE", "ADA", "PUMP", ...watchValues.map(upper)]);',
+  '  const watch = restrictTemporaryMarketUniverse(["BTC", "ETH", "SOL", "BNB", "HYPE", "XRP", "ONDO", "KPEPE", "TRX", "AAVE", "ADA", "DOGE", "LINK", "PUMP", "SEI", "SUI", "UNI", "VIRTUAL", ...watchValues.map(upper)]);',
   "restrict LeverUp native sampling to the all eligible 50x+ markets excluding ZEC");
 await writeFile(nativePath, native);
 
-console.log("Applied 50x+ market universe: BTC, ETH, SOL, BNB, HYPE, ADA and PUMP. Existing-position management is unchanged.");
+console.log("Applied 50x+ market universe: 18 eligible markets; ZEC and below-50x markets excluded. Existing-position management is unchanged.");

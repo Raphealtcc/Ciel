@@ -18,8 +18,8 @@ assert.ok(worker.includes('return [...restrictTemporaryMarketUniverse([...new Se
 assert.ok(worker.includes("Market is outside the configured 50x+ trading universe. Unsupported symbol."));
 assert.ok(worker.includes("rows.results = (rows.results || []).filter((position) => isTemporaryMarketAllowed(position.symbol))"));
 assert.ok(worker.includes("isTemporaryMarketAllowed(p.symbol)"));
-assert.ok(worker.includes("outside the enabled seven-market universe"));
-assert.ok(worker.includes('new Set(["BTC", "ETH", "MON", "SOL", "BNB", "HYPE", "ADA", "PUMP"])'));
+assert.ok(worker.includes("outside the enabled 50x+ market universe"));
+assert.ok(worker.includes('new Set(["BTC", "ETH", "MON", "SOL", "BNB", "HYPE", "XRP", "ONDO", "KPEPE", "TRX", "AAVE", "ADA", "DOGE", "LINK", "PUMP", "SEI", "SUI", "UNI", "VIRTUAL"])'));
 assert.ok(worker.includes("if (!isTemporaryMarketAllowed(candidate.symbol)) continue;"));
 const recovered=await readFile("recovered-src/symbols.js.part-001","utf8");
 assert.ok(recovered.includes("HYPE: 50") && recovered.includes("ZEC: 25"));

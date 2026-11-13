@@ -62,7 +62,7 @@ once(signature,learningHelpers+"\nfunction analyzeCoreTrendContinuation(symbol, 
 
 once(
   "  const symbols = configuredWatchSymbols(env.WATCH_SYMBOLS);",
-  '  const symbols = [...new Set(["BTC","ETH","SOL","BNB","HYPE","ADA","PUMP", ...configuredWatchSymbols(env.WATCH_SYMBOLS)])];',
+  '  const symbols = [...new Set(["BTC","ETH","SOL","BNB","HYPE","XRP","ONDO","KPEPE","TRX","AAVE","ADA","DOGE","LINK","PUMP","SEI","SUI","UNI","VIRTUAL", ...configuredWatchSymbols(env.WATCH_SYMBOLS)])];',
   "keep BTC ETH SOL in the scan even when WATCH_SYMBOLS omits them"
 );
 once(
