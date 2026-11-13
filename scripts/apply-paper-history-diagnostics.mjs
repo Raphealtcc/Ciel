@@ -7,6 +7,14 @@ let source = await readFile(file, "utf8");
 function once(text, before, after, label) {
   const count = text.split(before).length - 1;
   if (count === 0 && text.includes(after)) return text;
+  if (count === 0 && label.includes("recentClosed mapping")) {
+    const start = text.indexOf("const recentClosed = closedTrades.slice(0, 5).map((trade) => ({");
+    if (start < 0) throw new Error(label + ": recentClosed mapping not found");
+    const endMarker = "  }));";
+    const end = text.indexOf(endMarker, start);
+    if (end < 0) throw new Error(label + ": recentClosed mapping end not found");
+    return text.slice(0, start) + after + text.slice(end + endMarker.length);
+  }
   if (count !== 1) throw new Error(label + ": expected exactly one match, found " + count);
   return text.replace(before, after);
 }
