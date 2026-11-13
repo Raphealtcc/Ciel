@@ -104,7 +104,9 @@ assert.equal(minimumMarginForMarketLeverage(context.LEVERUP_MARKET_MAX_LEVERAGE.
 assert.equal(minimumMarginForMarketLeverage(context.LEVERUP_MARKET_MAX_LEVERAGE.LIT), null);
 
 const stopLossMath = paperTradePnl({ side: "LONG", entryPrice: 100, entryMonUsd: 0.2, marginMon: 22, leverage: 50 }, 99.6, 0.2);
-assert.ok(Math.abs(stopLossMath.mon - (-5.05868)) < 1e-9);\nassert.ok(Math.abs(stopLossMath.grossMon - (-4.4)) < 1e-9);\nassert.ok(Math.abs(stopLossMath.feeMon - 0.65868) < 1e-9);
+assert.ok(Math.abs(stopLossMath.mon - (-5.05868)) < 1e-9);
+assert.ok(Math.abs(stopLossMath.grossMon - (-4.4)) < 1e-9);
+assert.ok(Math.abs(stopLossMath.feeMon - 0.65868) < 1e-9);
 assert.ok(Math.abs(stopLossMath.roiPct - (-22.994)) < 1e-9);
 const hundredXStopMath = paperTradePnl({ side: "LONG", entryPrice: 100, entryMonUsd: 0.2, marginMon: 11, leverage: 100 }, 99.6, 0.2);
 assert.ok(Math.abs(hundredXStopMath.mon - (-5.05868)) < 1e-9);
