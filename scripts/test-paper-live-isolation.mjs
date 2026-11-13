@@ -8,7 +8,7 @@ assert.ok(source.includes('const paperTradingEnabled = String(paperOverride ?? e
 assert.ok(source.includes("if (paperTradingEnabled && sizingLimits.feasible)"));
 assert.ok(source.includes("PAPER TRADING PAUSED"));
 assert.ok(source.includes("paperState?.trades || []"));
-assert.ok(source.includes('paperStorage.put("ciel:adaptive-learning:v1"'));
+assert.ok(source.includes('paperStorage.put("ciel:adaptive-learning:v2"'));
 assert.ok(source.includes("WATCHLIST_ONLY_MAX_"));
 assert.ok(!source.includes('reason:"WATCHLIST_ONLY_MAX_"}); continue;'));
 assert.ok(!source.includes('reason:"PAPER_INSUFFICIENT_FREE_MARGIN",requiredPaperMargin,availablePaperMargin:paperCash}); continue;'));
