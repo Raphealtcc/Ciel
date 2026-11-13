@@ -177,11 +177,11 @@ else if (!source.includes("if (await handleTradingModeCommand(env, command)) ret
 
 const helpAnchor = '      "/test \\u2014 verify Telegram delivery",';
 if (source.includes(helpAnchor)) source = source.replace(helpAnchor,
-  '      "/paperactive /paperdeactivate \\u2014 toggle paper entries",\\n' +
-  '      "/liveactive /livedeactivate \\u2014 toggle live entries",\\n' +
-  '      "/modes \\u2014 show effective trading modes",\\n' +
-  '      "/geministatus \\u2014 Gemini keys, latest review and manager health",\\n' +
-  '      "/paperbalance \\u2014 show fee-adjusted paper balance and equity",\\n' +
+  '      "/paperactive /paperdeactivate \\u2014 toggle paper entries",\n' +
+  '      "/liveactive /livedeactivate \\u2014 toggle live entries",\n' +
+  '      "/modes \\u2014 show effective trading modes",\n' +
+  '      "/geministatus \\u2014 Gemini keys, latest review and manager health",\n' +
+  '      "/paperbalance \\u2014 show fee-adjusted paper balance and equity",\n' +
   helpAnchor);
 
 await writeFile(file, source);
