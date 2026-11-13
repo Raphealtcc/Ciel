@@ -14,6 +14,23 @@ var setting = /* @__PURE__ */ __name((v, d, a, b) => {
   const n = Number(v);
   return Number.isFinite(n) ? clamp(n, a, b) : d;
 }, "setting");
+function parseGeminiKeyList(value) {
+  if (Array.isArray(value)) return [...new Set(value.map((key) => String(key || "").trim()).filter(Boolean))];
+  const raw = String(value || "").trim();
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) return parseGeminiKeyList(parsed);
+  } catch {}
+  return raw.split(/[,;\n]+/).map((key) => key.trim().replace(/^["']|["']$/g, "")).filter(Boolean);
+}
+__name(parseGeminiKeyList, "parseGeminiKeyList");
+function getGeminiApiKeys(env = {}) {
+  const values = [env.GEMINI_API_KEYS, env.GEMINI_API_KEY];
+  for (let index = 1; index <= 20; index += 1) values.push(env["GEMINI_API_KEY_" + index]);
+  return [...new Set(values.flatMap((value) => parseGeminiKeyList(value)))];
+}
+__name(getGeminiApiKeys, "getGeminiApiKeys");
 async function notify(env, text, buttons) {
   const token = (env.TELEGRAM_BOT_TOKEN || "").trim(), chat = (env.TELEGRAM_CHAT_ID || "").trim();
   if (!token || !chat) throw new Error("Telegram credentials unavailable");
