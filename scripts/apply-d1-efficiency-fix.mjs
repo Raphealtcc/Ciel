@@ -36,7 +36,7 @@ const method = [
   "  async writeCoreScalpCandles(now) {",
   "    if (now - this.lastCoreScalpCandleAt < 55e3) return;",
   "    this.lastCoreScalpCandleAt = now;",
-  '    const symbols = ["BTC", "ETH", "SOL", "BNB", "HYPE", "ADA", "PUMP"].filter((symbol) => Number(this.latest[symbol]) > 0);',
+  '    const symbols = ["BTC", "ETH", "SOL", "BNB", "HYPE", "XRP", "ONDO", "KPEPE", "TRX", "AAVE", "ADA", "DOGE", "LINK", "PUMP", "SEI", "SUI", "UNI", "VIRTUAL"].filter((symbol) => Number(this.latest[symbol]) > 0);',
   "    let updated = false;",
   "    for (let offset = 0; offset < symbols.length; offset += 3) {",
   "      await Promise.all(symbols.slice(offset, offset + 3).map(async (symbol) => {",
@@ -77,7 +77,7 @@ const method = [
   "            .slice(-90);",
   "          updated = true;",
   "        } catch (error) {",
-  '          console.error("Core scalp 1m candle refresh failed for " + symbol + ": " + String(error).slice(0,160));',
+  '          console.error("Trend-entry 1m candle refresh failed for " + symbol + ": " + String(error).slice(0,160));',
   "        }",
   "      }));",
   "    }",
@@ -107,7 +107,8 @@ const oldCandleReads = [
   "  }));"
 ].join("\n");
 const newCandleReads = [
-  "  const coreCandleResults = coreScalpSymbols.map((symbol) => {",
+  "  const trendEntrySymbols = [...trendEntryMarketSet];",
+  "  const coreCandleResults = trendEntrySymbols.map((symbol) => {",
   "    const one = Array.isArray(coreScalpCandles?.[symbol]) ? coreScalpCandles[symbol].slice(-90) : [];",
   "    const five = Array.isArray(coreTrendCandles?.[symbol]) ? coreTrendCandles[symbol].filter((row) => Number(row.close_ts_ms) <= now).slice(-60) : [];",
   "    return [symbol,one,five];",

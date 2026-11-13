@@ -102,7 +102,7 @@ const newLiveMon = 'async function liveMon(env) {\n  const x = await env.DB.prep
 once(oldLiveMon, newLiveMon, "use the LeverUp MON/USD quote for /signals, /positions and /entered when no Hyperliquid MON sample exists");
 const oldCandle = "  for (const [symbol,one,five] of coreCandleResults) coreScalpData.set(symbol,{one,five});";
 const newCandle = `  for (const [symbol, one, five] of coreCandleResults) coreScalpData.set(symbol, { one, five });
-  const missingTrendSymbols = coreScalpSymbols.filter((symbol) => {
+  const missingTrendSymbols = trendEntrySymbols.filter((symbol) => {
     const rows = coreScalpData.get(symbol)?.five || [];
     const latest = Number(rows[rows.length - 1]?.close_ts_ms || 0);
     return rows.length < 40 || now - latest > 7 * 60 * 1000;
