@@ -158,4 +158,6 @@ assert.ok(worker.includes("statsLastRefreshKey") && worker.includes("6 * 60 * 60
 assert.ok(worker.includes("WHERE status='EXPIRED' AND exit_reason IN"), "shadow aggregation should use the indexed status/created window");
 assert.ok(worker.includes("SHADOW_TARGET_FIRST"));
 assert.ok(worker.includes("strategyStats:strategyShadowStats"));
+assert.ok(worker.includes("target_pct-0.06"));
+assert.ok(worker.includes("net of modeled 3 bps-per-side fees"));
 console.log("PASS: quality gates, regime-aware evidence, same-setup suppression, 5m reversal confirmation and Worker integration.");
