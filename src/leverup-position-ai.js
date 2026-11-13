@@ -109,6 +109,12 @@ export async function reviewLeverUpPositionWithGemini({ env, position, currentPr
         peakFavourablePct: adaptive.peakFavourablePct ?? null,
         givebackPct: adaptive.givebackPct ?? null
       },
+      feeContext: {
+        actualFeeSnapshot,
+        estimatedRoundTripFeePct,
+        grossFavourableMovePct: Number.isFinite(grossFavourableMovePct) ? grossFavourableMovePct : null,
+        netFavourableMoveAfterEstimatedFeesPct
+      },
       recentPrices: (state.history || []).slice(-12)
     })
   ].join("\n");
