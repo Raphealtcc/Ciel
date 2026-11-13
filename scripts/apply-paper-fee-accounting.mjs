@@ -181,5 +181,12 @@ once('    openCount: openTrades.length, closedCount: Number(state.closedCount ||
 '    openCount: openTrades.length, closedCount: Number(state.closedCount || 0),\n    feeDataUnavailableCount: closedTrades.filter((trade) => trade.feeModelVersion === "LEGACY_FEE_DATA_UNAVAILABLE").length,\n    feeAdjustedClosedCount: closedTrades.filter((trade) => trade.feeModelVersion !== "LEGACY_FEE_DATA_UNAVAILABLE" && trade.netPnlMon !== null && trade.netPnlMon !== undefined).length,',
 "expose legacy trades without a usable fee basis");
 
+once('pnlMon: trade.grossPnlMon,',
+'pnlMon: trade.feeModelVersion === "LEGACY_FEE_DATA_UNAVAILABLE" ? null : (trade.netPnlMon ?? null),\n    grossPnlMon: trade.grossPnlMon,\n    feeMon: trade.feeMon ?? null,\n    netPnlMon: trade.feeModelVersion === "LEGACY_FEE_DATA_UNAVAILABLE" ? null : (trade.netPnlMon ?? null),\n    feeModelVersion: trade.feeModelVersion || null,\n    feeDataUnavailable: trade.feeModelVersion === "LEGACY_FEE_DATA_UNAVAILABLE",',
+"report recent paper closes as fee-priced net results only");
+once('pnlUsd: trade.grossPnlUsd,',
+'pnlUsd: trade.feeModelVersion === "LEGACY_FEE_DATA_UNAVAILABLE" ? null : (trade.netPnlUsd ?? null),',
+"do not expose gross USD P&L as net for unpriced legacy trades");
+
 await writeFile(file, source);
 console.log("Applied fee-aware paper accounting and one-time historical migration.");
