@@ -165,5 +165,9 @@ once('"Paper results use Hyperliquid mids, not LeverUp Pyth/pool fills. Fees, fu
 '"Paper results use Hyperliquid mids, not LeverUp Pyth/pool fills. Estimated 3 bps-per-side trading fees are deducted; funding/holding fees, oracle costs, slippage, collateral CR, minimum-hold restrictions and liquidation are not simulated."',
 "update /profits cost disclosure");
 
+once('    openCount: openTrades.length, closedCount: Number(state.closedCount || 0),',
+'    openCount: openTrades.length, closedCount: Number(state.closedCount || 0),\n    feeDataUnavailableCount: closedTrades.filter((trade) => trade.feeModelVersion === "LEGACY_FEE_DATA_UNAVAILABLE").length,',
+"expose legacy trades without a usable fee basis");
+
 await writeFile(file, source);
 console.log("Applied fee-aware paper accounting and one-time historical migration.");

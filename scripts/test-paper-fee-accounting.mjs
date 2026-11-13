@@ -27,6 +27,7 @@ assert.ok(Math.abs(summary.totalPnlMon-(-5.05868))<1e-9);
 assert.ok(Math.abs(summary.equityMon-94.94132)<1e-9);
 assert.equal(summary.wins,0);
 assert.equal(summary.losses,1);
+assert.equal(summary.feeDataUnavailableCount,0);
 assert.equal(state.trades[0].feeModelVersion,"LEVERUP_TAKER_3BPS_EACH_SIDE_V1");
 assert.ok(source.includes("feeAwareProfit.mon >= 0.15"));
 assert.ok(source.includes("Estimated 3 bps-per-side trading fees are deducted"));

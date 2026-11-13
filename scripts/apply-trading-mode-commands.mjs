@@ -22,7 +22,7 @@ const paperBalanceHelper = `async function handlePaperBalanceCommand(env, comman
     const fundingCapacity = equity <= 0 || available < 11 ? "INSUFFICIENT — below the 11 MON 100x venue minimum" : available < 22 ? "100x tier only — 11 MON minimum covered; 50x needs 22 MON" : "50x minimum covered — 22 MON available";
     const lines = [
       "CIEL PAPER BALANCE",
-      "Starting balance: " + Number(data.startingBalanceMon || 0).toFixed(3) + " MON",
+      "Starting balance: " + Number(data.starterBalanceMon || 0).toFixed(3) + " MON",
       "Available: " + available.toFixed(3) + " MON",
       "Reserved margin: " + Number(data.openMarginMon || 0).toFixed(3) + " MON",
       "Realized NET P&L: " + signed(data.realizedPnlMon || 0) + " MON",
@@ -30,6 +30,7 @@ const paperBalanceHelper = `async function handlePaperBalanceCommand(env, comman
       "Total NET P&L: " + (data.totalPnlMon === null ? "unavailable" : signed(data.totalPnlMon) + " MON"),
       "Equity: " + (data.equityMon === null ? "unavailable" : Number(data.equityMon).toFixed(3) + " MON"),
       "Closed: " + Number(data.closedCount || 0) + " | net wins " + Number(data.wins || 0) + " | net losses " + Number(data.losses || 0),
+      "Historical fee basis unavailable: " + Number(data.feeDataUnavailableCount || 0) + " trades (not fee-adjusted)",
       "Open positions: " + (open.length ? open.map((trade) => String(trade.side) + " " + String(trade.symbol) + " (" + (trade.pnlMon === null ? "mark unavailable" : signed(trade.pnlMon) + " MON net") + ")").join(", ") : "none"),
       "Funding capacity: " + fundingCapacity,\n      "Fee model: estimated 3 bps per side deducted. Funding, holding fees, oracle costs and slippage are not included."
     ];
