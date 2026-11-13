@@ -18,9 +18,12 @@ const paperBalanceHelper = `async function handlePaperBalanceCommand(env, comman
     if (!response.ok || data.ok !== true) throw new Error(data.detail || data.error || "Paper ledger returned HTTP " + response.status);
     const signed = (value) => (Number(value) > 0 ? "+" : "") + Number(value).toFixed(3);
     const open = Array.isArray(data.openTrades) ? data.openTrades : [];
+    const available = Number(data.availableBalanceMon || 0), equity = Number(data.equityMon);
+    const fundingCapacity = equity <= 0 || available < 11 ? "INSUFFICIENT — below the 11 MON 100x venue minimum" : available < 22 ? "100x tier only — 11 MON minimum covered; 50x needs 22 MON" : "50x minimum covered — 22 MON available";
     const lines = [
       "CIEL PAPER BALANCE",
-      "Available: " + Number(data.availableBalanceMon || 0).toFixed(3) + " MON",
+      "Starting balance: " + Number(data.startingBalanceMon || 0).toFixed(3) + " MON",
+      "Available: " + available.toFixed(3) + " MON",
       "Reserved margin: " + Number(data.openMarginMon || 0).toFixed(3) + " MON",
       "Realized NET P&L: " + signed(data.realizedPnlMon || 0) + " MON",
       "Unrealized NET P&L: " + (data.unrealizedPnlMon === null ? "unavailable (stale/missing mark)" : signed(data.unrealizedPnlMon) + " MON"),
@@ -28,7 +31,7 @@ const paperBalanceHelper = `async function handlePaperBalanceCommand(env, comman
       "Equity: " + (data.equityMon === null ? "unavailable" : Number(data.equityMon).toFixed(3) + " MON"),
       "Closed: " + Number(data.closedCount || 0) + " | net wins " + Number(data.wins || 0) + " | net losses " + Number(data.losses || 0),
       "Open positions: " + (open.length ? open.map((trade) => String(trade.side) + " " + String(trade.symbol) + " (" + (trade.pnlMon === null ? "mark unavailable" : signed(trade.pnlMon) + " MON net") + ")").join(", ") : "none"),
-      "Funding capacity: " + (Number(data.equityMon) <= 0 || Number(data.availableBalanceMon) < 11 ? "INSUFFICIENT — no new paper entry can be funded at the venue minimum" : "available"),\n      "Fee model: estimated 3 bps per side deducted. Funding, holding fees, oracle costs and slippage are not included."
+      "Funding capacity: " + fundingCapacity,\n      "Fee model: estimated 3 bps per side deducted. Funding, holding fees, oracle costs and slippage are not included."
     ];
     await sendTelegram(env, lines.join("\\n"));
   } catch (error) {
