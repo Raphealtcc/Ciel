@@ -28,7 +28,8 @@ assert.ok(!advisor.includes("interval=\'1m\'"), "core scalp must not read the du
 assert.ok(advisor.includes("coreTrendCandles?.[symbol]"), "native 5m confirmation candles must come from the persistent DO cache");
 const d1FallbackGuard = advisor.indexOf("if (missingTrendSymbols.length)");
 const d1FallbackQuery = advisor.indexOf("FROM market_candles", d1FallbackGuard);
-assert.ok(advisor.includes("const trendEntrySymbols = [...trendEntryMarketSet]") && advisor.includes("const coreCandleResults = trendEntrySymbols.map"), "all 18 trend markets must receive both candle buffers");\nassert.ok(advisor.includes("const missingTrendSymbols = trendEntrySymbols.filter"), "5m D1 fallback must identify only missing/stale Durable Object buffers across all 18 trend markets");
+assert.ok(advisor.includes("const trendEntrySymbols = [...trendEntryMarketSet]") && advisor.includes("const coreCandleResults = trendEntrySymbols.map"), "all 18 trend markets must receive both candle buffers");
+assert.ok(advisor.includes("const missingTrendSymbols = trendEntrySymbols.filter"), "5m D1 fallback must identify only missing/stale Durable Object buffers across all 18 trend markets");
 assert.ok(advisor.includes("now - latest > 7 * 60 * 1000"), "5m D1 fallback must require a stale Durable Object candle cache");
 assert.ok(d1FallbackGuard > 0 && d1FallbackQuery > d1FallbackGuard, "5m candle history may be read from D1 only inside the missing/stale-cache fallback, never unconditionally each minute");
 
