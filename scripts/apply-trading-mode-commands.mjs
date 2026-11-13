@@ -28,7 +28,7 @@ const paperBalanceHelper = `async function handlePaperBalanceCommand(env, comman
       "Equity: " + (data.equityMon === null ? "unavailable" : Number(data.equityMon).toFixed(3) + " MON"),
       "Closed: " + Number(data.closedCount || 0) + " | net wins " + Number(data.wins || 0) + " | net losses " + Number(data.losses || 0),
       "Open positions: " + (open.length ? open.map((trade) => String(trade.side) + " " + String(trade.symbol) + " (" + (trade.pnlMon === null ? "mark unavailable" : signed(trade.pnlMon) + " MON net") + ")").join(", ") : "none"),
-      "Fee model: estimated 3 bps per side deducted. Funding, holding fees, oracle costs and slippage are not included."
+      "Funding capacity: " + (Number(data.equityMon) <= 0 || Number(data.availableBalanceMon) < 11 ? "INSUFFICIENT — no new paper entry can be funded at the venue minimum" : "available"),\n      "Fee model: estimated 3 bps per side deducted. Funding, holding fees, oracle costs and slippage are not included."
     ];
     await sendTelegram(env, lines.join("\\n"));
   } catch (error) {

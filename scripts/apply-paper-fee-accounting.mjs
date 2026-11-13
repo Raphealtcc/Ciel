@@ -31,8 +31,8 @@ once(`function paperTradePnl(trade, currentPrice, currentMonUsd) {
   const notionalUsd = marginUsd * Number(trade.leverage);
   const grossUsd = notionalUsd * movePct / 100;
   const exitNotionalUsd = notionalUsd * current / entry;
-  // LeverUp preflight snapshots report an effective 2.85 bps open/close fee; paper mode uses that measured rate.
-  const feeRate = 0.000285;
+  // LeverUp preflight snapshots report an 3 bps open/close fee from LeverUp preflight; paper mode uses that measured rate.
+  const feeRate = 0.0003;
   const feeUsd = Math.max(0, (notionalUsd + exitNotionalUsd) * feeRate);
   const grossMon = grossUsd / monUsd;
   const feeMon = feeUsd / monUsd;
@@ -72,7 +72,7 @@ once(`      trade.status = "CLOSED"; trade.exitPrice = exitPrice; trade.exitMonU
       trade.feeUsd = Number(pnl.feeUsd) || 0;
       trade.netPnlMon = pnlMon;
       trade.netPnlUsd = pnlMon * Number(prices.MON);
-      trade.feeModelVersion = "LEVERUP_TAKER_2_85BPS_EACH_SIDE_V1";
+      trade.feeModelVersion = "LEVERUP_TAKER_3BPS_EACH_SIDE_V1";
       trade.returnOnMarginPct = Number(trade.marginMon) > 0 ? pnlMon / Number(trade.marginMon) * 100 : 0;`,
 "persist gross, fee and net settlement values");
 
@@ -85,7 +85,7 @@ once(`      lines.push(trade.side + " " + trade.symbol + " | " + trade.reason,
 "show net P&L in paper close notifications");
 
 once('"Gross Hyperliquid-mid paper result; LeverUp Pyth/pool fills, fees, funding/holding fees, oracle costs, slippage, collateral CR, minimum-hold restrictions and liquidation are excluded."',
-'"Net mark-based paper result after estimated 2.85 bps-per-side trading fees. Funding, holding fees, oracle costs, slippage, collateral CR, minimum-hold restrictions and liquidation remain excluded."',
+'"Net mark-based paper result after estimated 3 bps-per-side trading fees. Funding, holding fees, oracle costs, slippage, collateral CR, minimum-hold restrictions and liquidation remain excluded."',
 "replace gross-only paper disclaimer");
 
 once('const availableBalanceMon = Number(state.availableBalanceMon ?? state.startingBalanceMon ?? PAPER_STARTING_BALANCE_MON);',
@@ -104,8 +104,9 @@ once(`  const closedTrades = (state.trades || []).filter((trade) => trade.status
   // One-time migration: retain all trades, but recalculate historical realized P&L after estimated entry/exit fees.
   let feeMigrationChanged = false, legacyFeeDataUnavailable = 0;
   for (const trade of closedTrades) {
-    if (trade.feeModelVersion) {
-      if (trade.feeModelVersion === "LEGACY_FEE_DATA_UNAVAILABLE") legacyFeeDataUnavailable += 1;
+    if (trade.feeModelVersion === "LEVERUP_TAKER_3BPS_EACH_SIDE_V1") continue;
+    if (trade.feeModelVersion === "LEGACY_FEE_DATA_UNAVAILABLE") {
+      legacyFeeDataUnavailable += 1;
       continue;
     }
     const historical = paperTradePnl(trade, Number(trade.exitPrice), Number(trade.exitMonUsd) || monUsd);

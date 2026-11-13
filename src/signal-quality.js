@@ -184,14 +184,21 @@ export function evaluateSignalQuality({ candidate, forecast, market, eventIntel 
   components.push({ key: "DERIVATIVES_CONTEXT", score: fundingScore + premiumScore + oiScore, max: 15,
     detail: "funding, mark/oracle premium and OI change" });
 
-  const rr = stopPct > 0 && targetPct > 0 ? targetPct / stopPct : 0;
+  // LeverUp's configured default is 3 bps on open and 3 bps on close.
+  // Convert the 6 bps round trip to 0.06 percentage points before scoring the setup.
+  const roundTripFeePct = 0.06;
+  const netTargetPct = targetPct - roundTripFeePct;
+  const netStopPct = stopPct + roundTripFeePct;
+  const rr = netStopPct > 0 && netTargetPct > 0 ? netTargetPct / netStopPct : 0;
   let rrScore = rr >= 2 ? 10 : rr >= 1.8 ? 8 : rr >= 1.6 ? 6 : rr >= 1.4 ? 3 : 0;
-  if (rr < 1.4) vetoes.push("INSUFFICIENT_REWARD_TO_RISK");
+  if (netTargetPct <= 0) vetoes.push("TARGET_DOES_NOT_COVER_ROUND_TRIP_FEES");
+  else if (rr < 1.0) vetoes.push("NET_REWARD_TO_RISK_BELOW_1R");
   if (spreadBps !== null && targetPct > 0 && targetPct < (spreadBps / 100) * 2.5) {
     vetoes.push("TARGET_TOO_SMALL_RELATIVE_TO_SPREAD");
     rrScore = 0;
   }
-  components.push({ key: "REWARD_TO_RISK", score: rrScore, max: 10, detail: rr.toFixed(2) + "R before fees and funding" });
+  components.push({ key: "REWARD_TO_RISK", score: rrScore, max: 10,
+    detail: rr.toFixed(2) + "R after estimated 3 bps-per-side fees (" + netTargetPct.toFixed(3) + "% net target / " + netStopPct.toFixed(3) + "% net stop)" });
 
   const regime = regimeEvidence(candidate || {}, eventIntel);
   components.push({ key: "REGIME_AND_EVENT", score: regime.score, max: 5, detail: regime.reason });
