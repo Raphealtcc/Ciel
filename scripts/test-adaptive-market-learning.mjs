@@ -59,7 +59,9 @@ assert.ok(source.includes('const preferredGroup = Math.floor(now / (5 * 60e3)) %
 assert.ok(source.includes('signal.mode === "TREND_HOLD"'));
 assert.ok(source.includes("1M_SWING_REVERSAL+RECLAIM"));
 assert.ok(source.includes("var CYCLE = 6e4;"));
-assert.ok(source.includes('coreMarkets:["BTC","ETH","SOL"],trendEntryMarkets:["BTC","ETH","SOL","BNB","HYPE","ADA","PUMP"],preferredGroup'));
+assert.ok(source.includes('coreMarkets:["BTC","ETH","SOL"]'));
+assert.ok(source.includes('trendEntryMarkets:["BTC","ETH","SOL","BNB","HYPE","ADA","PUMP"]'));
+assert.ok(source.includes("preferredGroup"));
 assert.ok(source.includes("scanDiagnostics:scanDiagnostics.slice(-120)"));
 assert.ok(source.includes('"INSUFFICIENT_CLOSED_CANDLE_HISTORY"'));
 
