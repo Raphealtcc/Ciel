@@ -190,7 +190,7 @@ export function evaluateSignalQuality({ candidate, forecast, market, eventIntel 
   const netTargetPct = targetPct - roundTripFeePct;
   const netStopPct = stopPct + roundTripFeePct;
   const rr = netStopPct > 0 && netTargetPct > 0 ? netTargetPct / netStopPct : 0;
-  let rrScore = rr >= 2 ? 10 : rr >= 1.8 ? 8 : rr >= 1.6 ? 6 : rr >= 1.4 ? 3 : 0;
+  let rrScore = rr >= 2 ? 10 : rr >= 1.8 ? 8 : rr >= 1.25 ? 6 : rr >= 1.0 ? 3 : 0;
   if (netTargetPct <= 0) vetoes.push("TARGET_DOES_NOT_COVER_ROUND_TRIP_FEES");
   else if (rr < 1.0) vetoes.push("NET_REWARD_TO_RISK_BELOW_1R");
   if (spreadBps !== null && targetPct > 0 && targetPct < (spreadBps / 100) * 2.5) {
