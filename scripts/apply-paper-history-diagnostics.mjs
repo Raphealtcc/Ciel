@@ -22,7 +22,7 @@ source = once(source,
     mode: trade.mode || "LEGACY", regime: trade.regime || null,
     leverage: trade.leverage, marginMon: trade.marginMon, entryPrice: trade.entryPrice,
     exitPrice: trade.exitPrice, closeReason: trade.closeReason, pnlMon: trade.grossPnlMon,
-    pnlUsd: trade.netPnlUsd ?? trade.grossPnlUsd, returnOnMarginPct: trade.returnOnMarginPct, closedAtMs: trade.closedAtMs
+    pnlUsd: trade.grossPnlUsd, returnOnMarginPct: trade.returnOnMarginPct, closedAtMs: trade.closedAtMs
   }));`,
   `const historyTrades = includeHistory
     ? closedTrades.slice().sort((a, b) => Number(b.closedAtMs) - Number(a.closedAtMs)).slice(0, 250)
