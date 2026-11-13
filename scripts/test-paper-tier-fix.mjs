@@ -270,7 +270,7 @@ assert.ok(source.includes('paperResult.trade.leverage + "x · "'), "paper entry 
 assert.ok(source.includes("Reference price source: Hyperliquid mid; LeverUp settles against Pyth and applies per-pair pool slippage. Check LeverUp's live quote before entry."));
 assert.ok(source.includes("Hyperliquid market quality: 24h notional"));
 assert.ok(source.includes("AI evidence basis: CIEL technical signal, local forecast and Hyperliquid derivatives/order-book metrics only."));
-assert.ok(source.includes("Net mark-based result after estimated 3 bps-per-side trading fees"));
+assert.ok(source.includes("Net mark-based paper result after estimated 3 bps-per-side trading fees"));
 assert.ok(source.includes("Paper results use Hyperliquid mids, not LeverUp Pyth/pool fills."));
 assert.equal(context.LEVERUP_MARKET_MAX_LEVERAGE.CASHCAT, 3);
 assert.equal(context.LEVERUP_MARKET_MAX_LEVERAGE.PONS, 3);

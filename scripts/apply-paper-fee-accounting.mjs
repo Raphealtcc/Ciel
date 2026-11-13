@@ -147,5 +147,9 @@ once('const pnl = matches.reduce((sum, trade) => sum + (Number(trade.grossPnlMon
 'const pnl = matches.reduce((sum, trade) => sum + (Number(trade.netPnlMon ?? trade.grossPnlMon) || 0), 0);',
 "report net strategy P&L");
 
+once('"Paper results use Hyperliquid mids, not LeverUp Pyth/pool fills. Fees, funding/holding fees, oracle costs, slippage, collateral CR, minimum-hold restrictions and liquidation are not simulated."',
+'"Paper results use Hyperliquid mids, not LeverUp Pyth/pool fills. Estimated 3 bps-per-side trading fees are deducted; funding/holding fees, oracle costs, slippage, collateral CR, minimum-hold restrictions and liquidation are not simulated."',
+"update /profits cost disclosure");
+
 await writeFile(file, source);
 console.log("Applied fee-aware paper accounting and one-time historical migration.");
