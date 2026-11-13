@@ -41,5 +41,7 @@ assert.ok(missingBasisSummary.availableBalanceMon<=0);
 assert.equal(missingBasisSummary.wins,0);
 assert.equal(missingBasisSummary.losses,0);
 assert.equal(missingBasisState.trades[0].netPnlMon,null);
+assert.equal(missingBasisSummary.recentClosed[0].pnlMon,null);
+assert.equal(missingBasisSummary.recentClosed[0].feeDataUnavailable,true);
 assert.equal(missingBasisState.trades[0].feeModelVersion,"LEGACY_FEE_DATA_UNAVAILABLE");
 console.log("Paper fee accounting and historical migration tests passed.");
