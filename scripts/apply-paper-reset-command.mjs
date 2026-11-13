@@ -9,14 +9,11 @@ const commandStart = source.indexOf(commandAnchor);
 if (commandStart < 0 || source.indexOf(commandAnchor, commandStart + 1) >= 0) throw new Error("Paper reset command anchor mismatch");
 if (!source.includes("if (await handlePaperResetCommand(env, command)) return;")) {
   source = source.slice(0, commandStart) + resetHandler + source.slice(commandStart);
-  const dispatchStart = source.indexOf("  if (await handleAdvisorCommand(env, text)) return;", commandStart + resetHandler.length);
-  const commandLineStart = source.indexOf("  const command =", dispatchStart);
+  const commandLineStart = source.indexOf("  const command =", commandStart + resetHandler.length);
   const commandLineEnd = source.indexOf(NL, commandLineStart);
-  if (dispatchStart < 0 || commandLineStart < 0 || commandLineEnd < 0) throw new Error("Paper reset dispatch anchor mismatch");
-  const commandLine = source.slice(commandLineStart, commandLineEnd);
-  source = source.slice(0, dispatchStart) + commandLine + NL +
-    "  if (await handlePaperResetCommand(env, command)) return;" + NL +
-    "  if (await handleAdvisorCommand(env, text)) return;" + source.slice(commandLineEnd);
+  if (commandLineStart < 0 || commandLineEnd < 0) throw new Error("Paper reset dispatch anchor mismatch");
+  source = source.slice(0, commandLineEnd) + NL +
+    "  if (await handlePaperResetCommand(env, command)) return;" + source.slice(commandLineEnd);
 }
 if (!source.includes('"/paperreset')) {
   const testAnchor = String.fromCharCode(32,32,32,32,32,32,34) + "/test " + String.fromCharCode(92) + "u2014 verify Telegram delivery" + String.fromCharCode(34) + ",";
