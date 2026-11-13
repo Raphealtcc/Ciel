@@ -1,4 +1,4 @@
-const parseKeys = (value) => [...new Set(String(value || "").split(/[,;\n]+/).map((key) => key.trim()).filter(Boolean))];
+const parseKeys = (value) => [...new Set(String(value || "").split(/[,;\n]+/).map((key) => key.trim().replace(/^["\']|["\']$/g, "")).filter(Boolean))];
 
 export function parseGeminiApiKeys(value) {
   if (Array.isArray(value)) return [...new Set(value.map((key) => String(key || "").trim()).filter(Boolean))];
