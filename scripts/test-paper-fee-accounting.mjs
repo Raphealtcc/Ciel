@@ -26,5 +26,6 @@ assert.ok(Math.abs(summary.availableBalanceMon-94.94132)<1e-9);
 assert.equal(summary.wins,0);
 assert.equal(summary.losses,1);
 assert.equal(state.trades[0].feeModelVersion,"LEVERUP_TAKER_3BPS_EACH_SIDE_V1");
-assert.ok(source.includes("feeAwareProfit.mon >= 0.15"));\nassert.ok(source.includes("Estimated 3 bps-per-side trading fees are deducted"));
+assert.ok(source.includes("feeAwareProfit.mon >= 0.15"));
+assert.ok(source.includes("Estimated 3 bps-per-side trading fees are deducted"));
 console.log("Paper fee accounting and historical migration tests passed.");
