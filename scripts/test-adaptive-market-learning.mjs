@@ -139,6 +139,6 @@ assert.ok(source.includes("LOCAL_TREND_BREAKOUT_RETEST"));
 assert.ok(!source.includes('paperStorage.put("ciel:adaptive-learning:v2").bind'));
 
 assert.ok(source.includes("candidate.strategy") && source.includes("profile?.bySymbol?.[symbol]") && source.includes("profile?.bySide?.[side]") && source.includes("profile?.byRegime?.[regime]"));
-console.log("PASS: recent strategy/side/regime learning adjusts ranking only; all seven markets remain eligible.");
+console.log("PASS: recent strategy/side/regime learning adjusts ranking only; all 18 eligible markets remain available.");
 
 assert.ok(source.includes("const baseSignals = [analyzeCandleLevelReversal"), "both base signal generators must be evaluated independently");
