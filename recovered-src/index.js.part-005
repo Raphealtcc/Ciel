@@ -23,6 +23,18 @@
     ctx.waitUntil(ensureTelegramWebhook(env));
     ctx.waitUntil((async () => {
       try {
+        const authorization = await env.DB.prepare("SELECT token_hash FROM paper_reset_authorizations WHERE expires_at_ms>? LIMIT 1").bind(Date.now()).first();
+        if (authorization) {
+          const resetResponse = await feedStub2(env).fetch("https://feed/paper/reset", { method: "POST" });
+          const resetResult = await resetResponse.json().catch(() => ({}));
+          if (!resetResponse.ok || resetResult.ok !== true) throw new Error("One-time paper reset failed: " + JSON.stringify(resetResult).slice(0, 300));
+          const resetAt = Date.now();
+          await env.DB.batch([
+            env.DB.prepare("INSERT INTO paper_reset_events (reset_at_ms,result_json) VALUES (?,?)").bind(resetAt, JSON.stringify(resetResult)),
+            env.DB.prepare("DELETE FROM paper_reset_authorizations WHERE token_hash=?").bind(authorization.token_hash)
+          ]);
+          console.log("CIEL paper account reset completed: " + JSON.stringify(resetResult));
+        }
         const response = await feedStub2(env).fetch("https://feed/ensure", { method: "POST" });
         if (!response.ok) {
           const body = await response.text();
