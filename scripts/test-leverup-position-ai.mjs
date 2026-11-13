@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
-import { parseGeminiApiKeys, reviewLeverUpPositionWithGemini } from "../src/leverup-position-ai.js";
+import { getGeminiApiKeys, parseGeminiApiKeys, reviewLeverUpPositionWithGemini } from "../src/leverup-position-ai.js";
 
 assert.deepEqual(parseGeminiApiKeys(" alpha , beta\n gamma;alpha "), ["alpha", "beta", "gamma"]);
+assert.deepEqual(parseGeminiApiKeys('["json-a","json-b"]'), ["json-a", "json-b"]);
+assert.deepEqual(getGeminiApiKeys({ GEMINI_API_KEYS: '["shared-a","shared-b"]', GEMINI_API_KEY_1: "numbered-c", GEMINI_API_KEY_2: "shared-a" }), ["shared-a", "shared-b", "numbered-c"]);
 const writes = new Map();
 const storage = {
   get: async (key) => writes.get(key) ?? null,
@@ -74,4 +76,22 @@ assert.equal(failedCalls, 5, "all five configured keys must be attempted even wh
 assert.equal(exhausted.status, "FAILED");
 assert.equal(exhausted.configuredKeyCount, 5);
 
-console.log("PASS: comma-separated Gemini keys rotate on HTTP 400 and all five keys are attempted before giving up.");
+let numberedCalls = 0;
+const numbered = await reviewLeverUpPositionWithGemini({
+  env: { GEMINI_API_KEY_1: "numbered-key-1", GEMINI_API_KEY_2: "numbered-key-2", GEMINI_MODEL: "test-model", CIEL_STATE: storage },
+  position: { positionHash: "0x" + "ef".repeat(32), symbol: "ETH", isLong: false },
+  currentPriceRaw: "2000",
+  now: 40_000,
+  dependencies: {
+    fetchImpl: async (_url, options) => {
+      numberedCalls++;
+      assert.ok(["numbered-key-1", "numbered-key-2"].includes(options.headers["x-goog-api-key"]));
+      return { ok: true, json: async () => ({ candidates: [{ content: { parts: [{ text: JSON.stringify({ action: "HOLD", confidence: 70, reason: "Evidence mixed." }) }] } }] }) };
+    }
+  }
+});
+assert.equal(numberedCalls, 1);
+assert.equal(numbered.status, "REVIEWED");
+assert.equal(numbered.configuredKeyCount, 2, "numbered Cloudflare Gemini secrets must be discovered");
+
+console.log("PASS: CSV/JSON and numbered Gemini secrets are discovered; keys rotate on HTTP 400 and all configured keys are attempted.");
