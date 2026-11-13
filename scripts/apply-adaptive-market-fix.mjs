@@ -20,11 +20,11 @@ function buildAdaptiveLearningProfile(trades, now) {
     add("mode:" + mode, trade); add("strategy:" + strategy, trade); add("market:" + symbol + "|" + strategy, trade); add("side:" + side, trade); add("regime:" + regime, trade);
   }
   const summarize = (rows) => {
-    const count = rows.length, wins = rows.filter((trade) => Number(trade.grossPnlMon ?? trade.pnlMon ?? 0) > 0).length;
-    const realizedPnlMon = rows.reduce((sum, trade) => sum + (Number(trade.grossPnlMon ?? trade.pnlMon) || 0), 0), totalMarginMon = rows.reduce((sum, trade) => sum + Math.max(0, Number(trade.marginMon) || 0), 0);
+    const count = rows.length, wins = rows.filter((trade) => Number(trade.netPnlMon ?? trade.grossPnlMon ?? trade.pnlMon ?? 0) > 0).length;
+    const realizedPnlMon = rows.reduce((sum, trade) => sum + (Number(trade.netPnlMon ?? trade.grossPnlMon ?? trade.pnlMon) || 0), 0), totalMarginMon = rows.reduce((sum, trade) => sum + Math.max(0, Number(trade.marginMon) || 0), 0);
     const expectancyPct = totalMarginMon > 0 ? realizedPnlMon / totalMarginMon * 100 : 0, smoothedWinRate = (wins + 2) / (count + 4), sampleWeight = Math.min(1, count / 20);
-    const winAdjustment = Math.max(-0.03, Math.min(0.03, (smoothedWinRate - 0.5) * 0.10)), expectancyAdjustment = Math.max(-0.12, Math.min(0.12, expectancyPct * 0.04));
-    const multiplier = count < 8 ? 1 : Math.max(0.85, Math.min(1.15, 1 + (winAdjustment + expectancyAdjustment) * sampleWeight));
+    const winAdjustment = Math.max(-0.06, Math.min(0.06, (smoothedWinRate - 0.5) * 0.16)), expectancyAdjustment = Math.max(-0.20, Math.min(0.20, expectancyPct * 0.06));
+    const multiplier = count < 8 ? 1 : Math.max(0.70, Math.min(1.30, 1 + (winAdjustment + expectancyAdjustment) * sampleWeight));
     const closeReasons = {}; for (const trade of rows) { const reason = String(trade.closeReason || "UNKNOWN"); closeReasons[reason] = (closeReasons[reason] || 0) + 1; }
     return { trades: count, wins, losses: count - wins, winRate: count ? wins / count : 0, realizedPnlMon: Number(realizedPnlMon.toFixed(6)), totalMarginMon: Number(totalMarginMon.toFixed(6)), expectancyPct: Number(expectancyPct.toFixed(6)), multiplier: Number(multiplier.toFixed(6)), avgBestFavorableMovePct: count ? rows.reduce((sum, trade) => sum + (Number(trade.bestFavorableMovePct) || 0), 0) / count : 0, closeReasons };
   };
@@ -41,7 +41,7 @@ function adaptiveCandidateMultiplier(profile, candidate) {
   if (selected && selected.trades >= 8) factors.push(Number(selected.multiplier) || 1);
   const sideStats = profile?.bySide?.[side]; if (sideStats && sideStats.trades >= 8) factors.push(Number(sideStats.multiplier) || 1);
   const regimeStats = profile?.byRegime?.[regime]; if (regimeStats && regimeStats.trades >= 8) factors.push(Number(regimeStats.multiplier) || 1);
-  return Math.max(0.85, Math.min(1.15, factors.reduce((product, factor) => product * factor, 1)));
+  return Math.max(0.70, Math.min(1.30, factors.reduce((product, factor) => product * factor, 1)));
 }
 __name(adaptiveCandidateMultiplier, "adaptiveCandidateMultiplier");
 `;;

@@ -104,11 +104,11 @@ assert.equal(minimumMarginForMarketLeverage(context.LEVERUP_MARKET_MAX_LEVERAGE.
 assert.equal(minimumMarginForMarketLeverage(context.LEVERUP_MARKET_MAX_LEVERAGE.LIT), null);
 
 const stopLossMath = paperTradePnl({ side: "LONG", entryPrice: 100, entryMonUsd: 0.2, marginMon: 22, leverage: 50 }, 99.6, 0.2);
-assert.ok(Math.abs(stopLossMath.mon - (-4.4)) < 1e-9);
-assert.ok(Math.abs(stopLossMath.roiPct - (-20)) < 1e-9);
+assert.ok(Math.abs(stopLossMath.mon - (-5.05868)) < 1e-9);\nassert.ok(Math.abs(stopLossMath.grossMon - (-4.4)) < 1e-9);\nassert.ok(Math.abs(stopLossMath.feeMon - 0.65868) < 1e-9);
+assert.ok(Math.abs(stopLossMath.roiPct - (-22.994)) < 1e-9);
 const hundredXStopMath = paperTradePnl({ side: "LONG", entryPrice: 100, entryMonUsd: 0.2, marginMon: 11, leverage: 100 }, 99.6, 0.2);
-assert.ok(Math.abs(hundredXStopMath.mon - (-4.4)) < 1e-9);
-assert.ok(Math.abs(hundredXStopMath.roiPct - (-40)) < 1e-9);
+assert.ok(Math.abs(hundredXStopMath.mon - (-5.05868)) < 1e-9);
+assert.ok(Math.abs(hundredXStopMath.roiPct - (-45.988)) < 1e-9);
 
 const fifty = makeStorage();
 const opened50 = await openPaperTrade(fifty, params("BNB", "test-50"));
@@ -175,8 +175,8 @@ await managePaperTrades(stopStorage, { MON: 0.2, BNB: 99.6 }, stopNow, stopNow -
 const stopped = await stopStorage.get("ciel:paper:account:v1");
 assert.equal(stopped.trades[0].status, "CLOSED");
 assert.equal(stopped.trades[0].closeReason, "STOP_LOSS");
-assert.ok(Math.abs(stopped.realizedPnlMon - (-4.4)) < 1e-9);
-assert.ok(Math.abs(stopped.availableBalanceMon - 95.6) < 1e-9);
+assert.ok(Math.abs(stopped.realizedPnlMon - (-5.05868)) < 1e-9);
+assert.ok(Math.abs(stopped.availableBalanceMon - 94.94132) < 1e-9);
 
 // A take-profit close returns reserved margin plus gross P&L to free balance.
 const targetStorage = makeStorage();
@@ -185,8 +185,8 @@ const targetNow = targetOpen.trade.openedAtMs + 1_000;
 await managePaperTrades(targetStorage, { MON: 0.2, BNB: 100.81 }, targetNow, targetNow - 1_000, {});
 const targeted = await targetStorage.get("ciel:paper:account:v1");
 assert.equal(targeted.trades[0].closeReason, "TAKE_PROFIT");
-assert.ok(Math.abs(targeted.realizedPnlMon - 8.8) < 1e-9);
-assert.ok(Math.abs(targeted.availableBalanceMon - 108.8) < 1e-9);
+assert.ok(Math.abs(targeted.realizedPnlMon - 8.13736) < 1e-9);
+assert.ok(Math.abs(targeted.availableBalanceMon - 108.13736) < 1e-9);
 
 // A position is closed at its maximum hold when the feed is fresh.
 const holdStorage = makeStorage();
@@ -270,7 +270,7 @@ assert.ok(source.includes('paperResult.trade.leverage + "x · "'), "paper entry 
 assert.ok(source.includes("Reference price source: Hyperliquid mid; LeverUp settles against Pyth and applies per-pair pool slippage. Check LeverUp's live quote before entry."));
 assert.ok(source.includes("Hyperliquid market quality: 24h notional"));
 assert.ok(source.includes("AI evidence basis: CIEL technical signal, local forecast and Hyperliquid derivatives/order-book metrics only."));
-assert.ok(source.includes("Gross Hyperliquid-mid paper result; LeverUp Pyth/pool fills"));
+assert.ok(source.includes("Net mark-based result after estimated 3 bps-per-side trading fees"));
 assert.ok(source.includes("Paper results use Hyperliquid mids, not LeverUp Pyth/pool fills."));
 assert.equal(context.LEVERUP_MARKET_MAX_LEVERAGE.CASHCAT, 3);
 assert.equal(context.LEVERUP_MARKET_MAX_LEVERAGE.PONS, 3);

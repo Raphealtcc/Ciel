@@ -30,7 +30,12 @@ export async function purgePaperTrades({ storage, accountKey, prices, now = Date
       const marginMon = Number(trade.marginMon) || 0;
       const marginUsd = marginMon * Number(trade.entryMonUsd);
       const notionalUsd = marginUsd * Number(trade.leverage || 0);
-      const pnlMon = Math.max(-marginMon, notionalUsd * movePct / 100 / monUsd);
+      const grossPnlUsd = notionalUsd * movePct / 100;
+      const exitNotionalUsd = notionalUsd * current / Number(trade.entryPrice);
+      const feeUsd = Math.max(0, (notionalUsd + exitNotionalUsd) * 0.0003);
+      const feeMon = feeUsd / monUsd;
+      const grossPnlMon = grossPnlUsd / monUsd;
+      const pnlMon = Math.max(-marginMon, grossPnlMon - feeMon);
       const pnlUsd = pnlMon * monUsd;
       state.availableBalanceMon = Number(state.availableBalanceMon || 0) + marginMon + pnlMon;
       state.realizedPnlMon = Number(state.realizedPnlMon || 0) + pnlMon;
@@ -44,10 +49,15 @@ export async function purgePaperTrades({ storage, accountKey, prices, now = Date
       trade.exitMonUsd = monUsd;
       trade.closedAtMs = now;
       trade.closeReason = "MANUAL_PURGE";
-      trade.grossPnlMon = pnlMon;
-      trade.grossPnlUsd = pnlUsd;
+      trade.grossPnlMon = grossPnlMon;
+      trade.grossPnlUsd = grossPnlUsd;
+      trade.feeMon = feeMon;
+      trade.feeUsd = feeUsd;
+      trade.netPnlMon = pnlMon;
+      trade.netPnlUsd = pnlUsd;
+      trade.feeModelVersion = "LEVERUP_TAKER_3BPS_EACH_SIDE_V1";
       trade.returnOnMarginPct = marginMon > 0 ? pnlMon / marginMon * 100 : 0;
-      closed.push({ symbol: trade.symbol, side: trade.side, signalId: trade.signalId, exitPrice: current, pnlMon, pnlUsd, roiPct: trade.returnOnMarginPct });
+      closed.push({ symbol: trade.symbol, side: trade.side, signalId: trade.signalId, exitPrice: current, pnlMon, pnlUsd, grossPnlMon, feeMon, roiPct: trade.returnOnMarginPct });
       changed = true;
     }
     if (changed) {
