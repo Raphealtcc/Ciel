@@ -54,9 +54,9 @@ assert.ok(adaptiveStrategyPriority({strategy:"5M_TREND_CONTINUATION+BREAKOUT_RET
 assert.ok(adaptiveStrategyPriority({strategy:"5M_TREND+1M_PULLBACK+RECLAIM"})>adaptiveStrategyPriority({strategy:"MULTI_MARKET_LEVEL_SWEEP_RECLAIM"}));
 assert.ok(adaptiveStrategyPriority({strategy:"MULTI_MARKET_LEVEL_SWEEP_RECLAIM"})>adaptiveStrategyPriority({strategy:"1M_MICRO_MOMENTUM_BREAKOUT"}));
 assert.ok(source.includes("candidate.strategyPriority=adaptiveStrategyPriority(candidate)"),"strategy performance preference must affect ranking only");
-assert.ok(source.includes('["BTC","ETH","SOL","BNB","HYPE","ADA","PUMP", ...configuredWatchSymbols(env.WATCH_SYMBOLS)]'));
+assert.ok(source.includes('"BTC","ETH","SOL","BNB","HYPE","XRP","ONDO","KPEPE","TRX","AAVE","ADA","DOGE","LINK","PUMP","SEI","SUI","UNI","VIRTUAL", ...configuredWatchSymbols(env.WATCH_SYMBOLS)]'));
 assert.ok(source.includes("orderedSymbols"));
-assert.ok(source.includes('const trendEntryMarketSet = new Set(["BTC","ETH","SOL","BNB","HYPE","ADA","PUMP"])'));
+assert.ok(source.includes('const trendEntryMarketSet = new Set(["BTC","ETH","SOL","BNB","HYPE","XRP","ONDO","KPEPE","TRX","AAVE","ADA","DOGE","LINK","PUMP","SEI","SUI","UNI","VIRTUAL"])'));
 assert.ok(!source.includes("signal.confidence >= minimumConfidence"));
 assert.ok(!source.includes("scalp.confidence >= minimumConfidence"));
 assert.ok(!source.includes("continuation.confidence >= minimumConfidence"));
