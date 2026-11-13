@@ -75,7 +75,18 @@ export async function reviewLeverUpPositionWithGemini({ env, position, currentPr
   const cursorRaw = storage?.get ? await storage.get(cursorKey).catch(() => "0") : "0";
   const cursor = Math.max(0, Number(cursorRaw || 0)) % keys.length;
   const model = String(env?.GEMINI_MODEL || "gemini-2.5-flash").trim();
-  const actualFeeSnapshot = position.feeBreakdown || position.feeSnapshot || position.fees || null;
+  const rawPositionFeeFields = Object.fromEntries([
+    "openFeeRaw", "executionFeeRaw", "fundingFeeRaw", "holdingFeeRaw",
+    "accruedFundingFeeRaw", "accruedHoldingFeeRaw"
+  ].filter((field) => position[field] != null && String(position[field]) !== "")
+    .map((field) => [field, String(position[field])]));
+  const actualFeeSnapshot = position.feeBreakdown || position.feeSnapshot || position.fees ||
+    (Object.keys(rawPositionFeeFields).length ? {
+      marginToken: position.marginToken || null,
+      marginRaw: position.marginRaw || null,
+      leverage: position.leverage || null,
+      ...rawPositionFeeFields
+    } : null);
   const grossFavourableMovePct = Number(adaptive.favourablePct);
   const estimatedRoundTripFeePct = actualFeeSnapshot ? null : 0.06;
   const netFavourableMoveAfterEstimatedFeesPct = !actualFeeSnapshot && Number.isFinite(grossFavourableMovePct)

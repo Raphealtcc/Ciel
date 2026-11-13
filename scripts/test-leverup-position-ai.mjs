@@ -42,6 +42,33 @@ assert.equal(promptSnapshot.feeContext.estimatedRoundTripFeePct, 0.06);
 assert.equal(promptSnapshot.feeContext.grossFavourableMovePct, 0.08);
 assert.equal(promptSnapshot.feeContext.netFavourableMoveAfterEstimatedFeesPct, 0.02);
 assert.ok(firstPrompt.includes("Gross mark movement is not net profit"));
+
+let actualFeePrompt = "";
+const actualFeeReview = await reviewLeverUpPositionWithGemini({
+  env: { GEMINI_API_KEYS: "good-key", GEMINI_MODEL: "test-model", CIEL_STATE: storage },
+  position: {
+    positionHash: "0x" + "dd".repeat(32), symbol: "ETH", isLong: false,
+    marginToken: "LVMON", marginRaw: "1000000000000000000", leverage: 100,
+    openFeeRaw: "1200", executionFeeRaw: "300", fundingFeeRaw: "400",
+    holdingFeeRaw: "500", accruedFundingFeeRaw: "50", accruedHoldingFeeRaw: "60"
+  },
+  currentPriceRaw: "90",
+  adaptive: { favourablePct: 0.2 },
+  now: 30_000,
+  dependencies: {
+    fetchImpl: async (_url, options) => {
+      actualFeePrompt = JSON.parse(options.body).contents[0].parts[0].text;
+      return { ok: true, json: async () => ({ candidates: [{ content: { parts: [{ text: JSON.stringify({
+        action: "HOLD", confidence: 70, reversalConfirmed: false, reason: "Actual fee snapshot supplied."
+      }) }] } }] }) };
+    }
+  }
+});
+assert.equal(actualFeeReview.status, "REVIEWED");
+const actualFeeSnapshot = JSON.parse(actualFeePrompt.split("Position snapshot: ")[1]).feeContext;
+assert.equal(actualFeeSnapshot.estimatedRoundTripFeePct, null);
+assert.equal(actualFeeSnapshot.actualFeeSnapshot.marginToken, "LVMON");
+assert.equal(actualFeeSnapshot.actualFeeSnapshot.openFeeRaw, "1200");
 assert.equal(writes.get("ciel:leverup:gemini-position:key-cursor"), "0");
 assert.equal(writes.has("ciel:gemini:key-cursor"), false);
 const savedReview = JSON.parse(writes.get("ciel:leverup:gemini-review:last"));
