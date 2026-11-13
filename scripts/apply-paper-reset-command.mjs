@@ -9,9 +9,7 @@ const resetHandler = `async function handlePaperResetCommand(env, command) {
   try {
     const response = await feedStub(env).fetch("https://feed/paper/reset", { method: "POST" });
     const result = await response.json().catch(() => ({}));
-    if (!response.ok || result.ok !== true) {
-      throw new Error(result.detail || result.error || "Paper account reset returned HTTP " + response.status);
-    }
+    if (!response.ok || result.ok !== true) throw new Error(result.detail || result.error || "Paper reset returned HTTP " + response.status);
     await sendTelegram(env, [
       "🧪 PAPER ACCOUNT RESET COMPLETE",
       "Starting balance: " + Number(result.startingBalanceMon || 100).toFixed(3) + " MON",
@@ -21,7 +19,7 @@ const resetHandler = `async function handlePaperResetCommand(env, command) {
       "New account realized P&L: 0.000 MON",
       "New account win/loss counters: 0",
       "Live trading settings and live positions: untouched"
-    ].join("\\n"));
+    ].join("\n"));
   } catch (error) {
     await sendTelegram(env, "⚠️ Paper reset failed. The account reset was not confirmed. " + String(error).slice(0, 220));
   }
@@ -31,24 +29,21 @@ __name(handlePaperResetCommand, "handlePaperResetCommand");
 `;
 
 const commandAnchor = "async function handleCommand(env, text) {";
-if (source.split(commandAnchor).length !== 2) throw new Error("Paper reset command anchor mismatch");
-if (!source.includes('if (await handlePaperResetCommand(env, command)) return;')) {
-  source = source.replace(commandAnchor, resetHandler + commandAnchor);
-  const oldDispatch = "  if (await handleAdvisorCommand(env, text)) return;\\n  const command = (text.trim().split(/\\\\s+/, 1)[0] || \"\").split(\"@\")[0].toLowerCase();";
-  const newDispatch = "  const command = (text.trim().split(/\\\\s+/, 1)[0] || \"\").split(\"@\")[0].toLowerCase();\\n  if (await handlePaperResetCommand(env, command)) return;\\n  if (await handleAdvisorCommand(env, text)) return;";
-  if (!source.includes(oldDispatch)) throw new Error("Paper reset Telegram dispatch anchor mismatch");
-  source = source.replace(oldDispatch, newDispatch);
+const commandStart = source.indexOf(commandAnchor);
+if (commandStart < 0 || source.indexOf(commandAnchor, commandStart + 1) >= 0) throw new Error("Paper reset command anchor mismatch");
+if (!source.includes("if (await handlePaperResetCommand(env, command)) return;")) {
+  source = source.slice(0, commandStart) + resetHandler + source.slice(commandStart);
+  const dispatchStart = source.indexOf("  if (await handleAdvisorCommand(env, text)) return;", commandStart + resetHandler.length);
+  const commandLineStart = source.indexOf("  const command =", dispatchStart);
+  const commandLineEnd = source.indexOf("\n", commandLineStart);
+  if (dispatchStart < 0 || commandLineStart < 0 || commandLineEnd < 0) throw new Error("Paper reset dispatch anchor mismatch");
+  const commandLine = source.slice(commandLineStart, commandLineEnd);
+  source = source.slice(0, dispatchStart) + commandLine + "\n  if (await handlePaperResetCommand(env, command)) return;\n  if (await handleAdvisorCommand(env, text)) return;" + source.slice(commandLineEnd);
 }
-const helpAnchor = '      "/paperactive /paperdeactivate';
 if (!source.includes('"/paperreset')) {
-  const insertion = '      "/paperreset — reset paper account to 100 MON; preserve closed history",\\n';
-  const at = source.indexOf(helpAnchor);
-  if (at >= 0) source = source.slice(0, at) + insertion + source.slice(at);
-  else {
-    const testAnchor = '      "/test \\u2014 verify Telegram delivery",';
-    if (!source.includes(testAnchor)) throw new Error("Paper reset help anchor mismatch");
-    source = source.replace(testAnchor, insertion + testAnchor);
-  }
+  const testAnchor = '      "/test \\u2014 verify Telegram delivery",';
+  if (!source.includes(testAnchor)) throw new Error("Paper reset help anchor mismatch");
+  source = source.replace(testAnchor, '      "/paperreset — reset paper account to 100 MON; preserve closed history",\n' + testAnchor);
 }
 
 const oldReset = `          const closedTrades = Array.isArray(previous?.trades) ? previous.trades.filter((trade) => trade?.status === "CLOSED") : [];
@@ -77,26 +72,25 @@ const newReset = `          const previousTrades = Array.isArray(previous?.trade
           state.closedCount = 0;`;
 if (!source.includes(oldReset)) throw new Error("Durable Object reset implementation anchor mismatch");
 source = source.replace(oldReset, newReset);
-source = source.replace(
-  'openPositionsClosed: Array.isArray(previous?.trades) ? previous.trades.filter((trade) => trade?.status === "OPEN").length : 0, historicalClosedTradesPreserved: closedTrades.length',
-  'openPositionsClosed: openTrades.length, historicalClosedTradesPreserved: closedTrades.length, resetClosedTradesRecorded: resetClosedTrades.length'
-);
+const oldResult = 'openPositionsClosed: Array.isArray(previous?.trades) ? previous.trades.filter((trade) => trade?.status === "OPEN").length : 0, historicalClosedTradesPreserved: closedTrades.length';
+if (!source.includes(oldResult)) throw new Error("Durable Object reset result anchor mismatch");
+source = source.replace(oldResult, "openPositionsClosed: openTrades.length, historicalClosedTradesPreserved: closedTrades.length, resetClosedTradesRecorded: resetClosedTrades.length");
 
 const routeStart = source.indexOf('    if (url.pathname === "/internal/paper-reset"');
 if (routeStart >= 0) {
   const routeEnd = source.indexOf('    if (url.pathname === "/telegram/webhook")', routeStart);
-  if (routeEnd < 0) throw new Error("Could not locate end of obsolete D1 reset route");
+  if (routeEnd < 0) throw new Error("Could not locate obsolete D1 reset route end");
   source = source.slice(0, routeStart) + source.slice(routeEnd);
 }
 const scheduledStart = source.indexOf('        const authorization = await env.DB.prepare("SELECT token_hash FROM paper_reset_authorizations');
 if (scheduledStart >= 0) {
-  const scheduledEndMarker = '          console.log("CIEL paper account reset completed: " + JSON.stringify(resetResult));\\n        }\\n';
-  const scheduledEnd = source.indexOf(scheduledEndMarker, scheduledStart);
-  if (scheduledEnd < 0) throw new Error("Could not locate obsolete scheduled D1 reset block end");
-  source = source.slice(0, scheduledStart) + source.slice(scheduledEnd + scheduledEndMarker.length);
+  const logAt = source.indexOf('          console.log("CIEL paper account reset completed: " + JSON.stringify(resetResult));', scheduledStart);
+  const blockEnd = logAt >= 0 ? source.indexOf("\n        }\n", logAt) : -1;
+  if (logAt < 0 || blockEnd < 0) throw new Error("Could not locate obsolete scheduled D1 reset block end");
+  source = source.slice(0, scheduledStart) + source.slice(blockEnd + "\n        }\n".length);
 }
-if (source.includes('SELECT token_hash FROM paper_reset_authorizations')) {
-  throw new Error("Obsolete D1 paper-reset authorization query remains in Worker");
+if (source.includes("SELECT token_hash FROM paper_reset_authorizations") || source.includes('url.pathname === "/internal/paper-reset"')) {
+  throw new Error("Obsolete D1 paper-reset path remains in Worker");
 }
 await writeFile(file, source);
-console.log("Added authorised Telegram /paperreset; paper state remains in Durable Object storage; removed D1 reset route and cron query.");
+console.log("Added Telegram /paperreset, closed open paper trades in Durable Object history, and removed D1 reset polling.");
