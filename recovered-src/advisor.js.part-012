@@ -32,7 +32,7 @@ function eventFingerprint(articles) {
   return (hash>>>0).toString(16).padStart(8,"0");
 }
 async function reviewMarketEvent(env, bundle) {
-  const keys=[...new Set(String(env.GEMINI_API_KEYS||"").split(/[,;\n]+/).map(x=>x.trim()).filter(Boolean))];
+  const keys=getGeminiApiKeys(env);
   const model=(env.GEMINI_MODEL||"gemini-3.8-flash").trim();
   if(!keys.length)return {ok:false,reason:"No Gemini key configured."};
   const cooldownKey="ciel:gemini:cooldown";
