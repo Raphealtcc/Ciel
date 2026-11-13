@@ -27,6 +27,12 @@ source = source.replace(oldReset, newReset);
 const oldResult = "openPositionsClosed: Array.isArray(previous?.trades) ? previous.trades.filter((trade) => trade?.status === \"OPEN\").length : 0, historicalClosedTradesPreserved: closedTrades.length";
 if (!source.includes(oldResult)) throw new Error("Durable Object reset result anchor mismatch");
 source = source.replace(oldResult, "openPositionsClosed: openTrades.length, historicalClosedTradesPreserved: closedTrades.length, resetClosedTradesRecorded: resetClosedTrades.length");
+const oldSummary = "  const closedTrades = (state.trades || []).filter((trade) => trade.status === \"CLOSED\");";
+const newSummary = "  const allClosedTrades = (state.trades || []).filter((trade) => trade.status === \"CLOSED\");" + NL +
+  "  const resetAtMs = Number(state.resetAtMs) || 0;" + NL +
+  "  const closedTrades = allClosedTrades.filter((trade) => !trade.resetClosed && (!resetAtMs || Number(trade.closedAtMs || 0) >= resetAtMs));";
+if (!source.includes(oldSummary)) throw new Error("Paper summary session-counter anchor mismatch");
+source = source.replace(oldSummary, newSummary);
 const routeStart = source.indexOf('    if (url.pathname === "/internal/paper-reset"');
 if (routeStart >= 0) {
   const routeEnd = source.indexOf('    if (url.pathname === "/telegram/webhook")', routeStart);
