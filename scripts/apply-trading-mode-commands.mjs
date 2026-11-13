@@ -10,6 +10,35 @@ if (source.includes(writeOnlyImport)) source = source.replace(writeOnlyImport, i
 else if (source.includes(readOnlyImport)) source = source.replace(readOnlyImport, importLine);
 else if (!source.includes(importLine)) source = importLine + "\n" + source;
 
+const paperBalanceHelper = `async function handlePaperBalanceCommand(env, command) {
+  if (command !== "/paperbalance") return false;
+  try {
+    const response = await feedStub2(env).fetch("https://feed/paper/profits");
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || data.ok !== true) throw new Error(data.detail || data.error || "Paper ledger returned HTTP " + response.status);
+    const signed = (value) => (Number(value) > 0 ? "+" : "") + Number(value).toFixed(3);
+    const open = Array.isArray(data.openTrades) ? data.openTrades : [];
+    const lines = [
+      "CIEL PAPER BALANCE",
+      "Available: " + Number(data.availableBalanceMon || 0).toFixed(3) + " MON",
+      "Reserved margin: " + Number(data.openMarginMon || 0).toFixed(3) + " MON",
+      "Realized NET P&L: " + signed(data.realizedPnlMon || 0) + " MON",
+      "Unrealized NET P&L: " + (data.unrealizedPnlMon === null ? "unavailable (stale/missing mark)" : signed(data.unrealizedPnlMon) + " MON"),
+      "Total NET P&L: " + (data.totalPnlMon === null ? "unavailable" : signed(data.totalPnlMon) + " MON"),
+      "Equity: " + (data.equityMon === null ? "unavailable" : Number(data.equityMon).toFixed(3) + " MON"),
+      "Closed: " + Number(data.closedCount || 0) + " | net wins " + Number(data.wins || 0) + " | net losses " + Number(data.losses || 0),
+      "Open positions: " + (open.length ? open.map((trade) => String(trade.side) + " " + String(trade.symbol) + " (" + (trade.pnlMon === null ? "mark unavailable" : signed(trade.pnlMon) + " MON net") + ")").join(", ") : "none"),
+      "Fee model: estimated 3 bps per side deducted. Funding, holding fees, oracle costs and slippage are not included."
+    ];
+    await sendTelegram(env, lines.join("\\n"));
+  } catch (error) {
+    await sendTelegram(env, "Paper balance unavailable: " + String(error).slice(0, 220) + ". The paper ledger was not changed.");
+  }
+  return true;
+}
+__name(handlePaperBalanceCommand, "handlePaperBalanceCommand");
+`;
+
 const geminiStatusHelper = `async function handleGeminiStatusCommand(env, command) {
   if (command !== "/geministatus") return false;
   const keys = [...new Set(String(env.GEMINI_API_KEYS || "").split(/[,;\\n]+/).map((key) => key.trim()).filter(Boolean))];
@@ -138,10 +167,12 @@ function replaceNamedHandler(source, name, replacement, anchor) {
   return source.slice(0, start) + replacement + source.slice(end + endMarker.length);
 }
 source = replaceNamedHandler(source, "handleGeminiStatusCommand", geminiStatusHelper, anchor);
+source = replaceNamedHandler(source, "handlePaperBalanceCommand", paperBalanceHelper, anchor);
 source = replaceNamedHandler(source, "handleTradingModeCommand", helper, anchor);
 
 const dispatch = '  if (await handleAdvisorCommand(env, text)) return;\n  const command = (text.trim().split(/\\s+/, 1)[0] || "").split("@")[0].toLowerCase();';
-const dispatchReplacement = '  const command = (text.trim().split(/\\s+/, 1)[0] || "").split("@")[0].toLowerCase();\n  if (await handleGeminiStatusCommand(env, command)) return;\n  if (await handleTradingModeCommand(env, command)) return;\n  if (await handleAdvisorCommand(env, text)) return;';
+const dispatchReplacement = '  const command = (text.trim().split(/\\s+/, 1)[0] || "").split("@")[0].toLowerCase();\n  if (await handlePaperBalanceCommand(env, command)) return;
+  if (await handleGeminiStatusCommand(env, command)) return;\n  if (await handleTradingModeCommand(env, command)) return;\n  if (await handleAdvisorCommand(env, text)) return;';
 if (source.includes(dispatch)) source = source.replace(dispatch, dispatchReplacement);
 else if (!source.includes("if (await handleTradingModeCommand(env, command)) return;")) throw new Error("Telegram command dispatch anchor mismatch");
 

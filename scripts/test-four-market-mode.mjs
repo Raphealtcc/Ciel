@@ -3,15 +3,15 @@ import { readFile } from "node:fs/promises";
 import { isTemporaryMarketAllowed, restrictTemporaryMarketUniverse, TEMPORARY_MARKET_ALLOWLIST } from "../src/market-universe.js";
 import { prepareLeverUpAdvisorPlan } from "../src/leverup-advisor.js";
 
-const enabled = ["BTC", "ETH", "SOL", "BNB", "HYPE", "ZEC", "ADA", "PUMP"];
+const enabled = ["BTC", "ETH", "SOL", "BNB", "HYPE", "ADA", "PUMP"];
 assert.deepEqual(TEMPORARY_MARKET_ALLOWLIST, enabled);
-assert.deepEqual(restrictTemporaryMarketUniverse(["BTC", "XRP", "eth", "SOL", "BNB", "HYPE", "ZEC", "DOGE", "BTC"]), enabled);
+assert.deepEqual(restrictTemporaryMarketUniverse(["BTC", "XRP", "eth", "SOL", "BNB", "HYPE", "DOGE", "BTC"]), enabled);
 for (const symbol of enabled) assert.equal(isTemporaryMarketAllowed(symbol), true);
 for (const symbol of ["XRP", "MON", "DOGE", ""]) assert.equal(isTemporaryMarketAllowed(symbol), false);
 const blocked = await prepareLeverUpAdvisorPlan({env:{},candidate:{symbol:"XRP",side:"LONG"},reviewed:{verdict:"APPROVE"},signalId:"TEMP-ALLOWLIST-TEST",now:1_800_000_000_000});
 assert.equal(blocked.status,"BLOCKED_TEMPORARY_MARKET_UNIVERSE");
 const native=await readFile("src/leverup-native-feed.js","utf8");
-assert.ok(native.includes('restrictTemporaryMarketUniverse(["BTC", "ETH", "SOL", "BNB", "HYPE", "ZEC", "ADA", "PUMP", ...watchValues.map(upper)])'));
+assert.ok(native.includes('restrictTemporaryMarketUniverse(["BTC", "ETH", "SOL", "BNB", "HYPE", "ADA", "PUMP", ...watchValues.map(upper)])'));
 const worker=await readFile("reconstructed/patched-worker.js","utf8");
 assert.ok(worker.includes("restrictTemporaryMarketUniverse([...new Set"));
 assert.ok(worker.includes('return [...restrictTemporaryMarketUniverse([...new Set(["BTC","ETH","SOL","BNB","HYPE","ZEC", ...parsed])]), "MON"];'));
@@ -19,7 +19,7 @@ assert.ok(worker.includes("Market is outside the enabled eight-market universe. 
 assert.ok(worker.includes("rows.results = (rows.results || []).filter((position) => isTemporaryMarketAllowed(position.symbol))"));
 assert.ok(worker.includes("isTemporaryMarketAllowed(p.symbol)"));
 assert.ok(worker.includes("outside the enabled eight-market universe"));
-assert.ok(worker.includes('new Set(["BTC", "ETH", "MON", "SOL", "BNB", "HYPE", "ZEC", "ADA", "PUMP"])'));
+assert.ok(worker.includes('new Set(["BTC", "ETH", "MON", "SOL", "BNB", "HYPE", "ADA", "PUMP"])'));
 assert.ok(worker.includes("if (!isTemporaryMarketAllowed(candidate.symbol)) continue;"));
 const recovered=await readFile("recovered-src/symbols.js.part-001","utf8");
 assert.ok(recovered.includes("HYPE: 50") && recovered.includes("ZEC: 25"));

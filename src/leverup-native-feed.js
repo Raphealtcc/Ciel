@@ -106,7 +106,7 @@ export async function runLeverUpNativeSampler({ env, now = Date.now(), dependenc
   if (!env?.HYPERLIQUID_FEED?.get || !env?.CIEL_STATE?.put) throw new Error("LEVERUP_NATIVE_FEED_BINDINGS_MISSING");
   const sampleAt = Math.floor(now / SAMPLE_INTERVAL_MS) * SAMPLE_INTERVAL_MS;
   const fetchImpl = dependencies.fetchImpl || fetch;
-  const configuredWatch = String(env.WATCH_SYMBOLS || "BTC,ETH,MON,BNB,XRP,HYPE,ONDO,KPEPE,QNT,ZEC,TRX,AAVE,ADA,CASHCAT,DOGE,LINK,LIT,PONS,PUMP,SEI,SOL,SUI,UNI,VIRTUAL,XMR").trim();
+  const configuredWatch = String(env.WATCH_SYMBOLS || "BTC,ETH,MON,BNB,XRP,HYPE,ONDO,KPEPE,QNT,TRX,AAVE,ADA,CASHCAT,DOGE,LINK,LIT,PONS,PUMP,SEI,SOL,SUI,UNI,VIRTUAL,XMR").trim();
   let watchValues;
   try {
     const parsed = JSON.parse(configuredWatch);

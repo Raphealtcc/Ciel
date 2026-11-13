@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import vm from "node:vm";
 
 const source = await readFile("reconstructed/patched-worker.js", "utf8");
-assert.ok(source.includes('new Set(["BTC", "ETH", "MON", "SOL", "BNB", "HYPE", "ZEC"])'), "SOL candle history must be added without dropping MON");
+assert.ok(source.includes('new Set(["BTC", "ETH", "MON", "SOL", "BNB", "HYPE"])'), "SOL candle history must be added without dropping MON");
 assert.ok(source.includes('interval: "1m"'));
 assert.ok(source.includes("this.coreScalpCandles[symbol]"), "1m scalp candles must be retained in Durable Object state");
 assert.ok(source.includes('this.state.storage.put("coreScalpCandles", this.coreScalpCandles)'), "1m scalp candle history must survive Durable Object restarts");

@@ -21,7 +21,7 @@ const scalpWriter = worker.slice(worker.indexOf("async writeCoreScalpCandles(now
 assert.ok(scalpWriter.includes("filter((symbol) => Number(this.latest[symbol]) > 0)"));
 assert.ok(!scalpWriter.includes("minLeverage"));
 assert.ok(!scalpWriter.includes("LEVERUP_MARKET_MAX_LEVERAGE[symbol]"));
-assert.ok(scalpWriter.includes('const symbols = ["BTC", "ETH", "SOL", "BNB", "HYPE", "ZEC", "ADA", "PUMP"]'));
+assert.ok(scalpWriter.includes('const symbols = ["BTC", "ETH", "SOL", "BNB", "HYPE", "ADA", "PUMP"]'));
 assert.ok(scalpWriter.includes("CIEL_CORE_SCALP_1M_EMPTY"));
 assert.ok(scalpWriter.includes("if (next.length !== existing.length || nextLast !== previousLast) updated = true;"));
 assert.ok(worker.includes("this.coreTrendCandles = values[24] || {};"));

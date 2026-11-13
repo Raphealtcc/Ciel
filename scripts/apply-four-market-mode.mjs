@@ -23,7 +23,7 @@ worker = once(worker,
 
 worker = once(worker,
   'async function openPaperTrade(storage, params) {\n  if (!storage) return { opened: false, reason: "Durable Object paper storage is unavailable." };',
-  'async function openPaperTrade(storage, params) {\n  if (!["BTC","ETH","SOL","BNB","HYPE","ZEC","ADA","PUMP"].includes(String(params?.symbol || "").trim().toUpperCase())) return { opened: false, reason: "Market is outside the enabled eight-market universe. Unsupported symbol." };\n  if (!storage) return { opened: false, reason: "Durable Object paper storage is unavailable." };',
+  'async function openPaperTrade(storage, params) {\n  if (!["BTC","ETH","SOL","BNB","HYPE","ADA","PUMP"].includes(String(params?.symbol || "").trim().toUpperCase())) return { opened: false, reason: "Market is outside the enabled seven-market universe. Unsupported symbol." };\n  if (!storage) return { opened: false, reason: "Durable Object paper storage is unavailable." };',
   "hard-block non-core paper entries");
 
 worker = once(worker,
@@ -38,7 +38,7 @@ worker = once(worker,
 
 worker = once(worker,
   '    if (!proposal) return { handled: true, removeButtons: true, reply: "This proposal has expired or is no longer pending." };',
-  '    if (!proposal) return { handled: true, removeButtons: true, reply: "This proposal has expired or is no longer pending." };\n    if (!isTemporaryMarketAllowed(proposal.symbol)) return { handled: true, removeButtons: true, reply: "This proposal is outside the enabled eight-market universe." };',
+  '    if (!proposal) return { handled: true, removeButtons: true, reply: "This proposal has expired or is no longer pending." };\n    if (!isTemporaryMarketAllowed(proposal.symbol)) return { handled: true, removeButtons: true, reply: "This proposal is outside the enabled seven-market universe." };',
   "reject stale non-core Telegram proposal buttons");
 
 await writeFile(workerPath, worker);
@@ -49,7 +49,7 @@ const advisorImport = 'import { isTemporaryMarketAllowed } from "./market-univer
 if (!advisor.includes(advisorImport)) advisor = advisorImport + "\n" + advisor;
 advisor = once(advisor,
   '  if (!candidate?.symbol) return result("BLOCKED", "CIEL candidate symbol is missing.");',
-  '  if (!candidate?.symbol) return result("BLOCKED", "CIEL candidate symbol is missing.");\n  if (!isTemporaryMarketAllowed(candidate.symbol)) return result("BLOCKED_TEMPORARY_MARKET_UNIVERSE", "Only BTC, ETH, SOL, BNB, HYPE, ZEC, ADA and PUMP are eligible for new LeverUp entries.");',
+  '  if (!candidate?.symbol) return result("BLOCKED", "CIEL candidate symbol is missing.");\n  if (!isTemporaryMarketAllowed(candidate.symbol)) return result("BLOCKED_TEMPORARY_MARKET_UNIVERSE", "Only BTC, ETH, SOL, BNB, HYPE, ADA and PUMP are eligible for new LeverUp entries.");',
   "hard-block non-core live and manual LeverUp entries");
 await writeFile(advisorPath, advisor);
 
@@ -59,8 +59,8 @@ const nativeImport = 'import { restrictTemporaryMarketUniverse } from "./market-
 if (!native.includes(nativeImport)) native = nativeImport + "\n" + native;
 native = once(native,
   '  const watch = [...new Set(watchValues.map(upper).filter(Boolean))];',
-  '  const watch = restrictTemporaryMarketUniverse(["BTC", "ETH", "SOL", "BNB", "HYPE", "ZEC", "ADA", "PUMP", ...watchValues.map(upper)]);',
+  '  const watch = restrictTemporaryMarketUniverse(["BTC", "ETH", "SOL", "BNB", "HYPE", "ADA", "PUMP", ...watchValues.map(upper)]);',
   "restrict LeverUp native sampling to the eight enabled markets");
 await writeFile(nativePath, native);
 
-console.log("Applied eight-market universe: BTC, ETH, SOL, BNB, HYPE, ZEC, ADA and PUMP. Existing-position management is unchanged.");
+console.log("Applied seven-market universe: BTC, ETH, SOL, BNB, HYPE, ADA and PUMP. Existing-position management is unchanged.");
