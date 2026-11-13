@@ -28,8 +28,8 @@ assert.equal(breadth.excludedSymbol, "BTC");
 
 const coreBreadth = calculateCrossAssetBreadth({ history, symbols: ["BTC","ETH","SOL","BNB","HYPE","ADA","PUMP"], excludeSymbol: "BTC", volumeBySymbol, now });
 assert.equal(coreBreadth.status, "READY");
-assert.equal(coreBreadth.n5, 7);
-assert.equal(coreBreadth.n15, 7);
+assert.equal(coreBreadth.n5, 6);
+assert.equal(coreBreadth.n15, 6);
 const insufficient = calculateCrossAssetBreadth({ history, symbols: symbols.slice(0, 2), excludeSymbol: "BTC", now });
 assert.equal(insufficient.status, "INSUFFICIENT_COVERAGE");
 const staleHistory = Object.fromEntries(symbols.map((s) => [s, [{t:now-30*60000,p:100},{t:now-20*60000,p:101},{t:now-10*60000,p:102}]]));
