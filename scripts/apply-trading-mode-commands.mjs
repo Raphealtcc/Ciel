@@ -9,8 +9,6 @@ const readOnlyImport = 'import { readTradingControl } from "../src/trading-contr
 if (source.includes(writeOnlyImport)) source = source.replace(writeOnlyImport, importLine);
 else if (source.includes(readOnlyImport)) source = source.replace(readOnlyImport, importLine);
 else if (!source.includes(importLine)) source = importLine + "\n" + source;
-const geminiKeysImport = 'import { getGeminiApiKeys } from "../src/leverup-position-ai.js";';
-if (!source.includes(geminiKeysImport)) source = geminiKeysImport + "\n" + source;
 
 const paperBalanceHelper = `async function handlePaperBalanceCommand(env, command) {
   if (command !== "/paperbalance") return false;
