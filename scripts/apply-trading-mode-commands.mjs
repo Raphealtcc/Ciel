@@ -9,6 +9,8 @@ const readOnlyImport = 'import { readTradingControl } from "../src/trading-contr
 if (source.includes(writeOnlyImport)) source = source.replace(writeOnlyImport, importLine);
 else if (source.includes(readOnlyImport)) source = source.replace(readOnlyImport, importLine);
 else if (!source.includes(importLine)) source = importLine + "\n" + source;
+const geminiKeysImport = 'import { getGeminiApiKeys } from "../src/leverup-position-ai.js";';
+if (!source.includes(geminiKeysImport)) source = geminiKeysImport + "\n" + source;
 
 const paperBalanceHelper = `async function handlePaperBalanceCommand(env, command) {
   if (command !== "/paperbalance") return false;
@@ -41,7 +43,7 @@ __name(handlePaperBalanceCommand, "handlePaperBalanceCommand");
 
 const geminiStatusHelper = `async function handleGeminiStatusCommand(env, command) {
   if (command !== "/geministatus") return false;
-  const keys = [...new Set(String(env.GEMINI_API_KEYS || "").split(/[,;\\n]+/).map((key) => key.trim()).filter(Boolean))];
+  const keys = getGeminiApiKeys(env);
   const safeGet = async (key, type) => { try { return await env?.CIEL_STATE?.get(key, type); } catch { return null; } };
   const [lastReview, manager, historyRaw, liveOverride, entryOverride, paper] = await Promise.all([
     safeGet("ciel:leverup:gemini-review:last", "json"),
