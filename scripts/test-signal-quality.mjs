@@ -31,7 +31,7 @@ assert.match(good.interpretation, /not a win probability/i);
 
 const missingForecast = evaluateSignalQuality({ ...base, forecast: { available: false, medianReturnPct: null } });
 assert.equal(missingForecast.allowed, true, "a missing statistical forecast should reduce confidence, not suppress a valid technical setup");
-assert.ok(missingForecast.score < good.score);
+assert.ok(missingForecast.score < good.score);\nassert.ok(missingForecast.threshold < good.threshold);
 
 const missingDerivatives = evaluateSignalQuality({ ...base, market: { spreadBps: 3, topDepthUsd: 8000, volume: 5000000 } });
 assert.equal(missingDerivatives.allowed, true, "missing derivatives context should be a score penalty, not an automatic rejection");
@@ -73,6 +73,19 @@ const matching180mWeakShadow = evaluateSignalQuality({
 });
 assert.equal(matching180mWeakShadow.allowed, true, "matching-horizon shadow weakness must not hard-disable all setups");
 assert.ok(matching180mWeakShadow.score < shortHorizonShadowDoesNotVetoTrendHold.score);
+const pullbackShortHorizonShadow = evaluateSignalQuality({
+  ...base,
+  candidate: { ...base.candidate, strategy: "5M_TREND+1M_PULLBACK+RECLAIM", holdMinutes: 180 },
+  strategyStats: { "5M_TREND+1M_PULLBACK+RECLAIM": { sampleCount: 40, expectancyR: -0.2, winRate: 0.25, horizonMinutes: 15 } },
+});
+assert.equal(pullbackShortHorizonShadow.shadowPenalty, 0, "15-minute pullback outcomes must not be applied to a 180-minute trend hold");
+const pullbackMatchingHorizon = evaluateSignalQuality({
+  ...base,
+  candidate: { ...base.candidate, strategy: "5M_TREND+1M_PULLBACK+RECLAIM", holdMinutes: 180 },
+  strategyStats: { "5M_TREND+1M_PULLBACK+RECLAIM": { sampleCount: 40, expectancyR: -0.2, winRate: 0.25, horizonMinutes: 180 } },
+});
+assert.equal(pullbackMatchingHorizon.shadowPenalty, 5, "matching 180-minute pullback outcomes should inform the ranking score");
+
 
 const weakTrendForecast = evaluateSignalQuality({ ...base, forecast: { available: true, medianReturnPct: 0.03 } });
 assert.equal(weakTrendForecast.allowed, true, "neutral forecast should not erase independent trend structure");
