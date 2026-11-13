@@ -75,7 +75,7 @@ const historyMapping = \`  const historyTrades = includeHistory
     const wins = pricedClosed.filter((trade) => Number(trade.pnlMon) > 0);
     const losses = pricedClosed.filter((trade) => Number(trade.pnlMon) < 0);
     return {
-      count: priced.length, totalClosed: recentClosed.length, feeDataUnavailableCount: unavailable,
+      count: pricedClosed.length, totalClosed: recentClosed.length, feeDataUnavailableCount: unavailable,
       wins: wins.length, losses: losses.length,
       totalPnlMon: pricedClosed.reduce((sum, trade) => sum + Number(trade.pnlMon || 0), 0),
       averageWinMon: wins.reduce((sum, trade) => sum + Number(trade.pnlMon), 0) / Math.max(1, wins.length),
