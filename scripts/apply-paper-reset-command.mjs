@@ -1,34 +1,9 @@
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-
 const NL = String.fromCharCode(10);
 const file = path.join(process.cwd(), "reconstructed", "patched-worker.js");
 let source = await readFile(file, "utf8");
-
-const resetHandler = String.raw\`async function handlePaperResetCommand(env, command) {
-  if (command !== "/paperreset") return false;
-  try {
-    const response = await feedStub(env).fetch("https://feed/paper/reset", { method: "POST" });
-    const result = await response.json().catch(() => ({}));
-    if (!response.ok || result.ok !== true) throw new Error(result.detail || result.error || "Paper reset returned HTTP " + response.status);
-    await sendTelegram(env, [
-      "🧪 PAPER ACCOUNT RESET COMPLETE",
-      "Starting balance: " + Number(result.startingBalanceMon || 100).toFixed(3) + " MON",
-      "Available balance: " + Number(result.availableBalanceMon || 100).toFixed(3) + " MON",
-      "Open paper positions closed: " + Number(result.openPositionsClosed || 0),
-      "Closed-trade history retained: " + Number(result.historicalClosedTradesPreserved || 0),
-      "New account realized P&L: 0.000 MON",
-      "New account win/loss counters: 0",
-      "Live trading settings and live positions: untouched"
-    ].join("\\n"));
-  } catch (error) {
-    await sendTelegram(env, "⚠️ Paper reset failed. The account reset was not confirmed. " + String(error).slice(0, 220));
-  }
-  return true;
-}
-__name(handlePaperResetCommand, "handlePaperResetCommand");
-\`;
-
+const resetHandler = "async function handlePaperResetCommand(env, command) {\n  if (command !== \"/paperreset\") return false;\n  try {\n    const response = await feedStub(env).fetch(\"https://feed/paper/reset\", { method: \"POST\" });\n    const result = await response.json().catch(() => ({}));\n    if (!response.ok || result.ok !== true) throw new Error(result.detail || result.error || \"Paper reset returned HTTP \" + response.status);\n    await sendTelegram(env, [\n      \"🧪 PAPER ACCOUNT RESET COMPLETE\",\n      \"Starting balance: \" + Number(result.startingBalanceMon || 100).toFixed(3) + \" MON\",\n      \"Available balance: \" + Number(result.availableBalanceMon || 100).toFixed(3) + \" MON\",\n      \"Open paper positions closed: \" + Number(result.openPositionsClosed || 0),\n      \"Closed-trade history retained: \" + Number(result.historicalClosedTradesPreserved || 0),\n      \"New account realized P&L: 0.000 MON\",\n      \"New account win/loss counters: 0\",\n      \"Live trading settings and live positions: untouched\"\n    ].join(\"\\n\"));\n  } catch (error) {\n    await sendTelegram(env, \"⚠️ Paper reset failed. The account reset was not confirmed. \" + String(error).slice(0, 220));\n  }\n  return true;\n}\n__name(handlePaperResetCommand, \"handlePaperResetCommand\");\n";
 const commandAnchor = "async function handleCommand(env, text) {";
 const commandStart = source.indexOf(commandAnchor);
 if (commandStart < 0 || source.indexOf(commandAnchor, commandStart + 1) >= 0) throw new Error("Paper reset command anchor mismatch");
@@ -44,41 +19,17 @@ if (!source.includes("if (await handlePaperResetCommand(env, command)) return;")
     "  if (await handleAdvisorCommand(env, text)) return;" + source.slice(commandLineEnd);
 }
 if (!source.includes('"/paperreset')) {
-  const testAnchor = String.raw\`      "/test \u2014 verify Telegram delivery",\`;
+  const testAnchor = String.fromCharCode(32,32,32,32,32,32,34) + "/test " + String.fromCharCode(92) + "u2014 verify Telegram delivery" + String.fromCharCode(34) + ",";
   if (!source.includes(testAnchor)) throw new Error("Paper reset help anchor mismatch");
   source = source.replace(testAnchor, '      "/paperreset — reset paper account to 100 MON; preserve closed history",' + NL + testAnchor);
 }
-
-const oldReset = String.raw\`          const closedTrades = Array.isArray(previous?.trades) ? previous.trades.filter((trade) => trade?.status === "CLOSED") : [];
-          const now = Date.now();
-          const state = freshPaperState(now);
-          state.trades = closedTrades.slice(0, 1000);
-          state.closedCount = 0;\`;
-const newReset = String.raw\`          const previousTrades = Array.isArray(previous?.trades) ? previous.trades : [];
-          const closedTrades = previousTrades.filter((trade) => trade?.status === "CLOSED");
-          const openTrades = previousTrades.filter((trade) => trade?.status === "OPEN");
-          const now = Date.now();
-          const resetClosedTrades = openTrades.map((trade) => ({
-            ...trade,
-            status: "CLOSED",
-            exitPrice: Number(trade.entryPrice) || null,
-            exitMonUsd: Number(trade.entryMonUsd) || null,
-            closedAtMs: now,
-            closeReason: "ACCOUNT_RESET",
-            resetClosed: true,
-            grossPnlMon: 0,
-            grossPnlUsd: 0,
-            returnOnMarginPct: 0
-          }));
-          const state = freshPaperState(now);
-          state.trades = [...resetClosedTrades, ...closedTrades].slice(0, 1000);
-          state.closedCount = 0;\`;
+const oldReset = "          const closedTrades = Array.isArray(previous?.trades) ? previous.trades.filter((trade) => trade?.status === \"CLOSED\") : [];\n          const now = Date.now();\n          const state = freshPaperState(now);\n          state.trades = closedTrades.slice(0, 1000);\n          state.closedCount = 0;";
+const newReset = "          const previousTrades = Array.isArray(previous?.trades) ? previous.trades : [];\n          const closedTrades = previousTrades.filter((trade) => trade?.status === \"CLOSED\");\n          const openTrades = previousTrades.filter((trade) => trade?.status === \"OPEN\");\n          const now = Date.now();\n          const resetClosedTrades = openTrades.map((trade) => ({\n            ...trade,\n            status: \"CLOSED\",\n            exitPrice: Number(trade.entryPrice) || null,\n            exitMonUsd: Number(trade.entryMonUsd) || null,\n            closedAtMs: now,\n            closeReason: \"ACCOUNT_RESET\",\n            resetClosed: true,\n            grossPnlMon: 0,\n            grossPnlUsd: 0,\n            returnOnMarginPct: 0\n          }));\n          const state = freshPaperState(now);\n          state.trades = [...resetClosedTrades, ...closedTrades].slice(0, 1000);\n          state.closedCount = 0;";
 if (!source.includes(oldReset)) throw new Error("Durable Object reset implementation anchor mismatch");
 source = source.replace(oldReset, newReset);
-const oldResult = String.raw\`openPositionsClosed: Array.isArray(previous?.trades) ? previous.trades.filter((trade) => trade?.status === "OPEN").length : 0, historicalClosedTradesPreserved: closedTrades.length\`;
+const oldResult = "openPositionsClosed: Array.isArray(previous?.trades) ? previous.trades.filter((trade) => trade?.status === \"OPEN\").length : 0, historicalClosedTradesPreserved: closedTrades.length";
 if (!source.includes(oldResult)) throw new Error("Durable Object reset result anchor mismatch");
 source = source.replace(oldResult, "openPositionsClosed: openTrades.length, historicalClosedTradesPreserved: closedTrades.length, resetClosedTradesRecorded: resetClosedTrades.length");
-
 const routeStart = source.indexOf('    if (url.pathname === "/internal/paper-reset"');
 if (routeStart >= 0) {
   const routeEnd = source.indexOf('    if (url.pathname === "/telegram/webhook")', routeStart);
