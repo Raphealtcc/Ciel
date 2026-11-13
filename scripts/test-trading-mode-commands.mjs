@@ -41,6 +41,8 @@ assert.ok(worker.includes("const geminiKeyCount = getGeminiApiKeys(env).length;"
 assert.ok(worker.includes("function getGeminiApiKeys(env = {})"), "Worker must expose shared/numbered Gemini key discovery");
 assert.ok(worker.includes('env["GEMINI_API_KEY_" + index]'));
 assert.ok(worker.includes("JSON.parse(raw)"), "Gemini key parser must accept JSON-array and CSV secret formats");
+assert.ok(worker.includes("async function review(env, s, forecast, market, intraday, eventIntel = null, candleStructure = null) {\n  const keys = getGeminiApiKeys(env);"), "signal reviews must discover numbered Gemini secrets");
+assert.ok(worker.includes("async function reviewMarketEvent(env, bundle) {\n  const keys=getGeminiApiKeys(env);"), "market-event reviews must discover numbered Gemini secrets");
 assert.ok(worker.includes('Last result: '));
 assert.ok(worker.includes("Recent actual Gemini decisions"));
 assert.ok(worker.includes("Paper positions are not currently sent to Gemini"));
