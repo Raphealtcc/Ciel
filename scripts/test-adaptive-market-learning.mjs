@@ -29,14 +29,14 @@ const context=vm.createContext({
 vm.runInContext(source.slice(helperStart,advisorStart)+"\nglobalThis.learningTests={buildAdaptiveLearningProfile,adaptiveCandidateMultiplier,analyzeCoreTrendContinuation};",context);
 const {buildAdaptiveLearningProfile,adaptiveCandidateMultiplier,analyzeCoreTrendContinuation}=context.learningTests;
 const now=1800000000000;
+const trade=(i,pnl,mode="TREND_HOLD",symbol="BTC",strategy=mode,side="LONG",regime="TREND_UP")=>({status:"CLOSED",closedAtMs:now-i*60000,signalId:"s"+i,symbol,mode,strategy,side,regime,netPnlMon:pnl,marginMon:10,bestFavorableMovePct:Math.max(0,pnl),closeReason:pnl>0?"TAKE_PROFIT":"STOP_LOSS"});
 const weakRecent=buildAdaptiveLearningProfile(Array.from({length:24},(_,i)=>trade(i,-2,"TREND_HOLD","BTC","MULTI_MARKET_LEVEL_SWEEP_RECLAIM","SHORT","LEVEL_REVERSAL")),now);
 assert.ok(weakRecent.byStrategy.MULTI_MARKET_LEVEL_SWEEP_RECLAIM && weakRecent.bySide.SHORT && weakRecent.byRegime.LEVEL_REVERSAL);
 const weakFactor=adaptiveCandidateMultiplier(weakRecent,{symbol:"BTC",mode:"TREND_HOLD",strategy:"MULTI_MARKET_LEVEL_SWEEP_RECLAIM",side:"SHORT",regime:"LEVEL_REVERSAL"});
 assert.ok(weakFactor<0.9 && weakFactor>=0.70);
 const strongRecent=buildAdaptiveLearningProfile(Array.from({length:24},(_,i)=>trade(i,2,"TREND_HOLD","PUMP","TREND+MOMENTUM+BREAKOUT","LONG","TREND_UP")),now);
 const strongFactor=adaptiveCandidateMultiplier(strongRecent,{symbol:"PUMP",mode:"TREND_HOLD",strategy:"TREND+MOMENTUM+BREAKOUT",side:"LONG",regime:"TREND_UP"});
-assert.ok(strongFactor>1.05 && strongFactor<=1.15);
-const trade=(i,pnl,mode="TREND_HOLD",symbol="BTC",strategy=mode,side="LONG",regime="TREND_UP")=>({status:"CLOSED",closedAtMs:now-i*60000,signalId:"s"+i,symbol,mode,strategy,side,regime,netPnlMon:pnl,marginMon:10,bestFavorableMovePct:Math.max(0,pnl),closeReason:pnl>0?"TAKE_PROFIT":"STOP_LOSS"});
+assert.ok(strongFactor>1.05 && strongFactor<=1.30);
 const insufficient=buildAdaptiveLearningProfile(Array.from({length:7},(_,i)=>trade(i,1)),now);
 assert.equal(adaptiveCandidateMultiplier(insufficient,{symbol:"BTC",mode:"TREND_HOLD"}),1);
 const profitable=buildAdaptiveLearningProfile(Array.from({length:20},(_,i)=>trade(i,1)),now);
@@ -128,13 +128,6 @@ assert.ok(source.includes("LOCAL_TREND_BREAKOUT_RETEST"));
 
 assert.ok(!source.includes('paperStorage.put("ciel:adaptive-learning:v2").bind'));
 
-const recentWeak = buildAdaptiveLearningProfile(Array.from({length:24},(_,i)=>trade(i,-2,"TREND_HOLD","BTC","MULTI_MARKET_LEVEL_SWEEP_RECLAIM","SHORT","LEVEL_REVERSAL")),now);
-assert.ok(recentWeak.byStrategy.MULTI_MARKET_LEVEL_SWEEP_RECLAIM && recentWeak.bySide.SHORT && recentWeak.byRegime.LEVEL_REVERSAL);
-const weakFactor = adaptiveCandidateMultiplier(recentWeak,{symbol:"BTC",mode:"TREND_HOLD",strategy:"MULTI_MARKET_LEVEL_SWEEP_RECLAIM",side:"SHORT",regime:"LEVEL_REVERSAL"});
-assert.ok(weakFactor < 0.9 && weakFactor >= 0.70);
-const recentStrong = buildAdaptiveLearningProfile(Array.from({length:24},(_,i)=>trade(i,2,"TREND_HOLD","PUMP","TREND+MOMENTUM+BREAKOUT","LONG","TREND_UP")),now);
-const strongFactor = adaptiveCandidateMultiplier(recentStrong,{symbol:"PUMP",mode:"TREND_HOLD",strategy:"TREND+MOMENTUM+BREAKOUT",side:"LONG",regime:"TREND_UP"});
-assert.ok(strongFactor > 1.05 && strongFactor <= 1.30);
 assert.ok(source.includes("candidate.strategy") && source.includes("profile?.bySide?.[side]") && source.includes("profile?.byRegime?.[regime]"));
 console.log("PASS: recent strategy/side/regime learning adjusts ranking only; all seven markets remain eligible.");
 
