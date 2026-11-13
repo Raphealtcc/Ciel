@@ -7,7 +7,7 @@ import {
 } from "./leverup-1ct.js";
 import { ensureLeverUpTokenAllowance } from "./leverup-approval.js";
 import { evaluateAdaptiveLeverUpExit } from "./leverup-adaptive-exits.js";
-import { reviewLeverUpPositionWithGemini } from "./leverup-position-ai.js";
+import { getGeminiApiKeys, reviewLeverUpPositionWithGemini } from "./leverup-position-ai.js";
 import {
   LEVERUP_TOKENS, createLeverUpPublicClient, fetchOpenPositions, fetchAllPositions, fetchLeverUpPairs,
   fetchLatestOraclePrices, fetchAntiDdosConfig, readPositionsV4, normalizePositionAccrual,
@@ -1375,7 +1375,7 @@ export async function runLeverUpPositionManager({ env, db, now = Date.now(), dep
       ? Math.max(0, (now - (Number(position.timestamp) > 1e12 ? Number(position.timestamp) : Number(position.timestamp) * 1000)) / 60000)
       : null;
     const aiReview = deterministicExitAlreadyTriggered
-      ? { status: "SKIPPED_DETERMINISTIC_EXIT", action: "HOLD", confidence: 0, configuredKeyCount: String(env?.GEMINI_API_KEYS || "").split(/[,;\\n]+/).filter((x) => x.trim()).length }
+      ? { status: "SKIPPED_DETERMINISTIC_EXIT", action: "HOLD", confidence: 0, configuredKeyCount: getGeminiApiKeys(env).length }
       : await (dependencies.reviewPositionWithGemini || reviewLeverUpPositionWithGemini)({
           env, position, currentPriceRaw: latestPrice,
           adaptive: {
@@ -1391,7 +1391,7 @@ export async function runLeverUpPositionManager({ env, db, now = Date.now(), dep
           now,
           maxHoldReached: fixedAction.maxHoldReached === true,
           positionAgeMinutes: reviewAgeMinutes,
-        }).catch((error) => ({ status: "FAILED", action: "HOLD", confidence: 0, reason: String(error?.message || error).slice(0, 180), configuredKeyCount: String(env?.GEMINI_API_KEYS || "").split(/[,;\\n]+/).filter((x) => x.trim()).length }));
+        }).catch((error) => ({ status: "FAILED", action: "HOLD", confidence: 0, reason: String(error?.message || error).slice(0, 180), configuredKeyCount: getGeminiApiKeys(env).length }));
     geminiConfiguredKeyCount = Math.max(geminiConfiguredKeyCount, Number(aiReview.configuredKeyCount || 0));
     aiReviewStatusCounts[aiReview.status] = (aiReviewStatusCounts[aiReview.status] || 0) + 1;
     if (aiReview.status === "REVIEWED") aiReviewed++;
