@@ -7,7 +7,7 @@ const advisorStart=source.indexOf("async function runAdvisorCycle",helperStart);
 assert.ok(helperStart>=0&&advisorStart>helperStart);
 const trendSetDeclaration=source.indexOf("const trendEntryMarketSet = new Set(",advisorStart);
 const firstTrendSetReference=source.indexOf("trendEntryMarketSet",advisorStart);
-assert.equal(firstTrendSetReference,trendSetDeclaration,"trendEntryMarketSet must be initialized at the start of runAdvisorCycle before any use");
+assert.equal(firstTrendSetReference,trendSetDeclaration + "const ".length,"trendEntryMarketSet must be initialized at the start of runAdvisorCycle before any use");
 const context=vm.createContext({
   __name(){},
   anchoredReturn(points,minutes){
