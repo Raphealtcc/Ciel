@@ -25,40 +25,21 @@ source = once(source,
   "add opt-in history parameter to paper summary",
 );
 
-source = once(source,
-  `const recentClosed = closedTrades.slice(0, 5).map((trade) => ({
-    signalId: trade.signalId, symbol: trade.symbol, side: trade.side,
-    mode: trade.mode || "LEGACY", regime: trade.regime || null,
-    leverage: trade.leverage, marginMon: trade.marginMon, entryPrice: trade.entryPrice,
-    exitPrice: trade.exitPrice, closeReason: trade.closeReason,
-    pnlMon: trade.feeModelVersion === "LEGACY_FEE_DATA_UNAVAILABLE" ? null : (trade.netPnlMon ?? null),
-    grossPnlMon: trade.grossPnlMon,
-    feeMon: trade.feeMon ?? null,
-    netPnlMon: trade.feeModelVersion === "LEGACY_FEE_DATA_UNAVAILABLE" ? null : (trade.netPnlMon ?? null),
-    feeModelVersion: trade.feeModelVersion || null,
-    feeDataUnavailable: trade.feeModelVersion === "LEGACY_FEE_DATA_UNAVAILABLE",
-    pnlUsd: trade.feeModelVersion === "LEGACY_FEE_DATA_UNAVAILABLE" ? null : (trade.netPnlUsd ?? null),
-    returnOnMarginPct: trade.returnOnMarginPct, closedAtMs: trade.closedAtMs
-  }));`,
-  `const historyTrades = includeHistory
+const historyStart = source.indexOf("  const recentClosed = closedTrades.slice(0, 5).map((trade) => ({");
+const historyEnd = source.indexOf("\n  return {", historyStart);
+if (historyStart < 0 || historyEnd < 0) throw new Error("paper history mapping boundaries not found");
+const historyMapping = \`  const historyTrades = includeHistory
     ? closedTrades.slice().sort((a, b) => Number(b.closedAtMs) - Number(a.closedAtMs)).slice(0, 250)
     : closedTrades.slice(0, 5);
   const recentClosed = historyTrades.map((trade) => ({
-    signalId: trade.signalId,
-    symbol: trade.symbol,
-    side: trade.side,
-    mode: trade.mode || "LEGACY",
-    regime: trade.regime || null,
+    signalId: trade.signalId, symbol: trade.symbol, side: trade.side,
+    mode: trade.mode || "LEGACY", regime: trade.regime || null,
     strategy: trade.strategy || null,
     confidence: Number.isFinite(Number(trade.confidence)) ? Number(trade.confidence) : null,
-    leverage: trade.leverage,
-    marginMon: trade.marginMon,
-    entryPrice: trade.entryPrice,
-    exitPrice: trade.exitPrice,
-    closeReason: trade.closeReason,
+    leverage: trade.leverage, marginMon: trade.marginMon, entryPrice: trade.entryPrice,
+    exitPrice: trade.exitPrice, closeReason: trade.closeReason,
     pnlMon: trade.feeModelVersion === "LEGACY_FEE_DATA_UNAVAILABLE" ? null : (trade.netPnlMon ?? trade.grossPnlMon),
-    grossPnlMon: trade.grossPnlMon,
-    feeMon: trade.feeMon ?? null,
+    grossPnlMon: trade.grossPnlMon, feeMon: trade.feeMon ?? null,
     netPnlMon: trade.feeModelVersion === "LEGACY_FEE_DATA_UNAVAILABLE" ? null : (trade.netPnlMon ?? trade.grossPnlMon),
     feeModelVersion: trade.feeModelVersion || null,
     feeDataUnavailable: trade.feeModelVersion === "LEGACY_FEE_DATA_UNAVAILABLE",
@@ -68,52 +49,44 @@ source = once(source,
     targetPct: Number.isFinite(Number(trade.targetPct)) ? Number(trade.targetPct) : null,
     bestFavorableMovePct: Number.isFinite(Number(trade.bestFavorableMovePct)) ? Number(trade.bestFavorableMovePct) : null,
     worstAdverseMovePct: Number.isFinite(Number(trade.worstAdverseMovePct)) ? Number(trade.worstAdverseMovePct) : null,
-    openedAtMs: Number(trade.openedAtMs) || null,
-    closedAtMs: trade.closedAtMs,
+    openedAtMs: Number(trade.openedAtMs) || null, closedAtMs: trade.closedAtMs,
     durationMinutes: Number(trade.openedAtMs) > 0 && Number(trade.closedAtMs) >= Number(trade.openedAtMs)
       ? (Number(trade.closedAtMs) - Number(trade.openedAtMs)) / 60000 : null
   }));
   const historyAnalysis = includeHistory ? (() => {
-    const pricedClosed = recentClosed.filter((trade) => trade.pnlMon !== null && trade.pnlMon !== undefined);
-    const feeDataUnavailableCount = recentClosed.filter((trade) => trade.feeDataUnavailable).length;
+    const priced = recentClosed.filter((trade) => trade.pnlMon !== null && trade.pnlMon !== undefined);
+    const unavailable = recentClosed.filter((trade) => trade.feeDataUnavailable).length;
     const group = (field) => {
       const buckets = new Map();
-      for (const trade of pricedClosed) {
+      for (const trade of priced) {
         const key = String(trade[field] || "UNKNOWN");
         if (!buckets.has(key)) buckets.set(key, []);
         buckets.get(key).push(trade);
       }
       return [...buckets.entries()].map(([key, rows]) => ({
-        key,
-        trades: rows.length,
+        key, trades: rows.length,
         wins: rows.filter((trade) => Number(trade.pnlMon) > 0).length,
         losses: rows.filter((trade) => Number(trade.pnlMon) < 0).length,
-        totalPnlMon: rows.reduce((sum, trade) => sum + (Number(trade.pnlMon) || 0), 0),
-        averagePnlMon: rows.reduce((sum, trade) => sum + (Number(trade.pnlMon) || 0), 0) / Math.max(1, rows.length),
-        averageReturnOnMarginPct: rows.reduce((sum, trade) => sum + (Number(trade.returnOnMarginPct) || 0), 0) / Math.max(1, rows.length)
+        totalPnlMon: rows.reduce((sum, trade) => sum + Number(trade.pnlMon || 0), 0),
+        averagePnlMon: rows.reduce((sum, trade) => sum + Number(trade.pnlMon || 0), 0) / Math.max(1, rows.length),
+        averageReturnOnMarginPct: rows.reduce((sum, trade) => sum + Number(trade.returnOnMarginPct || 0), 0) / Math.max(1, rows.length)
       })).sort((a, b) => a.totalPnlMon - b.totalPnlMon);
     };
-    const wins = pricedClosed.filter((trade) => Number(trade.pnlMon) > 0);
-    const losses = pricedClosed.filter((trade) => Number(trade.pnlMon) < 0);
+    const wins = priced.filter((trade) => Number(trade.pnlMon) > 0);
+    const losses = priced.filter((trade) => Number(trade.pnlMon) < 0);
     return {
-      count: pricedClosed.length,
-      totalClosed: recentClosed.length,
-      feeDataUnavailableCount,
-      wins: wins.length,
-      losses: losses.length,
-      totalPnlMon: pricedClosed.reduce((sum, trade) => sum + (Number(trade.pnlMon) || 0), 0),
+      count: priced.length, totalClosed: recentClosed.length, feeDataUnavailableCount: unavailable,
+      wins: wins.length, losses: losses.length,
+      totalPnlMon: priced.reduce((sum, trade) => sum + Number(trade.pnlMon || 0), 0),
       averageWinMon: wins.reduce((sum, trade) => sum + Number(trade.pnlMon), 0) / Math.max(1, wins.length),
       averageLossMon: losses.reduce((sum, trade) => sum + Number(trade.pnlMon), 0) / Math.max(1, losses.length),
-      bySymbol: group("symbol"),
-      bySide: group("side"),
-      byMode: group("mode"),
-      byRegime: group("regime"),
-      byCloseReason: group("closeReason"),
-      worstTrades: pricedClosed.slice().sort((a, b) => Number(a.pnlMon) - Number(b.pnlMon)).slice(0, 15)
+      bySymbol: group("symbol"), bySide: group("side"), byMode: group("mode"),
+      byRegime: group("regime"), byCloseReason: group("closeReason"),
+      worstTrades: priced.slice().sort((a, b) => Number(a.pnlMon) - Number(b.pnlMon)).slice(0, 15)
     };
-  })() : null;`,
-  "replace complete recentClosed mapping with bounded history and loss attribution",
-);
+  })() : null;
+\`;
+source = source.slice(0, historyStart) + historyMapping + source.slice(historyEnd);
 
 source = once(source,
   '    if (path === "/paper/profits") {\n      try {\n        const summary = await getPaperSummary(this.state.storage, this.latest, Date.now(), this.lastTickAt);',
