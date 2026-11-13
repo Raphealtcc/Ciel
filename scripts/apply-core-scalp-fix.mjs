@@ -326,8 +326,8 @@ once(
 );
 
 once(
-  'fullyConfirmed\n      ? (localRangeReview ? "â Local range, statistical forecast and market-quality gates support this scalp; Gemini was intentionally skipped." : "â Forecast envelope and Gemini review support this direction.")',
-  'fullyConfirmed\n      ? (localCoreScalpReview ? "â Closed-candle pullback/reclaim, statistical forecast and market-quality gates support this scalp; Gemini was intentionally skipped." : localRangeReview ? "â Local range, statistical forecast and market-quality gates support this scalp; Gemini was intentionally skipped." : "â Forecast envelope and Gemini review support this direction.")',
+  'fullyConfirmed\n      ? (localRangeReview ? "✅ Local range, statistical forecast and market-quality gates support this scalp; Gemini was intentionally skipped." : "✅ Forecast envelope and Gemini review support this direction.")',
+  'fullyConfirmed\n      ? (localCoreScalpReview ? "✅ Closed-candle pullback/reclaim, statistical forecast and market-quality gates support this scalp; Gemini was intentionally skipped." : localRangeReview ? "✅ Local range, statistical forecast and market-quality gates support this scalp; Gemini was intentionally skipped." : "✅ Forecast envelope and Gemini review support this direction.")',
   "show core scalp's actual confirmation evidence",
 );
 
