@@ -3,6 +3,7 @@ import { getGeminiApiKeys, parseGeminiApiKeys, reviewLeverUpPositionWithGemini }
 
 assert.deepEqual(parseGeminiApiKeys(" alpha , beta\n gamma;alpha "), ["alpha", "beta", "gamma"]);
 assert.deepEqual(parseGeminiApiKeys('["json-a","json-b"]'), ["json-a", "json-b"]);
+assert.deepEqual(parseGeminiApiKeys('"quoted-a","quoted-b"'), ["quoted-a", "quoted-b"]);
 assert.deepEqual(getGeminiApiKeys({ GEMINI_API_KEYS: '["shared-a","shared-b"]', GEMINI_API_KEY_1: "numbered-c", GEMINI_API_KEY_2: "shared-a" }), ["shared-a", "shared-b", "numbered-c"]);
 const writes = new Map();
 const storage = {
