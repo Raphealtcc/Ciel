@@ -11,3 +11,4 @@ assert.match(source, /if \(url\.pathname === "\/api\/paper\/history"\)/);
 assert.match(source, /getPaperSummary\(this\.state\.storage, this\.latest, Date\.now\(\), this\.lastTickAt, true\)/);
 assert.match(source, /openTrades, recentClosed, strategyStats, \.\.\.\(includeHistory \? \{ historyAnalysis \} : \{\}\)/);
 console.log("Paper history diagnostics tests passed.");
+\nassert.ok(source.includes("pricedClosed"));\nassert.ok(source.includes("feeDataUnavailableCount"));\n

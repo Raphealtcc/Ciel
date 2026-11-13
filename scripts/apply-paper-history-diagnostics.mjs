@@ -78,7 +78,9 @@ source = once(source,
     const wins = pricedClosed.filter((trade) => Number(trade.pnlMon) > 0);
     const losses = pricedClosed.filter((trade) => Number(trade.pnlMon) < 0);
     return {
-      count: recentClosed.length,
+      count: pricedClosed.length,
+      totalClosed: recentClosed.length,
+      feeDataUnavailableCount,
       wins: wins.length,
       losses: losses.length,
       totalPnlMon: pricedClosed.reduce((sum, trade) => sum + (Number(trade.pnlMon) || 0), 0),

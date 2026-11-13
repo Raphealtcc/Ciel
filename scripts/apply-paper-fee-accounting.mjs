@@ -178,7 +178,7 @@ once('"Paper results use Hyperliquid mids, not LeverUp Pyth/pool fills. Fees, fu
 "update /profits cost disclosure");
 
 once('    openCount: openTrades.length, closedCount: Number(state.closedCount || 0),',
-'    openCount: openTrades.length, closedCount: Number(state.closedCount || 0),\n    feeDataUnavailableCount: closedTrades.filter((trade) => trade.feeModelVersion === "LEGACY_FEE_DATA_UNAVAILABLE").length,',
+'    openCount: openTrades.length, closedCount: Number(state.closedCount || 0),\n    feeDataUnavailableCount: closedTrades.filter((trade) => trade.feeModelVersion === "LEGACY_FEE_DATA_UNAVAILABLE").length,\n    feeAdjustedClosedCount: closedTrades.filter((trade) => trade.feeModelVersion !== "LEGACY_FEE_DATA_UNAVAILABLE" && trade.netPnlMon !== null && trade.netPnlMon !== undefined).length,',
 "expose legacy trades without a usable fee basis");
 
 await writeFile(file, source);
