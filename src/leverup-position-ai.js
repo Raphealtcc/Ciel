@@ -1,7 +1,20 @@
 const parseKeys = (value) => [...new Set(String(value || "").split(/[,;\n]+/).map((key) => key.trim()).filter(Boolean))];
 
 export function parseGeminiApiKeys(value) {
-  return parseKeys(value);
+  if (Array.isArray(value)) return [...new Set(value.map((key) => String(key || "").trim()).filter(Boolean))];
+  const raw = String(value || "").trim();
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) return parseGeminiApiKeys(parsed);
+  } catch {}
+  return parseKeys(raw);
+}
+
+export function getGeminiApiKeys(env = {}) {
+  const values = [env?.GEMINI_API_KEYS, env?.GEMINI_API_KEY];
+  for (let index = 1; index <= 20; index += 1) values.push(env?.["GEMINI_API_KEY_" + index]);
+  return [...new Set(values.flatMap((value) => parseGeminiApiKeys(value)))];
 }
 
 async function persistGeminiReview(storage, review, context = {}) {
@@ -34,7 +47,7 @@ async function persistGeminiReview(storage, review, context = {}) {
 }
 
 export async function reviewLeverUpPositionWithGemini({ env, position, currentPriceRaw, adaptive = {}, state = {}, now = Date.now(), maxHoldReached = false, positionAgeMinutes = null, dependencies = {} }) {
-  const keys = parseGeminiApiKeys(env?.GEMINI_API_KEYS);
+  const keys = getGeminiApiKeys(env);
   const hash = String(position?.positionHash || "").toLowerCase();
   const storage = env?.CIEL_STATE;
   const context = { now, model: env?.GEMINI_MODEL || "gemini-2.5-flash", configuredKeyCount: keys.length, symbol: position?.symbol || position?.pairSymbol || position?.purgeSymbol || "UNKNOWN", side: position?.isLong ? "LONG" : "SHORT", positionHash: hash };
