@@ -62,16 +62,8 @@ async function managePaperTrades(storage, prices, now, lastTickAt, env) {
         protection = updateProfitProtectionState(trade, trade.targetPct, movePct, now);
         if (protection.changed) changed = true;
         if (protection.trigger) {
-          const feeAwareProfit = paperTradePnl(trade, current, Number(prices.MON));
-          if (feeAwareProfit && feeAwareProfit.mon >= 0.15) {
-            reason = "PROFIT_PROTECTION";
-            exitPrice = current;
-          } else {
-            trade.profitProtectionSamples = 0;
-            trade.profitProtectionBreachAtMs = 0;
-            trade.profitProtectionLastSampleAtMs = 0;
-            changed = true;
-          }
+          reason = "PROFIT_PROTECTION";
+          exitPrice = current;
         } else if (now >= Number(trade.expiresAtMs)) {
           reason = "MAX_HOLD";
           exitPrice = current;
@@ -90,14 +82,8 @@ async function managePaperTrades(storage, prices, now, lastTickAt, env) {
       else if (pnlMon < 0) state.losses = Number(state.losses || 0) + 1;
       else state.breakeven = Number(state.breakeven || 0) + 1;
       trade.status = "CLOSED"; trade.exitPrice = exitPrice; trade.exitMonUsd = Number(prices.MON);
-      trade.closedAtMs = now; trade.closeReason = reason;
-      trade.grossPnlMon = Number.isFinite(Number(pnl.grossMon)) ? pnl.grossMon : pnlMon;
-      trade.grossPnlUsd = Number.isFinite(Number(pnl.grossUsd)) ? pnl.grossUsd : pnlUsd;
-      trade.feeMon = Number(pnl.feeMon) || 0;
-      trade.feeUsd = Number(pnl.feeUsd) || 0;
-      trade.netPnlMon = pnlMon;
-      trade.netPnlUsd = pnlMon * Number(prices.MON);
-      trade.feeModelVersion = "LEVERUP_TAKER_3BPS_EACH_SIDE_V1";
+      trade.closedAtMs = now; trade.closeReason = reason; trade.grossPnlMon = pnlMon;
+      trade.grossPnlUsd = pnlUsd;
       trade.returnOnMarginPct = Number(trade.marginMon) > 0 ? pnlMon / Number(trade.marginMon) * 100 : 0;
       closed.push({
         symbol:trade.symbol,side:trade.side,signalId:trade.signalId,reason,exitPrice,pnlMon,pnlUsd,
@@ -116,14 +102,14 @@ async function managePaperTrades(storage, prices, now, lastTickAt, env) {
     const lines = ["🧪 PAPER TRADE CLOSED"];
     for (const trade of closed) {
       lines.push(trade.side + " " + trade.symbol + " | " + trade.reason,
-        "Simulated exit $" + fmt(trade.exitPrice) + " | NET P&L " + sign(trade.pnlMon) + " MON ($" + sign(trade.pnlUsd) + ")",
+        "Simulated exit $" + fmt(trade.exitPrice) + " | P&L " + sign(trade.pnlMon) + " MON ($" + sign(trade.pnlUsd) + ")",
         "Return on margin: " + sign(trade.roiPct) + "% | signal " + trade.signalId);
       if (trade.reason === "PROFIT_PROTECTION") {
         lines.push("Profit protection: peak favourable move +" + Number(trade.bestMovePct).toFixed(3) +
           "%; exit after a confirmed giveback of at least 45% of that peak.");
       }
     }
-    lines.push("Net mark-based result after estimated 3 bps-per-side trading fees. Funding, holding fees, oracle costs, slippage and liquidation mechanics remain excluded.");
+    lines.push("Gross mark-based paper result; fees, funding, slippage and liquidation mechanics are excluded.");
     await sendTelegram(env, lines.join("\n")).catch((error) => console.error("Paper close notification failed: " + String(error).slice(0, 250)));
   }
 }

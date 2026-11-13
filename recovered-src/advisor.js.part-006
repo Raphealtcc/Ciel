@@ -88,16 +88,9 @@ function paperTradePnl(trade, currentPrice, currentMonUsd) {
   const movePct = direction * ((current - entry) / entry) * 100;
   const marginUsd = Number(trade.marginMon) * Number(trade.entryMonUsd);
   const notionalUsd = marginUsd * Number(trade.leverage);
-  const grossUsd = notionalUsd * movePct / 100;
-  const exitNotionalUsd = notionalUsd * current / entry;
-  // LeverUp preflight snapshots report a 3 bps default open/close fee. Paper mode assumes no LV-token discount.
-  const feeRate = 0.0003;
-  const feeUsd = Math.max(0, (notionalUsd + exitNotionalUsd) * feeRate);
-  const grossMon = grossUsd / monUsd;
-  const feeMon = feeUsd / monUsd;
-  const netUsd = grossUsd - feeUsd;
-  const netMon = netUsd / monUsd;
-  return { movePct, usd: netUsd, mon: netMon, grossUsd, grossMon, feeUsd, feeMon, netUsd, netMon, feeRate, roiPct: Number(trade.marginMon) > 0 ? netMon / Number(trade.marginMon) * 100 : 0, marginUsd, notionalUsd };
+  const pnlUsd = notionalUsd * movePct / 100;
+  const pnlMon = pnlUsd / monUsd;
+  return { movePct, usd: pnlUsd, mon: pnlMon, roiPct: Number(trade.marginMon) > 0 ? pnlMon / Number(trade.marginMon) * 100 : 0, marginUsd, notionalUsd };
 }
 function updateProfitProtectionState(state, targetPctInput, movePct, now) {
   const before = JSON.stringify(state);

@@ -26,52 +26,12 @@
   const totalPnlMon = allMarksAvailable ? Number(state.realizedPnlMon || 0) + unrealizedPnlMon : null;
   const equityMon = totalPnlMon === null ? null : startingBalanceMon + totalPnlMon;
   const closedTrades = (state.trades || []).filter((trade) => trade.status === "CLOSED");
-  // One-time migration: preserve historical trades while recalculating realized P&L after estimated entry/exit fees.
-  let feeMigrationChanged = false, legacyFeeDataUnavailable = 0;
-  for (const trade of closedTrades) {
-    if (trade.feeModelVersion) {
-      if (trade.feeModelVersion === "LEGACY_FEE_DATA_UNAVAILABLE") legacyFeeDataUnavailable += 1;
-      continue;
-    }
-    const historical = paperTradePnl(trade, Number(trade.exitPrice), Number(trade.exitMonUsd) || monUsd);
-    if (historical) {
-      trade.grossPnlMon = Number.isFinite(Number(trade.grossPnlMon)) ? Number(trade.grossPnlMon) : historical.grossMon;
-      trade.grossPnlUsd = Number.isFinite(Number(trade.grossPnlUsd)) ? Number(trade.grossPnlUsd) : historical.grossUsd;
-      trade.feeMon = historical.feeMon;
-      trade.feeUsd = historical.feeUsd;
-      trade.netPnlMon = Math.max(-Number(trade.marginMon || 0), historical.netMon);
-      trade.netPnlUsd = trade.netPnlMon * (Number(trade.exitMonUsd) || monUsd);
-      trade.feeModelVersion = "LEVERUP_TAKER_3BPS_EACH_SIDE_V1";
-      trade.returnOnMarginPct = Number(trade.marginMon) > 0 ? trade.netPnlMon / Number(trade.marginMon) * 100 : 0;
-    } else {
-      trade.netPnlMon = Number(trade.grossPnlMon) || 0;
-      trade.netPnlUsd = Number(trade.grossPnlUsd) || 0;
-      trade.feeMon = 0;
-      trade.feeUsd = 0;
-      trade.feeModelVersion = "LEGACY_FEE_DATA_UNAVAILABLE";
-      legacyFeeDataUnavailable += 1;
-    }
-    feeMigrationChanged = true;
-  }
-  if (feeMigrationChanged) {
-    const netRealized = closedTrades.reduce((sum, trade) => sum + (Number(trade.netPnlMon ?? trade.grossPnlMon) || 0), 0);
-    const netWins = closedTrades.filter((trade) => Number(trade.netPnlMon ?? trade.grossPnlMon) > 0).length;
-    const netLosses = closedTrades.filter((trade) => Number(trade.netPnlMon ?? trade.grossPnlMon) < 0).length;
-    state.realizedPnlMon = netRealized;
-    state.realizedPnlUsd = closedTrades.reduce((sum, trade) => sum + (Number(trade.netPnlUsd ?? trade.grossPnlUsd) || 0), 0);
-    state.availableBalanceMon = startingBalanceMon + netRealized - openMarginMon;
-    state.wins = netWins;
-    state.losses = netLosses;
-    state.breakeven = closedTrades.length - netWins - netLosses;
-    state.updatedAtMs = now;
-    await storage.put(PAPER_ACCOUNT_KEY, state);
-  }
   const modeStats = (mode) => {
     const matches = closedTrades.filter((trade) => (trade.mode || "LEGACY") === mode);
-    const wins = matches.filter((trade) => Number(trade.netPnlMon ?? trade.grossPnlMon) > 0).length;
-    const losses = matches.filter((trade) => Number(trade.netPnlMon ?? trade.grossPnlMon) < 0).length;
-    const breakeven = matches.filter((trade) => Number(trade.netPnlMon ?? trade.grossPnlMon) === 0).length;
-    const pnl = matches.reduce((sum, trade) => sum + (Number(trade.netPnlMon ?? trade.grossPnlMon) || 0), 0);
+    const wins = matches.filter((trade) => Number(trade.grossPnlMon) > 0).length;
+    const losses = matches.filter((trade) => Number(trade.grossPnlMon) < 0).length;
+    const breakeven = matches.filter((trade) => Number(trade.grossPnlMon) === 0).length;
+    const pnl = matches.reduce((sum, trade) => sum + (Number(trade.grossPnlMon) || 0), 0);
     return { closed: matches.length, wins, losses, breakeven, realizedPnlMon: pnl, winRatePct: matches.length ? wins / matches.length * 100 : null };
   };
   const strategyStats = { rangeScalp: modeStats("RANGE_SCALP"), trendHold: modeStats("TREND_HOLD"), legacy: modeStats("LEGACY") };
