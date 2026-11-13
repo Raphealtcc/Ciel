@@ -177,7 +177,7 @@ else if (!source.includes("if (await handleTradingModeCommand(env, command)) ret
 
 const helpAnchor = '      "/test Ã¢ÂÂ verify Telegram delivery",';
 if (source.includes(helpAnchor)) source = source.replace(helpAnchor,
-  '      "/paperactive /paperdeactivate Ã¢ÂÂ toggle paper entries",\n      "/liveactive /livedeactivate Ã¢ÂÂ toggle live entries",\n      "/modes Ã¢ÂÂ show effective trading modes",\n      "/geministatus Ã¢ÂÂ Gemini keys, latest review and manager health",\n' + helpAnchor);
+  '      "/paperactive /paperdeactivate Ã¢ÂÂ toggle paper entries",\n      "/liveactive /livedeactivate Ã¢ÂÂ toggle live entries",\n      "/modes Ã¢ÂÂ show effective trading modes",\n      "/geministatus Ã¢ÂÂ Gemini keys, latest review and manager health",\n      "/paperbalance — show fee-adjusted paper balance and equity",\n' + helpAnchor);
 
 await writeFile(file, source);
 console.log("Applied D1-backed Telegram trading-mode controls.");
