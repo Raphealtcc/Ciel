@@ -13,7 +13,7 @@ const modules = [
   ["advisor.js", 125157],
   ["telegram.js", 13973],
   ["hyperliquid_feed.js", 52929],
-  ["index.js", 26624],
+  ["index.js", 26960],
 ];
 
 await mkdir(path.join(output, "src"), { recursive: true });
@@ -49,8 +49,8 @@ if (preamble.length !== 391) {
 }
 
 const worker = preamble + recoveredModules.join("");
-if (worker.length !== 225146) {
-  throw new Error(`Integrity check failed for full Worker: expected 223205, got ${worker.length}`);
+if (worker.length !== 225482) {
+  throw new Error(`Integrity check failed for full Worker: expected 225482, got ${worker.length}`);
 }
 
 const sha256 = createHash("sha256").update(worker, "utf8").digest("hex");
