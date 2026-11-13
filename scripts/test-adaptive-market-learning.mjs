@@ -136,6 +136,6 @@ const recentStrong = buildAdaptiveLearningProfile(Array.from({length:24},(_,i)=>
 const strongFactor = adaptiveCandidateMultiplier(recentStrong,{symbol:"PUMP",mode:"TREND_HOLD",strategy:"TREND+MOMENTUM+BREAKOUT",side:"LONG",regime:"TREND_UP"});
 assert.ok(strongFactor > 1.05 && strongFactor <= 1.30);
 assert.ok(source.includes("candidate.strategy") && source.includes("profile?.bySide?.[side]") && source.includes("profile?.byRegime?.[regime]"));
-console.log("PASS: recent strategy/side/regime learning adjusts ranking only; all eight markets remain eligible.");
+console.log("PASS: recent strategy/side/regime learning adjusts ranking only; all seven markets remain eligible.");
 
 assert.ok(source.includes("const baseSignals = [analyzeCandleLevelReversal"), "both base signal generators must be evaluated independently");
