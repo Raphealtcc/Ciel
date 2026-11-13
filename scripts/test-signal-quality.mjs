@@ -171,6 +171,6 @@ assert.ok(worker.includes("SHADOW_TARGET_FIRST"));
 assert.ok(worker.includes("strategyStats:strategyShadowStats"));
 assert.ok(worker.includes("target_pct-0.06"));
 assert.ok(worker.includes("net of modeled 3 bps-per-side fees"));
-assert.ok(worker.includes("WHEN strategy LIKE '%5M_TREND%PULLBACK%' THEN 180*60000"));
+assert.ok(worker.includes("CASE WHEN strategy LIKE '%5M_TREND%PULLBACK%' THEN 180*60000"));
 assert.ok(worker.includes("WHEN strategy LIKE '%SWING_REVERSAL%' THEN 180*60000"));
 console.log("PASS: quality gates, regime-aware evidence, same-setup suppression, 5m reversal confirmation and Worker integration.");
