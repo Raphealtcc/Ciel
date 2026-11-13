@@ -6,7 +6,7 @@ let source = await readFile(file, "utf8");
 
 function once(text, before, after, label) {
   const count = text.split(before).length - 1;
-  if (count !== 1) throw new Error(label + ": expected exactly one match, found " + count);
+  if (count === 0 && text.includes(after)) return text;\n  if (count !== 1) throw new Error(label + ": expected exactly one match, found " + count);
   return text.replace(before, after);
 }
 
@@ -21,8 +21,15 @@ source = once(source,
     signalId: trade.signalId, symbol: trade.symbol, side: trade.side,
     mode: trade.mode || "LEGACY", regime: trade.regime || null,
     leverage: trade.leverage, marginMon: trade.marginMon, entryPrice: trade.entryPrice,
-    exitPrice: trade.exitPrice, closeReason: trade.closeReason, pnlMon: trade.grossPnlMon,
-    pnlUsd: trade.grossPnlUsd, returnOnMarginPct: trade.returnOnMarginPct, closedAtMs: trade.closedAtMs
+    exitPrice: trade.exitPrice, closeReason: trade.closeReason,
+    pnlMon: trade.feeModelVersion === "LEGACY_FEE_DATA_UNAVAILABLE" ? null : (trade.netPnlMon ?? null),
+    grossPnlMon: trade.grossPnlMon,
+    feeMon: trade.feeMon ?? null,
+    netPnlMon: trade.feeModelVersion === "LEGACY_FEE_DATA_UNAVAILABLE" ? null : (trade.netPnlMon ?? null),
+    feeModelVersion: trade.feeModelVersion || null,
+    feeDataUnavailable: trade.feeModelVersion === "LEGACY_FEE_DATA_UNAVAILABLE",
+    pnlUsd: trade.feeModelVersion === "LEGACY_FEE_DATA_UNAVAILABLE" ? null : (trade.netPnlUsd ?? null),
+    returnOnMarginPct: trade.returnOnMarginPct, closedAtMs: trade.closedAtMs
   }));`,
   `const historyTrades = includeHistory
     ? closedTrades.slice().sort((a, b) => Number(b.closedAtMs) - Number(a.closedAtMs)).slice(0, 250)
