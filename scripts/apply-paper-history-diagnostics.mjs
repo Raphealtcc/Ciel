@@ -28,7 +28,7 @@ source = once(source,
 const historyStart = source.indexOf("  const recentClosed = closedTrades.slice(0, 5).map((trade) => ({");
 const historyEnd = source.indexOf("\n  return {", historyStart);
 if (historyStart < 0 || historyEnd < 0) throw new Error("paper history mapping boundaries not found");
-const historyMapping = \`  const historyTrades = includeHistory
+const historyMapping = `  const historyTrades = includeHistory
     ? closedTrades.slice().sort((a, b) => Number(b.closedAtMs) - Number(a.closedAtMs)).slice(0, 250)
     : closedTrades.slice(0, 5);
   const recentClosed = historyTrades.map((trade) => ({
@@ -85,7 +85,7 @@ const historyMapping = \`  const historyTrades = includeHistory
       worstTrades: pricedClosed.slice().sort((a, b) => Number(a.pnlMon) - Number(b.pnlMon)).slice(0, 15)
     };
   })() : null;
-\`;
+`;
 source = source.slice(0, historyStart) + historyMapping + source.slice(historyEnd);
 
 source = once(source,
