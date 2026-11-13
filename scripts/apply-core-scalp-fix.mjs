@@ -7,6 +7,10 @@ let source = await readFile(file, "utf8");
 
 function once(before, after, label) {
   const count = source.split(before).length - 1;
+  if (count === 0 && source.includes(after)) {
+    console.log("Core scalp patch already present: " + label);
+    return;
+  }
   if (count !== 1) throw new Error(label + ": expected one match, found " + count);
   source = source.replace(before, after);
   console.log("Applied core scalp patch: " + label);
