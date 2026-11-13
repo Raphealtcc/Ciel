@@ -5,6 +5,9 @@ const source=await readFile("reconstructed/patched-worker.js","utf8");
 const helperStart=source.indexOf("function buildAdaptiveLearningProfile");
 const advisorStart=source.indexOf("async function runAdvisorCycle",helperStart);
 assert.ok(helperStart>=0&&advisorStart>helperStart);
+const trendSetDeclaration=source.indexOf("const trendEntryMarketSet = new Set(",advisorStart);
+const firstTrendSetReference=source.indexOf("trendEntryMarketSet",advisorStart);
+assert.equal(firstTrendSetReference,trendSetDeclaration,"trendEntryMarketSet must be initialized at the start of runAdvisorCycle before any use");
 const context=vm.createContext({
   __name(){},
   anchoredReturn(points,minutes){
