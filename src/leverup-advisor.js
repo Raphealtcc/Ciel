@@ -337,21 +337,21 @@ export function formatLeverUpAdvisorLine(record) {
     (Array.isArray(execution.risk?.reasons) ? execution.risk.reasons.join(", ") : "") ||
     execution.lastError || execution.error || execution.failureReason || intent.failureReason || record.failureReason || "";
   if (executionStatus.startsWith("REJECTED") || intent.success === false || record.status === "REJECTED") {
-    return "LeverUp: NOT OPENED Â· " + String(failure || "execution rejected").slice(0, 100);
+    return "LeverUp: NOT OPENED · " + String(failure || "execution rejected").slice(0, 100);
   }
   if ((executionStatus === "RECONCILED" && Array.isArray(execution.positions) && execution.positions.length > 0) ||
       (executionStatus === "EXECUTED" && /^0x[0-9a-fA-F]{64}$/.test(String(execution.positionHash || "")))) {
-    return "LeverUp: POSITION OPEN Â· on-chain position confirmed";
+    return "LeverUp: POSITION OPEN · on-chain position confirmed";
   }
   if (["SUBMITTED", "PENDING", "UNCERTAIN"].includes(executionStatus) || execution.submitted === true || intent.submitted === true) {
-    return "LeverUp: ORDER SUBMITTED Â· awaiting on-chain confirmation";
+    return "LeverUp: ORDER SUBMITTED · awaiting on-chain confirmation";
   }
   if (record.status === "PREFLIGHT_PASS_LIVE_ENABLED" || record.status === "PREFLIGHT_PASS_LIVE_DISABLED") {
-    return "LeverUp: PREFLIGHT PASS Â· " + record.selectedLeverage + "x Â· " +
-      Number(record.marginMonUsed).toFixed(2) + " MON Â· $" + Number(record.notionalUsd).toFixed(2) +
-      " notional Â· " + (record.liveExecutionEnabled ? "LIVE" : "DRY RUN") + " Â· fill unconfirmed";
+    return "LeverUp: PREFLIGHT PASS · " + record.selectedLeverage + "x · " +
+      Number(record.marginMonUsed).toFixed(2) + " MON · $" + Number(record.notionalUsd).toFixed(2) +
+      " notional · " + (record.liveExecutionEnabled ? "LIVE" : "DRY RUN") + " · fill unconfirmed";
   }
-  return "LeverUp: BLOCKED Â· " + String(record.reason || record.status || "preflight failed").slice(0, 100);
+  return "LeverUp: BLOCKED · " + String(record.reason || record.status || "preflight failed").slice(0, 100);
 }
 
 
