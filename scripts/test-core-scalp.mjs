@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import vm from "node:vm";
 
 const source = await readFile("reconstructed/patched-worker.js", "utf8");
-assert.ok(source.includes('new Set(["BTC", "ETH", "MON", "SOL", "BNB", "HYPE", "ADA", "PUMP"])'), "SOL candle history must be added without dropping MON");
+assert.ok(source.includes('new Set(["BTC", "ETH", "MON", "SOL", "BNB", "HYPE", "XRP", "ONDO", "KPEPE", "TRX", "AAVE", "ADA", "DOGE", "LINK", "PUMP", "SEI", "SUI", "UNI", "VIRTUAL"])'), "all eligible 50x+ candle history must be added without dropping MON");
 assert.ok(source.includes('const coreScalpSymbols = ["BTC","ETH","SOL","BNB","HYPE","ADA","PUMP"]'), "core scalp feed must exclude ZEC while retaining ADA and PUMP");
 assert.ok(source.includes('interval: "1m"'));
 assert.ok(source.includes("this.coreScalpCandles[symbol]"), "1m scalp candles must be retained in Durable Object state");
