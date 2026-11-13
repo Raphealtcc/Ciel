@@ -106,7 +106,13 @@ once(`  const closedTrades = (state.trades || []).filter((trade) => trade.status
   for (const trade of closedTrades) {
     if (trade.feeModelVersion === "LEVERUP_TAKER_3BPS_EACH_SIDE_V1") continue;
     if (trade.feeModelVersion === "LEGACY_FEE_DATA_UNAVAILABLE") {
+      trade.netPnlMon = null;
+      trade.netPnlUsd = null;
+      trade.feeMon = null;
+      trade.feeUsd = null;
+      trade.returnOnMarginPct = null;
       legacyFeeDataUnavailable += 1;
+      feeMigrationChanged = true;
       continue;
     }
     const historical = paperTradePnl(trade, Number(trade.exitPrice), Number(trade.exitMonUsd) || monUsd);
@@ -120,45 +126,51 @@ once(`  const closedTrades = (state.trades || []).filter((trade) => trade.status
       trade.feeModelVersion = "LEVERUP_TAKER_3BPS_EACH_SIDE_V1";
       trade.returnOnMarginPct = Number(trade.marginMon) > 0 ? trade.netPnlMon / Number(trade.marginMon) * 100 : 0;
     } else {
-      trade.netPnlMon = Number(trade.grossPnlMon) || 0;
-      trade.netPnlUsd = Number(trade.grossPnlUsd) || 0;
-      trade.feeMon = 0;
-      trade.feeUsd = 0;
+      trade.netPnlMon = null;
+      trade.netPnlUsd = null;
+      trade.feeMon = null;
+      trade.feeUsd = null;
+      trade.returnOnMarginPct = null;
       trade.feeModelVersion = "LEGACY_FEE_DATA_UNAVAILABLE";
       legacyFeeDataUnavailable += 1;
     }
     feeMigrationChanged = true;
   }
-  if (feeMigrationChanged) {
-    const netRealized = closedTrades.reduce((sum, trade) => sum + (Number(trade.netPnlMon ?? trade.grossPnlMon) || 0), 0);
-    const netWins = closedTrades.filter((trade) => Number(trade.netPnlMon ?? trade.grossPnlMon) > 0).length;
-    const netLosses = closedTrades.filter((trade) => Number(trade.netPnlMon ?? trade.grossPnlMon) < 0).length;
+  const feeDataUnavailableCount = closedTrades.filter((trade) => trade.feeModelVersion === "LEGACY_FEE_DATA_UNAVAILABLE").length;
+  const feeAdjustedClosedTrades = closedTrades.filter((trade) => trade.feeModelVersion !== "LEGACY_FEE_DATA_UNAVAILABLE" && trade.netPnlMon !== null && trade.netPnlMon !== undefined);
+  if (feeMigrationChanged || feeDataUnavailableCount > 0) {
+    const netRealized = feeAdjustedClosedTrades.reduce((sum, trade) => sum + Number(trade.netPnlMon || 0), 0);
+    const netWins = feeAdjustedClosedTrades.filter((trade) => Number(trade.netPnlMon) > 0).length;
+    const netLosses = feeAdjustedClosedTrades.filter((trade) => Number(trade.netPnlMon) < 0).length;
     state.realizedPnlMon = netRealized;
-    state.realizedPnlUsd = closedTrades.reduce((sum, trade) => sum + (Number(trade.netPnlUsd ?? trade.grossPnlUsd) || 0), 0);
-    state.availableBalanceMon = startingBalanceMon + netRealized - openMarginMon;
+    state.realizedPnlUsd = feeAdjustedClosedTrades.reduce((sum, trade) => sum + (Number(trade.netPnlUsd) || 0), 0);
+    const pricedAvailableBalance = startingBalanceMon + netRealized - openMarginMon;
+    state.availableBalanceMon = feeDataUnavailableCount > 0 ? Math.min(pricedAvailableBalance, 0) : pricedAvailableBalance;
     state.wins = netWins;
     state.losses = netLosses;
-    state.breakeven = closedTrades.length - netWins - netLosses;
+    state.breakeven = feeAdjustedClosedTrades.length - netWins - netLosses;
+    state.feeDataUnavailableCount = feeDataUnavailableCount;
+    state.feeAdjustedClosedCount = feeAdjustedClosedTrades.length;
     state.updatedAtMs = now;
     await storage.put(PAPER_ACCOUNT_KEY, state);
     availableBalanceMon = Number(state.availableBalanceMon);
-    totalPnlMon = allMarksAvailable ? Number(state.realizedPnlMon || 0) + unrealizedPnlMon : null;
+    totalPnlMon = allMarksAvailable && feeDataUnavailableCount === 0 ? Number(state.realizedPnlMon || 0) + unrealizedPnlMon : null;
     equityMon = totalPnlMon === null ? null : startingBalanceMon + totalPnlMon;
   }
   const modeStats = (mode) => {`,
 "recalculate historical paper balance once without deleting trade history");
 
 once('const wins = matches.filter((trade) => Number(trade.grossPnlMon) > 0).length;',
-'const wins = matches.filter((trade) => Number(trade.netPnlMon ?? trade.grossPnlMon) > 0).length;',
+'const pricedMatches = matches.filter((trade) => trade.feeModelVersion !== "LEGACY_FEE_DATA_UNAVAILABLE" && trade.netPnlMon !== null && trade.netPnlMon !== undefined);\n  const wins = pricedMatches.filter((trade) => Number(trade.netPnlMon) > 0).length;',
 "count net strategy wins");
 once('const losses = matches.filter((trade) => Number(trade.grossPnlMon) < 0).length;',
-'const losses = matches.filter((trade) => Number(trade.netPnlMon ?? trade.grossPnlMon) < 0).length;',
+'const losses = pricedMatches.filter((trade) => Number(trade.netPnlMon) < 0).length;',
 "count net strategy losses");
 once('const breakeven = matches.filter((trade) => Number(trade.grossPnlMon) === 0).length;',
-'const breakeven = matches.filter((trade) => Number(trade.netPnlMon ?? trade.grossPnlMon) === 0).length;',
+'const breakeven = pricedMatches.filter((trade) => Number(trade.netPnlMon) === 0).length;',
 "count net break-even trades");
 once('const pnl = matches.reduce((sum, trade) => sum + (Number(trade.grossPnlMon) || 0), 0);',
-'const pnl = matches.reduce((sum, trade) => sum + (Number(trade.netPnlMon ?? trade.grossPnlMon) || 0), 0);',
+'const pnl = pricedMatches.reduce((sum, trade) => sum + (Number(trade.netPnlMon) || 0), 0);',
 "report net strategy P&L");
 
 once('"Paper results use Hyperliquid mids, not LeverUp Pyth/pool fills. Fees, funding/holding fees, oracle costs, slippage, collateral CR, minimum-hold restrictions and liquidation are not simulated."',

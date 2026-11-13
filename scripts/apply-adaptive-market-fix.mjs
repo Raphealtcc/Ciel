@@ -12,7 +12,7 @@ function once(before, after, label) {
 
 const learningHelpers = `
 function buildAdaptiveLearningProfile(trades, now) {
-  const closed = (Array.isArray(trades) ? trades : []).filter((trade) => trade && trade.status === "CLOSED" && Number.isFinite(Number(trade.closedAtMs)) && now - Number(trade.closedAtMs) <= 90 * 86400000).sort((a, b) => Number(a.closedAtMs) - Number(b.closedAtMs)).slice(-300);
+  const closed = (Array.isArray(trades) ? trades : []).filter((trade) => trade && trade.status === "CLOSED" && trade.feeModelVersion !== "LEGACY_FEE_DATA_UNAVAILABLE" && trade.netPnlMon !== null && trade.netPnlMon !== undefined && Number.isFinite(Number(trade.closedAtMs)) && now - Number(trade.closedAtMs) <= 90 * 86400000).sort((a, b) => Number(a.closedAtMs) - Number(b.closedAtMs)).slice(-300);
   const buckets = new Map();
   const add = (key, trade) => { if (!buckets.has(key)) buckets.set(key, []); buckets.get(key).push(trade); };
   for (const trade of closed) {

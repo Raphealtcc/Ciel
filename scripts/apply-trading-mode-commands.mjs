@@ -29,8 +29,8 @@ const paperBalanceHelper = `async function handlePaperBalanceCommand(env, comman
       "Unrealized NET P&L: " + (data.unrealizedPnlMon === null ? "unavailable (stale/missing mark)" : signed(data.unrealizedPnlMon) + " MON"),
       "Total NET P&L: " + (data.totalPnlMon === null ? "unavailable" : signed(data.totalPnlMon) + " MON"),
       "Equity: " + (data.equityMon === null ? "unavailable" : Number(data.equityMon).toFixed(3) + " MON"),
-      "Closed: " + Number(data.closedCount || 0) + " | net wins " + Number(data.wins || 0) + " | net losses " + Number(data.losses || 0),
-      "Historical fee basis unavailable: " + Number(data.feeDataUnavailableCount || 0) + " trades (not fee-adjusted)",
+      "Closed: " + Number(data.closedCount || 0) + " | fee-priced " + Number(data.feeAdjustedClosedCount || 0) + " | net wins " + Number(data.wins || 0) + " | net losses " + Number(data.losses || 0),
+      "Historical fee basis unavailable: " + Number(data.feeDataUnavailableCount || 0) + " trades excluded from net P&L and win/loss",
       "Open positions: " + (open.length ? open.map((trade) => String(trade.side) + " " + String(trade.symbol) + " (" + (trade.pnlMon === null ? "mark unavailable" : signed(trade.pnlMon) + " MON net") + ")").join(", ") : "none"),
       "Funding capacity: " + fundingCapacity,\n      "Fee model: estimated 3 bps per side deducted. Funding, holding fees, oracle costs and slippage are not included."
     ];

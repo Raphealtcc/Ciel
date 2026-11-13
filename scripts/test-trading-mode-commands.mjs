@@ -35,7 +35,7 @@ assert.ok(worker.includes('ciel:leverup:gemini-review:last'));
 assert.ok(worker.includes("handlePaperBalanceCommand"));
 assert.ok(worker.includes("Starting balance: "));
 assert.ok(worker.includes("data.starterBalanceMon"));
-assert.ok(worker.includes("feeDataUnavailableCount"));
+assert.ok(worker.includes("feeDataUnavailableCount"));\nassert.ok(worker.includes("feeAdjustedClosedCount"));\nassert.ok(worker.includes("excluded from net P&L and win/loss"));
 assert.ok(worker.includes("100x tier only — 11 MON minimum covered; 50x needs 22 MON"));
 assert.ok(worker.includes("Fee model: estimated 3 bps per side deducted"));
 assert.ok(worker.includes("/paperbalance"));

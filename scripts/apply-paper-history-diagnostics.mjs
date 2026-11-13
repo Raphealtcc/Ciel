@@ -40,11 +40,11 @@ source = once(source,
     entryPrice: trade.entryPrice,
     exitPrice: trade.exitPrice,
     closeReason: trade.closeReason,
-    pnlMon: trade.netPnlMon ?? trade.grossPnlMon,
+    pnlMon: trade.feeModelVersion === "LEGACY_FEE_DATA_UNAVAILABLE" ? null : (trade.netPnlMon ?? trade.grossPnlMon),
     grossPnlMon: trade.grossPnlMon,
     feeMon: trade.feeMon || 0,
-    netPnlMon: trade.netPnlMon ?? trade.grossPnlMon,
-    pnlUsd: trade.netPnlUsd ?? trade.grossPnlUsd,
+    netPnlMon: trade.feeModelVersion === "LEGACY_FEE_DATA_UNAVAILABLE" ? null : (trade.netPnlMon ?? trade.grossPnlMon),\n    feeModelVersion: trade.feeModelVersion || null,\n    feeDataUnavailable: trade.feeModelVersion === "LEGACY_FEE_DATA_UNAVAILABLE",
+    pnlUsd: trade.feeModelVersion === "LEGACY_FEE_DATA_UNAVAILABLE" ? null : (trade.netPnlUsd ?? trade.grossPnlUsd),
     returnOnMarginPct: trade.returnOnMarginPct,
     stopPct: Number.isFinite(Number(trade.stopPct)) ? Number(trade.stopPct) : null,
     targetPct: Number.isFinite(Number(trade.targetPct)) ? Number(trade.targetPct) : null,
@@ -56,9 +56,11 @@ source = once(source,
       ? (Number(trade.closedAtMs) - Number(trade.openedAtMs)) / 60000 : null
   }));
   const historyAnalysis = includeHistory ? (() => {
+    const pricedClosed = recentClosed.filter((trade) => trade.pnlMon !== null && trade.pnlMon !== undefined);
+    const feeDataUnavailableCount = recentClosed.filter((trade) => trade.feeDataUnavailable).length;
     const group = (field) => {
       const buckets = new Map();
-      for (const trade of recentClosed) {
+      for (const trade of pricedClosed) {
         const key = String(trade[field] || "UNKNOWN");
         if (!buckets.has(key)) buckets.set(key, []);
         buckets.get(key).push(trade);
@@ -73,13 +75,13 @@ source = once(source,
         averageReturnOnMarginPct: rows.reduce((sum, trade) => sum + (Number(trade.returnOnMarginPct) || 0), 0) / Math.max(1, rows.length)
       })).sort((a, b) => a.totalPnlMon - b.totalPnlMon);
     };
-    const wins = recentClosed.filter((trade) => Number(trade.pnlMon) > 0);
-    const losses = recentClosed.filter((trade) => Number(trade.pnlMon) < 0);
+    const wins = pricedClosed.filter((trade) => Number(trade.pnlMon) > 0);
+    const losses = pricedClosed.filter((trade) => Number(trade.pnlMon) < 0);
     return {
       count: recentClosed.length,
       wins: wins.length,
       losses: losses.length,
-      totalPnlMon: recentClosed.reduce((sum, trade) => sum + (Number(trade.pnlMon) || 0), 0),
+      totalPnlMon: pricedClosed.reduce((sum, trade) => sum + (Number(trade.pnlMon) || 0), 0),
       averageWinMon: wins.reduce((sum, trade) => sum + Number(trade.pnlMon), 0) / Math.max(1, wins.length),
       averageLossMon: losses.reduce((sum, trade) => sum + Number(trade.pnlMon), 0) / Math.max(1, losses.length),
       bySymbol: group("symbol"),
@@ -87,7 +89,7 @@ source = once(source,
       byMode: group("mode"),
       byRegime: group("regime"),
       byCloseReason: group("closeReason"),
-      worstTrades: recentClosed.slice().sort((a, b) => Number(a.pnlMon) - Number(b.pnlMon)).slice(0, 15)
+      worstTrades: pricedClosed.slice().sort((a, b) => Number(a.pnlMon) - Number(b.pnlMon)).slice(0, 15)
     };
   })() : null;`,
   "replace complete recentClosed mapping with bounded history and loss attribution",

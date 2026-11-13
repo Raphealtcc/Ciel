@@ -34,6 +34,6 @@ assert.ok(source.includes("Estimated 3 bps-per-side trading fees are deducted"))
 const missingBasisState={startingBalanceMon:100,availableBalanceMon:100,realizedPnlMon:0,realizedPnlUsd:0,wins:0,losses:0,breakeven:0,closedCount:1,trades:[{side:"LONG",entryPrice:100,marginMon:10,leverage:50,status:"CLOSED",exitPrice:101,exitMonUsd:0.2,grossPnlMon:5,grossPnlUsd:1,closedAtMs:now}]};
 const missingBasisStorage={async get(){return missingBasisState;},async put(_key,value){Object.assign(missingBasisState,value);}};
 const missingBasisSummary=await context.feeTests.getPaperSummary(missingBasisStorage,{MON:0.2},now,now-1000);
-assert.equal(missingBasisSummary.feeDataUnavailableCount,1);
+assert.equal(missingBasisSummary.feeDataUnavailableCount,1);\nassert.equal(missingBasisSummary.feeAdjustedClosedCount,0);\nassert.equal(missingBasisSummary.equityMon,null);\nassert.ok(missingBasisSummary.availableBalanceMon<=0);\nassert.equal(missingBasisSummary.wins,0);\nassert.equal(missingBasisSummary.losses,0);\nassert.equal(missingBasisState.trades[0].netPnlMon,null);
 assert.equal(missingBasisState.trades[0].feeModelVersion,"LEGACY_FEE_DATA_UNAVAILABLE");
 console.log("Paper fee accounting and historical migration tests passed.");
