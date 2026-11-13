@@ -53,7 +53,7 @@ assert.ok(bad<1&&bad>=0.70);
 assert.ok(adaptiveStrategyPriority({strategy:"5M_TREND_CONTINUATION+BREAKOUT_RETEST"})>adaptiveStrategyPriority({strategy:"5M_TREND+1M_PULLBACK+RECLAIM"}));
 assert.ok(adaptiveStrategyPriority({strategy:"5M_TREND+1M_PULLBACK+RECLAIM"})>adaptiveStrategyPriority({strategy:"MULTI_MARKET_LEVEL_SWEEP_RECLAIM"}));
 assert.ok(adaptiveStrategyPriority({strategy:"MULTI_MARKET_LEVEL_SWEEP_RECLAIM"})>adaptiveStrategyPriority({strategy:"1M_MICRO_MOMENTUM_BREAKOUT"}));
-assert.ok(source.includes("candidate.strategyPriority=adaptiveStrategyPriority(candidate)"),"strategy performance preference must affect ranking only");
+assert.ok(source.includes("candidate.strategyPriority=adaptiveStrategyPriority(candidate)"),"strategy performance preference must affect ranking only");\nassert.ok(source.includes("candidate.feeAdjustedRewardRisk"),"candidate ranking must account for net reward/risk after round-trip fees");\nassert.ok(source.includes("const netRewardPct=targetPct-0.06,netRiskPct=stopPct+0.06"),"ranking must account for 3 bps entry and exit fees");
 assert.ok(source.includes('"BTC","ETH","SOL","BNB","HYPE","XRP","ONDO","KPEPE","TRX","AAVE","ADA","DOGE","LINK","PUMP","SEI","SUI","UNI","VIRTUAL", ...configuredWatchSymbols(env.WATCH_SYMBOLS)]'));
 assert.ok(source.includes("orderedSymbols"));
 assert.ok(source.includes('const trendEntryMarketSet = new Set(["BTC","ETH","SOL","BNB","HYPE","XRP","ONDO","KPEPE","TRX","AAVE","ADA","DOGE","LINK","PUMP","SEI","SUI","UNI","VIRTUAL"])'));
