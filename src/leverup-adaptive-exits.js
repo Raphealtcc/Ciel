@@ -104,6 +104,16 @@ export function evaluateAdaptiveLeverUpExit({ position, currentPriceRaw, state =
   if (closeScore >= 3 && history.length >= 10 && favourablePct > 0) {
     return { action: "MARKET_CLOSE", reason: "ADAPTIVE_MULTI_FACTOR_REVERSAL", closeScore, trendPct, momentumPct, atrProxyPct, favourablePct, peakFavourablePct, givebackPct, state: nextState };
   }
+  // Loss-side management. Live ledger (Nov 2026): hard-stop closes averaged -5.8 LVMON and
+  // realised ~1.4x the planned stop distance, while software exits averaged +2.6. Exit early,
+  // before the exchange stop, only when a losing position is well on its way to the stop AND
+  // trend, momentum and mean position all confirm continued adverse movement.
+  const adverseStopDistancePct = stop > 0n && (isLong ? stop < entry : stop > entry) ? Math.abs(pct(stop, entry)) : 0;
+  const adverseMovePct = favourablePct < 0 ? -favourablePct : 0;
+  if (adverseStopDistancePct > 0 && history.length >= 6 && closeScore >= 3 &&
+      adverseMovePct >= adverseStopDistancePct * 0.60) {
+    return { action: "MARKET_CLOSE", reason: "ADAPTIVE_ADVERSE_CUT", closeScore, trendPct, momentumPct, atrProxyPct, favourablePct, peakFavourablePct, givebackPct, stopDistancePct: adverseStopDistancePct, state: nextState };
+  }
   if (history.length >= 8 && proposedStop !== stop) {
     return { action: "UPDATE_TP_SL", reason: "ADAPTIVE_TRAILING_STOP_TIGHTEN", stopLossRaw: proposedStop.toString(), takeProfitRaw: toBig(position.takeProfitRaw).toString(), trendPct, momentumPct, atrProxyPct, closeScore, state: nextState };
   }
