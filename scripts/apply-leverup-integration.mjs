@@ -116,7 +116,7 @@ const newCandle = `  for (const [symbol, one, five] of coreCandleResults) coreSc
         if (now - last >= 6 * 60 * 60e3) fallbackEligible.push(symbol);
       }
       if (fallbackEligible.length) {
-        await Promise.all(fallbackEligible.map((symbol) => env.CIEL_STATE.put("ciel:d1:fallback:5m:" + symbol, String(now), { expirationTtl: 3600 }).catch(() => void 0)));
+        await Promise.all(fallbackEligible.map((symbol) => env.CIEL_STATE.put("ciel:d1:fallback:5m:" + symbol, String(now), { expirationTtl: 28800 }).catch(() => void 0)));
         const placeholders = fallbackEligible.map(() => "?").join(",");
         const candleRows = await env.DB.prepare(
           "WITH ranked AS (SELECT symbol,open_ts_ms,close_ts_ms,open_price,high_price,low_price,close_price,volume,ROW_NUMBER() OVER (PARTITION BY symbol ORDER BY open_ts_ms DESC) AS rn FROM market_candles WHERE symbol IN (" + placeholders + ") AND interval=? AND open_ts_ms<=?) SELECT symbol,open_ts_ms,close_ts_ms,open_price,high_price,low_price,close_price,volume FROM ranked WHERE rn<=40 ORDER BY symbol,open_ts_ms ASC"
