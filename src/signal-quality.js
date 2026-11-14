@@ -175,7 +175,9 @@ export function evaluateSignalQuality({ candidate, forecast, market, eventIntel 
   }
   if (premiumBps !== null) {
     if (Math.abs(premiumBps) > 25) vetoes.push("MARK_ORACLE_PREMIUM_TOO_WIDE");
-    premiumScore = Math.abs(premiumBps) <= 5 ? 5 : Math.abs(premiumBps) <= 10 ? 4 : Math.abs(premiumBps) <= 15 ? 3 : 1;
+    // Direction matters: shadow data showed premium agreeing with the side wins ~42% vs ~34% when opposed.
+    const signedPremiumBps = side === "LONG" ? premiumBps : side === "SHORT" ? -premiumBps : 0;
+    premiumScore = signedPremiumBps >= 1 ? 5 : signedPremiumBps > -1 ? 3 : signedPremiumBps > -5 ? 2 : 0;
   }
   if (oiChangePct !== null) {
     if (Math.abs(oiChangePct) > 35) vetoes.push("OPEN_INTEREST_SHOCK");

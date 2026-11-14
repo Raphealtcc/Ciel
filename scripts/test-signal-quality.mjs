@@ -29,6 +29,12 @@ assert.equal(good.allowed, true);
 assert.ok(good.score >= good.threshold);
 assert.match(good.interpretation, /not a win probability/i);
 
+const opposedPremium = evaluateSignalQuality({ ...base, market: { ...base.market, premiumBps: -8 } });
+assert.equal(opposedPremium.score, good.score - 5, "premium opposing the trade side must score lower than premium agreeing with it");
+assert.ok(!opposedPremium.vetoes.includes("DIRECTIONAL_DERIVATIVES_CROWDING"), "opposed premium is a score penalty, not a veto");
+const alignedWidePremium = evaluateSignalQuality({ ...base, market: { ...base.market, premiumBps: 12, funding: 0.00001 } });
+assert.equal(alignedWidePremium.score, good.score, "aligned premium is not penalised for being wider than 5 bps");
+
 const missingForecast = evaluateSignalQuality({ ...base, forecast: { available: false, medianReturnPct: null } });
 assert.equal(missingForecast.allowed, true, "a missing statistical forecast should reduce confidence, not suppress a valid technical setup");
 assert.ok(missingForecast.score < good.score);
