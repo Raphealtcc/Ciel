@@ -6,7 +6,7 @@ let source = await readFile(file, "utf8");
 const oldBlock = [
   '        const placeholders = fallbackEligible.map(() => "?").join(",");',
   "        const candleRows = await env.DB.prepare(",
-  '          "WITH ranked AS (SELECT symbol,open_ts_ms,close_ts_ms,open_price,high_price,low_price,close_price,volume,ROW_NUMBER() OVER (PARTITION BY symbol ORDER BY open_ts_ms DESC) AS rn FROM market_candles WHERE symbol IN (" + placeholders + ") AND interval=? AND open_ts_ms<=?) SELECT symbol,open_ts_ms,close_ts_ms,open_price,high_price,low_price,close_price,volume FROM ranked WHERE rn<=60 ORDER BY symbol,open_ts_ms ASC"',
+  '          "WITH ranked AS (SELECT symbol,open_ts_ms,close_ts_ms,open_price,high_price,low_price,close_price,volume,ROW_NUMBER() OVER (PARTITION BY symbol ORDER BY open_ts_ms DESC) AS rn FROM market_candles WHERE symbol IN (" + placeholders + ") AND interval=? AND open_ts_ms<=?) SELECT symbol,open_ts_ms,close_ts_ms,open_price,high_price,low_price,close_price,volume FROM ranked WHERE rn<=40 ORDER BY symbol,open_ts_ms ASC"',
   '        ).bind(...fallbackEligible, "5m", now - 5 * 60 * 1e3).all();',
   "        const bySymbol = new Map();",
   "        for (const row of candleRows.results || []) {",

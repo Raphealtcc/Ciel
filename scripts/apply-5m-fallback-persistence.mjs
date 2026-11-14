@@ -10,9 +10,9 @@ function once(before, after, label) {
 }
 
 once(
-  "if (now - last >= 30 * 60e3) fallbackEligible.push(symbol);",
-  "if (now - last >= 5 * 60e3) fallbackEligible.push(symbol);",
-  "retry missing 5m history after five minutes"
+  "if (now - last >= 6 * 60 * 60e3) fallbackEligible.push(symbol);",
+  "if (now - last >= 6 * 60 * 60e3) fallbackEligible.push(symbol);",
+  "retry missing 5m history at most every six hours"
 );
 once(
   `const rows = coreScalpData.get(symbol)?.five || [];
@@ -53,4 +53,4 @@ const newLoop = [
 
 once(oldLoop, newLoop, "persist D1 fallback candles into Durable Object storage");
 await writeFile(file, source);
-console.log("Applied persistent 5m D1 fallback with bounded five-minute retry.");
+console.log("Applied persistent 5m D1 fallback with bounded six-hour retry.");
