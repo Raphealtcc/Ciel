@@ -231,7 +231,11 @@ export function evaluateSignalQuality({ candidate, forecast, market, eventIntel 
     if (expectancyR <= 0.10) shadowPenalty = expectancyR <= 0 ? 5 : 3;
     else if (expectancyR < 0.20) shadowPenalty = 2;
   }
-  score = Math.max(0, score - shadowPenalty);
+  // Premium opposing the trade side lost materially more often in shadow outcomes (34.0% vs 41.9%
+  // target-first over 1,015 resolved signals; same direction in both halves of the sample).
+  const signedPremiumForPenalty = premiumBps === null ? 0 : side === "LONG" ? premiumBps : side === "SHORT" ? -premiumBps : 0;
+  const premiumDirectionPenalty = signedPremiumForPenalty <= -1 ? 4 : 0;
+  score = Math.max(0, score - shadowPenalty - premiumDirectionPenalty);
   const allowed = vetoes.length === 0 && score >= threshold;
   if (score < threshold) vetoes.push("QUALITY_SCORE_BELOW_THRESHOLD");
   return {
@@ -240,7 +244,7 @@ export function evaluateSignalQuality({ candidate, forecast, market, eventIntel 
     threshold,
     vetoes,
     components,
-    shadowPenalty, forecastPenalty,
+    shadowPenalty, forecastPenalty, premiumDirectionPenalty,
     interpretation: "Evidence-quality score, not a win probability or guaranteed return.",
   };
 }

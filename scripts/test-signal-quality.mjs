@@ -30,7 +30,11 @@ assert.ok(good.score >= good.threshold);
 assert.match(good.interpretation, /not a win probability/i);
 
 const opposedPremium = evaluateSignalQuality({ ...base, market: { ...base.market, premiumBps: -8 } });
-assert.equal(opposedPremium.score, good.score - 5, "premium opposing the trade side must score lower than premium agreeing with it");
+assert.equal(opposedPremium.score, good.score - 9, "premium opposing the trade side loses 5 component points plus a 4-point direction penalty");
+assert.equal(opposedPremium.premiumDirectionPenalty, 4);
+const neutralPremium = evaluateSignalQuality({ ...base, market: { ...base.market, premiumBps: 0.5 } });
+assert.equal(neutralPremium.score, good.score - 2, "a near-zero premium is not directionally penalised");
+assert.equal(neutralPremium.premiumDirectionPenalty, 0);
 assert.ok(!opposedPremium.vetoes.includes("DIRECTIONAL_DERIVATIVES_CROWDING"), "opposed premium is a score penalty, not a veto");
 const alignedWidePremium = evaluateSignalQuality({ ...base, market: { ...base.market, premiumBps: 12, funding: 0.00001 } });
 assert.equal(alignedWidePremium.score, good.score, "aligned premium is not penalised for being wider than 5 bps");
