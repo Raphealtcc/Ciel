@@ -51,6 +51,10 @@ assert.ok(source.includes("const limitReach = analyzeLimitReach(sym,candles.five
 assert.ok(source.includes('strategy:"LIMIT_REACH_RANGE_REVERSAL"'));
 assert.ok(source.includes("LIMIT_REACH_RANGE_REVERSAL") && source.includes("adaptiveStrategyPriority"));
 assert.ok(source.includes(".slice(-288)"), "the strategy must receive the existing 24h Durable Object candle cache");
+assert.ok(source.includes('this.coreScalpCandles = values[23] || {};'), "core scalp cache must restore from state slot 23");
+assert.ok(source.includes('this.coreTrendCandles = values[24] || {};'), "core trend cache must restore from state slot 24");
+assert.ok(source.includes('this.historyBootstrapDone = values[27] === true;'), "bootstrap completion must restore from state slot 27");
+assert.ok(source.includes('this.lastHistoryBootstrapAt = Number(values[28]) || 0;'), "bootstrap cooldown timestamp must restore from state slot 28");
 const strategySource = await readFile("src/limit-reach.js", "utf8");
 assert.ok(!strategySource.includes("env.DB") && !strategySource.includes("fetch("), "Limit Reach must use only the existing cached candle buffer");
 
