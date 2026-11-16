@@ -159,9 +159,9 @@ onceInMethod('          if (!latestClosed) return;',
 onceInMethod('    }\n  }\n', '    }\n    if (coreTrendUpdated) await this.state.storage.put("coreTrendCandles", this.coreTrendCandles).catch((error) => console.error("Core trend candle state persistence failed: " + String(error).slice(0,160)));\n  }\n', "persist the 5m cache once per snapshot batch");
 const hourlySummaryStart = trendCandleMethod.indexOf('    if (now - this.lastHourlySummaryAt >= 15 * 60 * 1e3) {');
 if (hourlySummaryStart >= 0) {
-  const methodClose = trendCandleMethod.lastIndexOf("\\n  }");
+  const methodClose = trendCandleMethod.lastIndexOf("  }");
   if (methodClose <= hourlySummaryStart) throw new Error("Could not safely isolate the now-unused hourly D1 aggregate writer.");
-  trendCandleMethod = trendCandleMethod.slice(0, hourlySummaryStart) + "\\n  }\\n";
+  trendCandleMethod = trendCandleMethod.slice(0, hourlySummaryStart) + "\n  }\n";
   console.log("Removed redundant hourly D1 aggregate writes; the advisor reads the same levels from the DO candle cache.");
 }
 source = source.slice(0, trendCandleMethodStart) + trendCandleMethod + source.slice(trendCandleMethodEnd);
