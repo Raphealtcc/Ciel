@@ -89,7 +89,9 @@ assert.ok(trendWriter.includes('["BTC","ETH","SOL","BNB","HYPE","XRP","ONDO","KP
 assert.ok(source.includes('new Set(["BTC", "ETH", "MON", "SOL", "BNB", "HYPE", "XRP", "ONDO", "KPEPE", "TRX", "AAVE", "ADA", "DOGE", "LINK", "PUMP", "SEI", "SUI", "UNI", "VIRTUAL"])'), "native 5m candle snapshots must include all six enabled markets");
 assert.ok(trendWriter.includes('this.state.storage.put("coreTrendCandles", this.coreTrendCandles)'), "native 5m cache must persist across DO restarts");
 assert.ok(trendWriter.includes("INSERT OR REPLACE INTO market_candles"), "native 5m history must remain archived in D1");
-assert.ok(!trendWriter.includes("aggregateStatements") && !trendWriter.includes("market_candle_hourly_stats"), "unused hourly aggregates must not generate recurring D1 reads or writes");
+assert.ok(!trendWriter.includes("aggregateStatements"), "the redundant full-hour D1 aggregate scan must be removed");
+assert.ok(trendWriter.includes("refreshRangeSummaries = now - this.lastHourlySummaryAt >= 60 * 60 * 1e3"), "incremental hourly summaries must be throttled to once per hour");
+assert.ok(trendWriter.includes('this.state.storage.put("lastHourlySummaryAt"'), "hourly summary throttle must survive DO restarts");
 
 const outcomeStart = source.indexOf("  async updateAlertOutcomes(now) {");
 const outcomeEnd = source.indexOf("\n  }\n};", outcomeStart);

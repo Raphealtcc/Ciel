@@ -51,7 +51,8 @@ assert.ok(source.includes("const limitReach = analyzeLimitReach(sym,candles.five
 assert.ok(source.includes('strategy:"LIMIT_REACH_RANGE_REVERSAL"'));
 assert.ok(source.includes("LIMIT_REACH_RANGE_REVERSAL") && source.includes("adaptiveStrategyPriority"));
 assert.ok(source.includes(".slice(-288)"), "the strategy must receive the existing 24h Durable Object candle cache");
-assert.ok(!source.includes("FROM market_candle_hourly_stats"), "Limit Reach must not add hourly-stat D1 reads");
+const strategySource = await readFile("src/limit-reach.js", "utf8");
+assert.ok(!strategySource.includes("env.DB") && !strategySource.includes("fetch("), "Limit Reach must use only the existing cached candle buffer");
 
 const quality = await readFile("src/signal-quality.js", "utf8");
 assert.ok(quality.includes('"LIMIT_REACH_RANGE_REVERSAL"'));

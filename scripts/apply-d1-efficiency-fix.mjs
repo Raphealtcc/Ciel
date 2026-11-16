@@ -150,6 +150,7 @@ function onceInMethod(from, to, description) {
   trendCandleMethod = trendCandleMethod.replace(from, to);
 }
 onceInMethod('    const statements = [];', '    const statements = [];\n    let coreTrendUpdated = false;', "track 5m cache updates");
+onceInMethod('    const refreshRangeSummaries = now - this.lastHourlySummaryAt >= 15 * 60 * 1e3;', '    const refreshRangeSummaries = now - this.lastHourlySummaryAt >= 60 * 60 * 1e3;\n    if (refreshRangeSummaries) { this.lastHourlySummaryAt = now; await this.state.storage.put("lastHourlySummaryAt", now).catch(() => void 0); }', "refresh hourly candle summaries once per hour");
 onceInMethod('req: { coin: symbol, interval: "5m", startTime, endTime }',
   'req: { coin: symbol, interval: "5m", startTime: (["BTC","ETH","SOL","BNB","HYPE","XRP","ONDO","KPEPE","TRX","AAVE","ADA","DOGE","LINK","PUMP","SEI","SUI","UNI","VIRTUAL"].includes(symbol) && (this.coreTrendCandles[symbol] || []).length < 40) ? now - 5 * 60 * 60 * 1e3 : startTime, endTime }',
   "bootstrap 5h of 5m candles only when the core cache is cold");
