@@ -68,11 +68,11 @@ export function analyzeLimitReach(symbol, rows, now = Date.now()) {
   const lows = clusterPivots(pivotLows, tolerance);
   if (!highs.length || !lows.length) return null;
 
-  const high = highs.filter((g) => g.level >= last.close * 0.998 &&
-    Math.abs(last.close / g.level - 1) <= 0.004)
+  const high = highs.filter((g) => g.level > last.close &&
+    (g.level / last.close - 1) <= 0.03)
     .sort((a, b) => Math.abs(last.close / a.level - 1) - Math.abs(last.close / b.level - 1))[0];
-  const low = lows.filter((g) => g.level <= last.close * 1.002 &&
-    Math.abs(last.close / g.level - 1) <= 0.004)
+  const low = lows.filter((g) => g.level < last.close &&
+    (last.close / g.level - 1) <= 0.03)
     .sort((a, b) => Math.abs(last.close / a.level - 1) - Math.abs(last.close / b.level - 1))[0];
   if (!high || !low || !(high.level > low.level)) return null;
 
@@ -85,7 +85,7 @@ export function analyzeLimitReach(symbol, rows, now = Date.now()) {
   const rejectionDistance = 0.0035;
   let side = null, targetLevel = 0, stopPct = 0, targetPct = 0, touchCount = 0, level = 0;
 
-  if (last.close < last.open && upperWick >= Math.max(body * 0.35, last.close * 0.0002) &&
+  if (Math.abs(last.close / high?.level - 1) <= 0.004 && last.close < last.open && upperWick >= Math.max(body * 0.35, last.close * 0.0002) &&
       Math.abs(recentHigh / high.level - 1) <= rejectionDistance && last.close < high.level &&
       low.level < last.close) {
     side = "SHORT";
@@ -95,7 +95,7 @@ export function analyzeLimitReach(symbol, rows, now = Date.now()) {
     const stopPrice = high.level + Math.max(atr * 0.45, last.close * 0.0008);
     stopPct = Math.max(0.12, (stopPrice / last.close - 1) * 100);
     targetPct = (last.close / targetLevel - 1) * 100;
-  } else if (last.close > last.open && lowerWick >= Math.max(body * 0.35, last.close * 0.0002) &&
+  } else if (Math.abs(last.close / low?.level - 1) <= 0.004 && last.close > last.open && lowerWick >= Math.max(body * 0.35, last.close * 0.0002) &&
       Math.abs(recentLow / low.level - 1) <= rejectionDistance && last.close > low.level &&
       high.level > last.close) {
     side = "LONG";
