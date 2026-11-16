@@ -157,6 +157,13 @@ onceInMethod('          if (!latestClosed) return;',
   '          if (!latestClosed) return;\n          if (["BTC","ETH","SOL","BNB","HYPE","XRP","ONDO","KPEPE","TRX","AAVE","ADA","DOGE","LINK","PUMP","SEI","SUI","UNI","VIRTUAL"].includes(symbol)) {\n            const merged = new Map((Array.isArray(this.coreTrendCandles[symbol]) ? this.coreTrendCandles[symbol] : []).map((row) => [Number(row.open_ts_ms), row]));\n            for (const candle of valid) {\n              if (candle.closeAt > now) continue;\n              merged.set(candle.openAt, { open_ts_ms: candle.openAt, close_ts_ms: candle.closeAt, open_price: candle.open, high_price: candle.high, low_price: candle.low, close_price: candle.close, volume: candle.volume });\n            }\n            this.coreTrendCandles[symbol] = [...merged.values()].sort((left, right) => left.open_ts_ms - right.open_ts_ms).slice(-60);\n            coreTrendUpdated = true;\n          }',
   "merge fresh closed 5m candles into the persistent DO cache");
 onceInMethod('    }\n  }\n', '    }\n    if (coreTrendUpdated) await this.state.storage.put("coreTrendCandles", this.coreTrendCandles).catch((error) => console.error("Core trend candle state persistence failed: " + String(error).slice(0,160)));\n  }\n', "persist the 5m cache once per snapshot batch");
+const hourlySummaryStart = trendCandleMethod.indexOf('    if (now - this.lastHourlySummaryAt >= 15 * 60 * 1e3) {');
+if (hourlySummaryStart >= 0) {
+  const methodClose = trendCandleMethod.lastIndexOf("\\n  }\\n");
+  if (methodClose <= hourlySummaryStart) throw new Error("Could not safely isolate the now-unused hourly D1 aggregate writer.");
+  trendCandleMethod = trendCandleMethod.slice(0, hourlySummaryStart) + "\\n  }\\n";
+  console.log("Removed redundant hourly D1 aggregate writes; the advisor reads the same levels from the DO candle cache.");
+}
 source = source.slice(0, trendCandleMethodStart) + trendCandleMethod + source.slice(trendCandleMethodEnd);
 
 

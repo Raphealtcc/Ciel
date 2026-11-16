@@ -188,7 +188,7 @@ assert.ok(worker.includes("WHEN strategy LIKE '%LEVEL_SWEEP%' THEN 180*60000"));
 assert.ok(worker.includes("horizonMinutes: Number(row.horizon_minutes || 0)"));
 assert.ok(worker.includes("created_at_ms >= 1794397468000"));
 assert.ok(worker.includes("ciel:advisor:shadow-stats:v2"));
-assert.ok(worker.includes("if (!horizonMigrationJustRan && now - lastRun < 30 * 60e3) return cached;"), "normal shadow outcome D1 updates remain throttled to 30 minutes after the one-time migration");
+assert.ok(worker.includes("if (!horizonMigrationJustRan && now - lastRun < 60 * 60e3) return cached;"), "normal shadow outcome D1 updates remain throttled to 60 minutes after the one-time migration");
 assert.ok(worker.includes("statsLastRefreshKey") && worker.includes("6 * 60 * 60e3"), "shadow aggregation must be throttled to six hours");
 assert.ok(worker.includes("WHERE status='EXPIRED' AND exit_reason IN"), "shadow aggregation should use the indexed status/created window");
 assert.ok(worker.includes("SHADOW_TARGET_FIRST"));

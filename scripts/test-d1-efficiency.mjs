@@ -89,6 +89,7 @@ assert.ok(trendWriter.includes('["BTC","ETH","SOL","BNB","HYPE","XRP","ONDO","KP
 assert.ok(source.includes('new Set(["BTC", "ETH", "MON", "SOL", "BNB", "HYPE", "XRP", "ONDO", "KPEPE", "TRX", "AAVE", "ADA", "DOGE", "LINK", "PUMP", "SEI", "SUI", "UNI", "VIRTUAL"])'), "native 5m candle snapshots must include all six enabled markets");
 assert.ok(trendWriter.includes('this.state.storage.put("coreTrendCandles", this.coreTrendCandles)'), "native 5m cache must persist across DO restarts");
 assert.ok(trendWriter.includes("INSERT OR REPLACE INTO market_candles"), "native 5m history must remain archived in D1");
+assert.ok(!trendWriter.includes("aggregateStatements") && !trendWriter.includes("market_candle_hourly_stats"), "unused hourly aggregates must not generate recurring D1 reads or writes");
 
 const outcomeStart = source.indexOf("  async updateAlertOutcomes(now) {");
 const outcomeEnd = source.indexOf("\n  }\n};", outcomeStart);

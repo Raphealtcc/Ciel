@@ -6,6 +6,7 @@ const REQUIRED_COMPONENTS = Object.freeze({
   "1M_SWING_REVERSAL+RECLAIM": ["1M_SWING_EXHAUSTION","1M_PIVOT_RECLAIM","1M_RSI_TURN","1M_VOLUME_CONFIRMATION","5M_REVERSAL_CONFIRMATION"],
   "5M_TREND+1M_PULLBACK+RECLAIM": ["5M_TREND_FILTER","1M_PULLBACK","1M_RECLAIM","VOLUME_CONFIRMATION"],
   "5M_TREND_CONTINUATION+BREAKOUT_RETEST": ["5M_EMA_TREND","5M_RANGE_BREAKOUT","5M_BREAKOUT_RETEST","VOLUME_CONFIRMATION"],
+  "LIMIT_REACH_RANGE_REVERSAL": ["LIMIT_REACH_HIGH_REPEATED_TOUCHES","LIMIT_REACH_LOW_REPEATED_TOUCHES","LIMIT_REACH_REJECTION","LIMIT_REACH_OPPOSITE_ZONE_TARGET"],
 });
 
 function componentSet(candidate) {
@@ -40,7 +41,8 @@ function structureEvidence(candidate) {
 function isCounterTrend(candidate) {
   const strategy = String(candidate?.strategy || "").toUpperCase();
   return strategy.includes("LEVEL_SWEEP") ||
-    strategy.includes("SWING_REVERSAL");
+    strategy.includes("SWING_REVERSAL") ||
+    strategy.includes("LIMIT_REACH");
 }
 
 function regimeEvidence(candidate, eventIntel) {
@@ -56,6 +58,9 @@ function regimeEvidence(candidate, eventIntel) {
   }
   if (strategy.includes("SWING_REVERSAL") && regime !== "COUNTER_TREND_REVERSAL") {
     return { score: 0, allowed: false, reason: "SWING_REVERSAL_REGIME_MISMATCH" };
+  }
+  if (strategy.includes("LIMIT_REACH") && regime !== "COUNTER_TREND_REVERSAL") {
+    return { score: 0, allowed: false, reason: "LIMIT_REACH_REGIME_MISMATCH" };
   }
   if (!counter && (side === "LONG" && regime !== "TREND_UP" || side === "SHORT" && regime !== "TREND_DOWN")) {
     return { score: 0, allowed: false, reason: "TREND_REGIME_DIRECTION_MISMATCH" };
