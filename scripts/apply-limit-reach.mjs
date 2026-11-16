@@ -9,7 +9,7 @@ function once(before, after, label) {
   source = source.replace(before, after);
 }
 
-if (!source.includes("analyzeLimitReach")) {
+if (!source.includes('import { analyzeLimitReach from "../src/limit-reach.js"')) {
   source = 'import { analyzeLimitReach } from "../src/limit-reach.js";\n' + source;
 }
 
