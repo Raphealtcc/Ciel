@@ -38,7 +38,7 @@ function clusterPivots(pivots, tolerance) {
  */
 export function analyzeLimitReach(symbol, rows, now = Date.now()) {
   const candles = normalizeCandles(rows, Number(now)).slice(-288);
-  if (candles.length < 180) return null;
+  if (candles.length < 60) return null;
 
   const last = candles[candles.length - 1];
   if (Number(now) - last.closeAt > 7 * 60_000 || last.closeAt > Number(now) + 15_000) return null;

@@ -20,14 +20,14 @@ once(
 );
 
 once(
-  'const continuation = analyzeCoreTrendContinuation(sym,candles.five,now);\n        if (continuation) candidates.push(continuation);',
-  'const limitReach = analyzeLimitReach(sym,candles.five,now);\n        if (limitReach) candidates.push(limitReach);\n        else scanDiagnostics.push({symbol:sym,strategy:"LIMIT_REACH_RANGE_REVERSAL",reason:"NO_REPEATED_LEVEL_REJECTION_OR_TARGET_RANGE"});\n        const continuation = analyzeCoreTrendContinuation(sym,candles.five,now);\n        if (continuation) candidates.push(continuation);',
+  'const continuation = analyzeCoreTrendContinuation(sym,candles.five,now);\n        if (continuation) candidates.push(continuation);\n        else scanDiagnostics.push({symbol:sym,strategy:"TREND_BREAKOUT_RETEST",reason:"EMA_BREAKOUT_RETEST_VOLUME_OR_FRESHNESS_GATE"});',
+  'const limitReach = analyzeLimitReach(sym,candles.five,now);\n        if (limitReach) candidates.push(limitReach);\n        else scanDiagnostics.push({symbol:sym,strategy:"LIMIT_REACH_RANGE_REVERSAL",reason:"NO_REPEATED_LEVEL_REJECTION_OR_TARGET_RANGE"});\n        const continuation = analyzeCoreTrendContinuation(sym,candles.five,now);\n        if (continuation) candidates.push(continuation);\n        else scanDiagnostics.push({symbol:sym,strategy:"TREND_BREAKOUT_RETEST",reason:"EMA_BREAKOUT_RETEST_VOLUME_OR_FRESHNESS_GATE"});',
   "add Limit Reach as an independent candidate without gating existing strategies"
 );
 
 once(
-  'if (strategy === "5M_TREND+1M_PULLBACK+RECLAIM") return 0.10;',
-  'if (strategy === "LIMIT_REACH_RANGE_REVERSAL") return 0.07;\n  if (strategy === "5M_TREND+1M_PULLBACK+RECLAIM") return 0.10;',
+  'if (strategy === "MULTI_MARKET_LEVEL_SWEEP_RECLAIM") return -0.06;',
+  'if (strategy === "LIMIT_REACH_RANGE_REVERSAL") return 0.07;\n  if (strategy === "MULTI_MARKET_LEVEL_SWEEP_RECLAIM") return -0.06;',
   "include Limit Reach in adaptive strategy ranking without restricting other strategies"
 );
 
