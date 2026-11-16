@@ -20,8 +20,8 @@ once(
 );
 
 once(
-  'const continuation = analyzeCoreTrendContinuation(sym,candles.five,now);\n        if (continuation) candidates.push(continuation);\n        else scanDiagnostics.push({symbol:sym,strategy:"TREND_BREAKOUT_RETEST",reason:"EMA_BREAKOUT_RETEST_VOLUME_OR_FRESHNESS_GATE"});',
-  'const limitReach = analyzeLimitReach(sym,candles.five,now);\n        if (limitReach) candidates.push(limitReach);\n        else scanDiagnostics.push({symbol:sym,strategy:"LIMIT_REACH_RANGE_REVERSAL",reason:"NO_REPEATED_LEVEL_REJECTION_OR_TARGET_RANGE"});\n        const continuation = analyzeCoreTrendContinuation(sym,candles.five,now);\n        if (continuation) candidates.push(continuation);\n        else scanDiagnostics.push({symbol:sym,strategy:"TREND_BREAKOUT_RETEST",reason:"EMA_BREAKOUT_RETEST_VOLUME_OR_FRESHNESS_GATE"});',
+  '        const continuation = analyzeCoreTrendContinuation(sym,candles.five,now);\n        if (continuation) candidates.push(continuation);\n        else scanDiagnostics.push({symbol:sym,strategy:"TREND_BREAKOUT_RETEST",reason:"EMA_BREAKOUT_RETEST_VOLUME_OR_FRESHNESS_GATE"});',
+  '        const limitReach = analyzeLimitReach(sym,candles.five,now);\n        if (limitReach) candidates.push(limitReach);\n        else scanDiagnostics.push({symbol:sym,strategy:"LIMIT_REACH_RANGE_REVERSAL",reason:"NO_REPEATED_LEVEL_REJECTION_OR_TARGET_RANGE"});\n        const continuation = analyzeCoreTrendContinuation(sym,candles.five,now);\n        if (continuation) candidates.push(continuation);\n        else scanDiagnostics.push({symbol:sym,strategy:"TREND_BREAKOUT_RETEST",reason:"EMA_BREAKOUT_RETEST_VOLUME_OR_FRESHNESS_GATE"});',
   "add Limit Reach as an independent candidate without gating existing strategies"
 );
 
