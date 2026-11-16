@@ -110,6 +110,9 @@ const newCandidateBuild = `    const beforeCount = candidates.length;
       if (!candles || candles.five.length < 40) {
         scanDiagnostics.push({symbol:sym,strategy:"TREND_BREAKOUT_RETEST",reason:"INSUFFICIENT_CLOSED_5M_HISTORY"});
       } else {
+        const limitReach = analyzeLimitReach(sym,candles.five,now);
+        if (limitReach) candidates.push(limitReach);
+        else scanDiagnostics.push({symbol:sym,strategy:"LIMIT_REACH_RANGE_REVERSAL",reason:"NO_REPEATED_LEVEL_REJECTION_OR_TARGET_RANGE"});
         const continuation = analyzeCoreTrendContinuation(sym,candles.five,now);
         if (continuation) candidates.push(continuation);
         else scanDiagnostics.push({symbol:sym,strategy:"TREND_BREAKOUT_RETEST",reason:"EMA_BREAKOUT_RETEST_VOLUME_OR_FRESHNESS_GATE"});
