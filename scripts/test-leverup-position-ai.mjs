@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { getGeminiApiKeys, parseGeminiApiKeys, reviewLeverUpPositionWithGemini } from "../src/leverup-position-ai.js";
+import { getGeminiApiKeys, getPositionAiProviderCount, parseGeminiApiKeys, reviewLeverUpPositionWithAI, reviewLeverUpPositionWithGemini } from "../src/leverup-position-ai.js";
 
 assert.deepEqual(parseGeminiApiKeys(" alpha , beta\n gamma;alpha "), ["alpha", "beta", "gamma"]);
 assert.deepEqual(parseGeminiApiKeys('["json-a","json-b"]'), ["json-a", "json-b"]);

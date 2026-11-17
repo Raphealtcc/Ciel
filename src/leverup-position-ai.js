@@ -113,7 +113,7 @@ export async function reviewLeverUpPositionWithAI({ env, position, currentPriceR
   }
   const cursorKey = "ciel:leverup:gemini-position:key-cursor";
   const cursorRaw = storage?.get ? await storage.get(cursorKey).catch(() => "0") : "0";
-  const cursor = Math.max(0, Number(cursorRaw || 0)) % keys.length;
+  const cursor = keys.length ? Math.max(0, Number(cursorRaw || 0)) % keys.length : 0;
   const model = String(env?.GEMINI_MODEL || "gemini-2.5-flash").trim();
   const rawPositionFeeFields = Object.fromEntries([
     "openFeeRaw", "executionFeeRaw", "fundingFeeRaw", "holdingFeeRaw",
@@ -280,7 +280,7 @@ export async function reviewLeverUpPositionWithAI({ env, position, currentPriceR
       lastError = String(error?.message || error).slice(0, 180);
     }
   }
-  if (storage?.put) await storage.put(cursorKey, String((cursor + 1) % keys.length), { expirationTtl: 30 * 24 * 3600 }).catch(() => void 0);
+  if (storage?.put && keys.length) await storage.put(cursorKey, String((cursor + 1) % keys.length), { expirationTtl: 30 * 24 * 3600 }).catch(() => void 0);
   const failed = {
     status: "FAILED", action: "HOLD", confidence: 0,
     reason: lastError, configuredKeyCount: keys.length,
