@@ -66,9 +66,11 @@ export async function reviewEntrySignalWithAI({ env = {}, prompt, dependencies =
     try {
       const result = await aiRun(POSITION_AI_QWEN_MODEL, {
         messages,
-        max_tokens: 256,
+        max_completion_tokens: 256,
         temperature: 0.1,
-        response_format: { type: "json_object" }
+        response_format: { type: "json_object" },
+        reasoning_effort: "low",
+        chat_template_kwargs: { enable_thinking: false }
       });
       const raw = typeof result === "string" ? result :
         result?.response ?? result?.result?.response ??
@@ -277,9 +279,11 @@ export async function reviewLeverUpPositionWithAI({ env, position, currentPriceR
     try {
       const response = await cloudflareAiRun(POSITION_AI_QWEN_MODEL, {
         messages,
-        max_tokens: 192,
+        max_completion_tokens: 256,
         temperature: 0.1,
-        response_format: { type: "json_object" }
+        response_format: { type: "json_object" },
+        reasoning_effort: "low",
+        chat_template_kwargs: { enable_thinking: false }
       });
       const content = typeof response === "string" ? response :
         response?.response ?? response?.result?.response ??

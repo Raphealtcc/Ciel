@@ -148,7 +148,9 @@ const qwenReview = await reviewLeverUpPositionWithAI({
         qwenCalls++;
         assert.equal(model, "@cf/qwen/qwen3.8-27b");
         assert.equal(options.temperature, 0.1);
-        assert.equal(options.max_tokens, 192);
+        assert.equal(options.max_completion_tokens, 256);
+        assert.equal(options.reasoning_effort, "low");
+        assert.equal(options.chat_template_kwargs.enable_thinking, false);
         assert.equal(options.response_format.type, "json_object");
         assert.equal(options.messages[0].role, "system");
         return { response: JSON.stringify({
@@ -248,7 +250,9 @@ const qwenEntry = await reviewEntrySignalWithAI({
     AI: {
       run: async (model, options) => {
         assert.equal(model, "@cf/qwen/qwen3.8-27b");
-        assert.equal(options.max_tokens, 256);
+        assert.equal(options.max_completion_tokens, 256);
+        assert.equal(options.reasoning_effort, "low");
+        assert.equal(options.chat_template_kwargs.enable_thinking, false);
         assert.equal(options.response_format.type, "json_object");
         assert.equal(options.messages[1].content, entryPrompt);
         return { response: JSON.stringify({ verdict: "APPROVE", reason: "Evidence is aligned.", flags: ["TREND_ALIGNED"] }) };
