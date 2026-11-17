@@ -53,7 +53,7 @@ export async function reviewEntrySignalWithAI({ env = {}, prompt, dependencies =
   const messages = [
     {
       role: "system",
-      content: "You are CIEL's conservative crypto-perpetual setup reviewer. Use only the supplied evidence. Return strict JSON with verdict APPROVE, REJECT, or WAIT, a short reason, and a flags array. Never invent facts or infer win probabilities. WAIT when evidence is mixed or insufficient."
+      content: "You are CIEL's conservative crypto-perpetual setup reviewer. Use only the supplied evidence. Return strict JSON with verdict APPROVE, REJECT, or WAIT, a short reason, and a flags array. Never invent facts or infer win probabilities. WAIT when evidence is mixed or insufficient. Do not require a news catalyst for a technically valid setup. When no event-intelligence bundle is supplied, news is unassessed, not negative evidence; do not reject or wait solely because no catalyst was supplied."
     },
     { role: "user", content: String(prompt || "") }
   ];

@@ -255,6 +255,8 @@ const qwenEntry = await reviewEntrySignalWithAI({
         assert.equal(options.chat_template_kwargs.enable_thinking, false);
         assert.equal(options.response_format.type, "json_object");
         assert.equal(options.messages[1].content, entryPrompt);
+        assert.ok(options.messages[0].content.includes("Do not require a news catalyst"));
+        assert.ok(options.messages[0].content.includes("news is unassessed, not negative evidence"));
         return { response: JSON.stringify({ verdict: "APPROVE", reason: "Evidence is aligned.", flags: ["TREND_ALIGNED"] }) };
       }
     }
