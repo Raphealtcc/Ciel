@@ -28,6 +28,81 @@ export function getPositionAiProviderCount(env = {}, dependencies = {}) {
   return Number(cloudflareReady) + Number(groqReady) + Number(geminiReady);
 }
 
+
+function parseEntryAiResult(value) {
+  const raw = String(value || "").trim();
+  const first = raw.indexOf("{");
+  const last = raw.lastIndexOf("}");
+  if (first < 0 || last <= first) throw new Error("ENTRY_AI_INVALID_JSON");
+  const parsed = JSON.parse(raw.slice(first, last + 1));
+  const verdict = String(parsed?.verdict || "").toUpperCase();
+  if (!["APPROVE", "REJECT", "WAIT"].includes(verdict)) throw new Error("ENTRY_AI_INVALID_VERDICT");
+  const reason = String(parsed?.reason || "").trim();
+  if (!reason) throw new Error("ENTRY_AI_INVALID_REASON");
+  const flags = Array.isArray(parsed?.flags)
+    ? parsed.flags.filter((value) => typeof value === "string").slice(0, 6)
+    : [];
+  return { verdict, reason: reason.slice(0, 240), flags };
+}
+
+export async function reviewEntrySignalWithAI({ env = {}, prompt, dependencies = {} } = {}) {
+  const aiRun = dependencies.aiRun ||
+    (typeof env?.AI?.run === "function" ? env.AI.run.bind(env.AI) : null);
+  const groqKey = String(env?.GROQ_API_KEY || "").trim();
+  if (!aiRun && !groqKey) return null;
+  const messages = [
+    {
+      role: "system",
+      content: "You are CIEL's conservative crypto-perpetual setup reviewer. Use only the supplied evidence. Return strict JSON with verdict APPROVE, REJECT, or WAIT, a short reason, and a flags array. Never invent facts or infer win probabilities. WAIT when evidence is mixed or insufficient."
+    },
+    { role: "user", content: String(prompt || "") }
+  ];
+  const parse = (raw, provider, model) => ({
+    ...parseEntryAiResult(raw),
+    provider,
+    model
+  });
+  if (aiRun) {
+    try {
+      const result = await aiRun(POSITION_AI_QWEN_MODEL, {
+        messages,
+        max_tokens: 256,
+        temperature: 0.1,
+        response_format: { type: "json_object" }
+      });
+      const raw = typeof result === "string" ? result :
+        result?.response ?? result?.result?.response ??
+        result?.choices?.[0]?.message?.content ?? "";
+      return parse(raw, "CLOUDFLARE_WORKERS_AI", POSITION_AI_QWEN_MODEL);
+    } catch {
+      // Continue to Groq. Gemini remains the caller's final fallback.
+    }
+  }
+  if (groqKey) {
+    try {
+      const model = String(env?.GROQ_POSITION_AI_MODEL || POSITION_AI_GROQ_MODEL_DEFAULT).trim();
+      const fetchImpl = dependencies.fetchImpl || fetch;
+      const response = await fetchImpl("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: "Bearer " + groqKey },
+        body: JSON.stringify({
+          model,
+          messages,
+          temperature: 0.1,
+          max_tokens: 256,
+          response_format: { type: "json_object" }
+        })
+      });
+      if (!response.ok) throw new Error("GROQ_HTTP_" + response.status);
+      const body = await response.json();
+      return parse(body?.choices?.[0]?.message?.content || "", "GROQ", model);
+    } catch {
+      // Return control to the caller so its existing Gemini rotation can run.
+    }
+  }
+  return null;
+}
+
 function parsePositionAiResult(value) {
   const raw = String(value || "").trim();
   const unfenced = raw.replace(/^\s*```(?:json)?\s*/i, "").replace(/\s*```\s*$/i, "");

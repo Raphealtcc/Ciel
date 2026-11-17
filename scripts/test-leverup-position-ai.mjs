@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { getGeminiApiKeys, getPositionAiProviderCount, parseGeminiApiKeys, reviewLeverUpPositionWithAI, reviewLeverUpPositionWithGemini } from "../src/leverup-position-ai.js";
+import { getGeminiApiKeys, getPositionAiProviderCount, parseGeminiApiKeys, reviewEntrySignalWithAI, reviewLeverUpPositionWithAI, reviewLeverUpPositionWithGemini } from "../src/leverup-position-ai.js";
 
 assert.deepEqual(parseGeminiApiKeys(" alpha , beta\n gamma;alpha "), ["alpha", "beta", "gamma"]);
 assert.deepEqual(parseGeminiApiKeys('["json-a","json-b"]'), ["json-a", "json-b"]);
@@ -239,3 +239,59 @@ assert.equal(getPositionAiProviderCount({
 }), 3);
 
 console.log("PASS: Qwen Workers AI is primary, Groq is secondary, and existing Gemini key rotation remains the tertiary fallback.");
+
+
+// New-entry AI review uses the same Qwen-first / Groq-second chain; Gemini remains in the caller.
+const entryPrompt = "Only inspect this supplied BTC trend, funding, order-book and forecast snapshot. Return APPROVE, REJECT or WAIT.";
+const qwenEntry = await reviewEntrySignalWithAI({
+  env: {
+    AI: {
+      run: async (model, options) => {
+        assert.equal(model, "@cf/qwen/qwen3.8-27b");
+        assert.equal(options.max_tokens, 256);
+        assert.equal(options.response_format.type, "json_object");
+        assert.equal(options.messages[1].content, entryPrompt);
+        return { response: JSON.stringify({ verdict: "APPROVE", reason: "Evidence is aligned.", flags: ["TREND_ALIGNED"] }) };
+      }
+    }
+  },
+  prompt: entryPrompt
+});
+assert.equal(qwenEntry.verdict, "APPROVE");
+assert.equal(qwenEntry.provider, "CLOUDFLARE_WORKERS_AI");
+assert.equal(qwenEntry.model, "@cf/qwen/qwen3.8-27b");
+
+let entryGroqCalls = 0;
+const groqEntry = await reviewEntrySignalWithAI({
+  env: {
+    AI: { run: async () => { throw new Error("QWEN_OFFLINE"); } },
+    GROQ_API_KEY: "entry-groq-test"
+  },
+  prompt: entryPrompt,
+  dependencies: {
+    fetchImpl: async (url, options) => {
+      entryGroqCalls++;
+      assert.equal(url, "https://api.groq.com/openai/v1/chat/completions");
+      assert.equal(options.headers.authorization, "Bearer entry-groq-test");
+      return {
+        ok: true,
+        json: async () => ({ choices: [{ message: { content: JSON.stringify({
+          verdict: "WAIT", reason: "Forecast and momentum disagree.", flags: ["FORECAST_CONFLICT"]
+        }) } }] })
+      };
+    }
+  }
+});
+assert.equal(entryGroqCalls, 1);
+assert.equal(groqEntry.verdict, "WAIT");
+assert.equal(groqEntry.provider, "GROQ");
+assert.equal(groqEntry.flags[0], "FORECAST_CONFLICT");
+
+const entryFallbackUnavailable = await reviewEntrySignalWithAI({
+  env: { AI: { run: async () => { throw new Error("QWEN_OFFLINE"); } }, GROQ_API_KEY: "bad-key" },
+  prompt: entryPrompt,
+  dependencies: { fetchImpl: async () => ({ ok: false, status: 429 }) }
+});
+assert.equal(entryFallbackUnavailable, null, "caller must continue into existing Gemini rotation after Qwen/Groq failures");
+
+console.log("PASS: entry signal review uses Qwen then Groq, and returns control for the existing Gemini fallback.");
