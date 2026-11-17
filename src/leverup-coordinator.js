@@ -7,7 +7,7 @@ import {
 } from "./leverup-1ct.js";
 import { ensureLeverUpTokenAllowance } from "./leverup-approval.js";
 import { evaluateAdaptiveLeverUpExit } from "./leverup-adaptive-exits.js";
-import { getGeminiApiKeys, reviewLeverUpPositionWithGemini } from "./leverup-position-ai.js";
+import { getGeminiApiKeys, reviewLeverUpPositionWithAI } from "./leverup-position-ai.js";
 import {
   LEVERUP_TOKENS, createLeverUpPublicClient, fetchOpenPositions, fetchAllPositions, fetchLeverUpPairs,
   fetchLatestOraclePrices, fetchAntiDdosConfig, readPositionsV4, normalizePositionAccrual,
@@ -1376,7 +1376,7 @@ export async function runLeverUpPositionManager({ env, db, now = Date.now(), dep
       : null;
     const aiReview = deterministicExitAlreadyTriggered
       ? { status: "SKIPPED_DETERMINISTIC_EXIT", action: "HOLD", confidence: 0, configuredKeyCount: getGeminiApiKeys(env).length }
-      : await (dependencies.reviewPositionWithGemini || reviewLeverUpPositionWithGemini)({
+      : await (dependencies.reviewPositionWithGemini || reviewLeverUpPositionWithAI)({
           env, position, currentPriceRaw: latestPrice,
           adaptive: {
             trendPct: adaptive.trendPct ?? null,

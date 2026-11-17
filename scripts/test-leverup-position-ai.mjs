@@ -131,3 +131,111 @@ const actualFeeSnapshot = JSON.parse(actualFeePrompt.split("Position snapshot: "
 assert.equal(actualFeeSnapshot.estimatedRoundTripFeePct, null);
 assert.equal(actualFeeSnapshot.actualFeeSnapshot.marginToken, "LVMON");
 assert.equal(actualFeeSnapshot.actualFeeSnapshot.openFeeRaw, "1200");
+
+
+// Workers AI is the primary position-review provider.
+let qwenCalls = 0;
+const qwenStorageWrites = new Map();
+const qwenStorage = {
+  get: async (key) => qwenStorageWrites.get(key) ?? null,
+  put: async (key, value) => { qwenStorageWrites.set(key, value); }
+};
+const qwenReview = await reviewLeverUpPositionWithAI({
+  env: {
+    CIEL_STATE: qwenStorage,
+    AI: {
+      run: async (model, options) => {
+        qwenCalls++;
+        assert.equal(model, "@cf/qwen/qwen3.8-27b");
+        assert.equal(options.temperature, 0.1);
+        assert.equal(options.max_tokens, 192);
+        assert.equal(options.response_format.type, "json_object");
+        assert.equal(options.messages[0].role, "system");
+        return { response: JSON.stringify({
+          action: "HOLD", confidence: 88, reversalConfirmed: false, reason: "Trend remains aligned."
+        }) };
+      }
+    }
+  },
+  position: { positionHash: "0x" + "11".repeat(32), symbol: "BTC", isLong: true },
+  currentPriceRaw: "105",
+  now: 100_000
+});
+assert.equal(qwenCalls, 1);
+assert.equal(qwenReview.status, "REVIEWED");
+assert.equal(qwenReview.provider, "CLOUDFLARE_WORKERS_AI");
+assert.equal(qwenReview.model, "@cf/qwen/qwen3.8-27b");
+assert.equal(qwenReview.action, "HOLD");
+assert.equal(qwenReview.configuredProviderCount, 1);
+assert.equal(JSON.parse(qwenStorageWrites.get("ciel:leverup:gemini-review:last")).provider, "CLOUDFLARE_WORKERS_AI");
+
+// Groq is attempted only after Workers AI fails, then uses a strict JSON response.
+let groqCalls = 0, groqUrl = "";
+const groqReview = await reviewLeverUpPositionWithAI({
+  env: {
+    GROQ_API_KEY: "test-groq-key",
+    GROQ_POSITION_AI_MODEL: "qwen/qwen3.8-27b",
+    AI: { run: async () => { throw new Error("QWEN_TEST_OUTAGE"); } }
+  },
+  position: { positionHash: "0x" + "22".repeat(32), symbol: "ETH", isLong: false },
+  currentPriceRaw: "2000",
+  now: 110_000,
+  dependencies: {
+    fetchImpl: async (url, options) => {
+      groqCalls++;
+      groqUrl = url;
+      assert.equal(options.headers.authorization, "Bearer test-groq-key");
+      const request = JSON.parse(options.body);
+      assert.equal(request.model, "qwen/qwen3.8-27b");
+      assert.equal(request.response_format.type, "json_object");
+      return {
+        ok: true,
+        json: async () => ({ choices: [{ message: { content: JSON.stringify({
+          action: "CLOSE", confidence: 91, reversalConfirmed: false, reason: "Momentum broke down."
+        }) } }] })
+      };
+    }
+  }
+});
+assert.equal(groqCalls, 1);
+assert.equal(groqUrl, "https://api.groq.com/openai/v1/chat/completions");
+assert.equal(groqReview.status, "REVIEWED");
+assert.equal(groqReview.provider, "GROQ");
+assert.equal(groqReview.action, "CLOSE");
+assert.equal(groqReview.configuredProviderCount, 2);
+
+// If Qwen and Groq fail, the existing Gemini key rotation remains the final fallback.
+let fallbackFetchCalls = 0;
+const tripleFallback = await reviewLeverUpPositionWithAI({
+  env: {
+    AI: { run: async () => { throw new Error("QWEN_UNAVAILABLE"); } },
+    GROQ_API_KEY: "test-groq-key",
+    GEMINI_API_KEYS: "gemini-test-key",
+    GEMINI_MODEL: "gemini-test-model"
+  },
+  position: { positionHash: "0x" + "33".repeat(32), symbol: "SOL", isLong: true },
+  currentPriceRaw: "150",
+  now: 120_000,
+  dependencies: {
+    fetchImpl: async (url) => {
+      fallbackFetchCalls++;
+      if (url.includes("groq.com")) return { ok: false, status: 429 };
+      return {
+        ok: true,
+        json: async () => ({ candidates: [{ content: { parts: [{ text: JSON.stringify({
+          action: "HOLD", confidence: 73, reversalConfirmed: false, reason: "Mixed evidence."
+        }) }] } }] })
+      };
+    }
+  }
+});
+assert.equal(fallbackFetchCalls, 2);
+assert.equal(tripleFallback.status, "REVIEWED");
+assert.equal(tripleFallback.provider, "GEMINI");
+assert.equal(tripleFallback.action, "HOLD");
+assert.equal(tripleFallback.configuredProviderCount, 3);
+assert.equal(getPositionAiProviderCount({
+  AI: { run: () => {} }, GROQ_API_KEY: "x", GEMINI_API_KEYS: "a"
+}), 3);
+
+console.log("PASS: Qwen Workers AI is primary, Groq is secondary, and existing Gemini key rotation remains the tertiary fallback.");

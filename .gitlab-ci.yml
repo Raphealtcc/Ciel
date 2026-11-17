@@ -112,5 +112,5 @@ build-cloudflare-release-candidate:
     expire_in: 1 day
   allow_failure: false
   rules:
-    - if: '$CI_COMMIT_BRANCH == "feature/leverup-1ct-autotrader" || $CI_COMMIT_BRANCH == "integration/leverup-1ct-main"'
+    - if: '$CI_COMMIT_BRANCH == "feature/leverup-1ct-autotrader" || $CI_COMMIT_BRANCH == "integration/leverup-1ct-main" || $CI_COMMIT_BRANCH == "feature/qwen-groq-ai-position-review"'
 

@@ -17,7 +17,38 @@ export function getGeminiApiKeys(env = {}) {
   return [...new Set(values.flatMap((value) => parseGeminiApiKeys(value)))];
 }
 
-async function persistGeminiReview(storage, review, context = {}) {
+
+const POSITION_AI_QWEN_MODEL = "@cf/qwen/qwen3.8-27b";
+const POSITION_AI_GROQ_MODEL_DEFAULT = "qwen/qwen3.8-27b";
+
+export function getPositionAiProviderCount(env = {}, dependencies = {}) {
+  const cloudflareReady = Boolean(dependencies.aiRun || env?.AI?.run);
+  const groqReady = Boolean(String(env?.GROQ_API_KEY || "").trim());
+  const geminiReady = getGeminiApiKeys(env).length > 0;
+  return Number(cloudflareReady) + Number(groqReady) + Number(geminiReady);
+}
+
+function parsePositionAiResult(value) {
+  const raw = String(value || "").trim();
+  const unfenced = raw.replace(/^\s*```(?:json)?\s*/i, "").replace(/\s*```\s*$/i, "");
+  const first = unfenced.indexOf("{");
+  const last = unfenced.lastIndexOf("}");
+  if (first < 0 || last <= first) throw new Error("POSITION_AI_INVALID_JSON");
+  const parsed = JSON.parse(unfenced.slice(first, last + 1));
+  const action = String(parsed?.action || "").toUpperCase();
+  const confidence = Number(parsed?.confidence);
+  if (!["HOLD", "CLOSE", "REVERSE"].includes(action)) throw new Error("POSITION_AI_INVALID_ACTION");
+  if (!Number.isFinite(confidence) || confidence < 0 || confidence > 100) throw new Error("POSITION_AI_INVALID_CONFIDENCE");
+  if (typeof parsed?.reversalConfirmed !== "boolean") throw new Error("POSITION_AI_INVALID_REVERSAL_FLAG");
+  return {
+    action,
+    confidence: Math.round(confidence),
+    reversalConfirmed: parsed.reversalConfirmed,
+    reason: String(parsed?.reason || "No reason supplied.").slice(0, 240),
+  };
+}
+
+async function persistPositionAiReview(storage, review, context = {}) {
   if (!storage?.put) return;
   const record = {
     at: Number(context.now || Date.now()),
@@ -27,6 +58,8 @@ async function persistGeminiReview(storage, review, context = {}) {
     reversalConfirmed: review?.reversalConfirmed === true,
     reason: String(review?.reason || "").slice(0, 180),
     model: String(review?.model || context.model || ""),
+    provider: String(review?.provider || context.provider || ""),
+    configuredProviderCount: Number(review?.configuredProviderCount ?? context.configuredProviderCount ?? 0),
     configuredKeyCount: Number(review?.configuredKeyCount ?? context.configuredKeyCount ?? 0),
     keyIndexUsed: review?.keyIndexUsed ?? null,
     retryAt: review?.retryAt ?? null,
@@ -46,19 +79,26 @@ async function persistGeminiReview(storage, review, context = {}) {
   await storage.put(historyKey, JSON.stringify(next), { expirationTtl: 30 * 24 * 3600 }).catch(() => void 0);
 }
 
-export async function reviewLeverUpPositionWithGemini({ env, position, currentPriceRaw, adaptive = {}, state = {}, now = Date.now(), maxHoldReached = false, positionAgeMinutes = null, dependencies = {} }) {
+export async function reviewLeverUpPositionWithAI({ env, position, currentPriceRaw, adaptive = {}, state = {}, now = Date.now(), maxHoldReached = false, positionAgeMinutes = null, dependencies = {} }) {
   const keys = getGeminiApiKeys(env);
   const hash = String(position?.positionHash || "").toLowerCase();
   const storage = env?.CIEL_STATE;
   const context = { now, model: env?.GEMINI_MODEL || "gemini-2.5-flash", configuredKeyCount: keys.length, symbol: position?.symbol || position?.pairSymbol || position?.purgeSymbol || "UNKNOWN", side: position?.isLong ? "LONG" : "SHORT", positionHash: hash };
-  if (!keys.length) {
-    const skipped = { status: "SKIPPED_NO_KEYS", action: "HOLD", confidence: 0, configuredKeyCount: 0 };
-    await persistGeminiReview(storage, skipped, context);
+  const groqKey = String(env?.GROQ_API_KEY || "").trim();
+  const cloudflareAiRun = dependencies.aiRun ||
+    (typeof env?.AI?.run === "function" ? env.AI.run.bind(env.AI) : null);
+  const configuredProviderCount = Number(Boolean(cloudflareAiRun)) +
+    Number(Boolean(groqKey)) + Number(keys.length > 0);
+  context.configuredProviderCount = configuredProviderCount;
+  if (!cloudflareAiRun && !groqKey && !keys.length) {
+    const skipped = { status: "SKIPPED_NO_KEYS", action: "HOLD", confidence: 0,
+      configuredKeyCount: 0, configuredProviderCount: 0 };
+    await persistPositionAiReview(storage, skipped, context);
     return skipped;
   }
   if (!/^0x[0-9a-f]{64}$/.test(hash)) {
     const skipped = { status: "SKIPPED_INVALID_POSITION", action: "HOLD", confidence: 0, configuredKeyCount: keys.length };
-    await persistGeminiReview(storage, skipped, context);
+    await persistPositionAiReview(storage, skipped, context);
     return skipped;
   }
   const cooldownKey = "ciel:leverup:gemini-review:cooldown:v1:" + hash;
@@ -130,7 +170,79 @@ export async function reviewLeverUpPositionWithGemini({ env, position, currentPr
     })
   ].join("\n");
   const fetchImpl = dependencies.fetchImpl || fetch;
-  let lastError = "GEMINI_POSITION_REVIEW_FAILED";
+  const systemPrompt = [
+    "You are a conservative risk-review model for leveraged perpetual positions.",
+    "Return exactly one JSON object with action, confidence, reversalConfirmed and reason.",
+    "Never invent data, never claim certainty, and choose HOLD when evidence is mixed.",
+    "You do not have authority to submit orders or change risk limits."
+  ].join(" ");
+  const messages = [
+    { role: "system", content: systemPrompt },
+    { role: "user", content: prompt }
+  ];
+  const providerErrors = [];
+  const finishReview = async (rawText, provider, modelName, keyIndexUsed = null) => {
+    const parsed = parsePositionAiResult(rawText);
+    const reviewed = {
+      status: "REVIEWED",
+      ...parsed,
+      provider,
+      model: modelName,
+      keyIndexUsed,
+      configuredKeyCount: keys.length,
+      configuredProviderCount
+    };
+    await persistPositionAiReview(storage, reviewed, { ...context, model: modelName, provider, configuredProviderCount });
+    return reviewed;
+  };
+  let lastError = "POSITION_AI_REVIEW_FAILED";
+
+  // Primary: Cloudflare Workers AI. No external API key is required.
+  if (cloudflareAiRun) {
+    try {
+      const response = await cloudflareAiRun(POSITION_AI_QWEN_MODEL, {
+        messages,
+        max_tokens: 192,
+        temperature: 0.1,
+        response_format: { type: "json_object" }
+      });
+      const content = typeof response === "string" ? response :
+        response?.response ?? response?.result?.response ??
+        response?.choices?.[0]?.message?.content ?? "";
+      return await finishReview(content, "CLOUDFLARE_WORKERS_AI", POSITION_AI_QWEN_MODEL);
+    } catch (error) {
+      lastError = String(error?.message || error).slice(0, 180);
+      providerErrors.push({ provider: "CLOUDFLARE_WORKERS_AI", error: lastError });
+    }
+  }
+
+  // Secondary: Groq-hosted Qwen. This activates only after GROQ_API_KEY is set.
+  if (groqKey) {
+    try {
+      const groqModel = String(env?.GROQ_POSITION_AI_MODEL || POSITION_AI_GROQ_MODEL_DEFAULT).trim();
+      const response = await fetchImpl("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: "Bearer " + groqKey },
+        body: JSON.stringify({
+          model: groqModel,
+          messages,
+          temperature: 0.1,
+          max_tokens: 192,
+          response_format: { type: "json_object" }
+        })
+      });
+      if (!response.ok) throw new Error("GROQ_HTTP_" + response.status);
+      const body = await response.json();
+      const content = body?.choices?.[0]?.message?.content || "";
+      return await finishReview(content, "GROQ", groqModel);
+    } catch (error) {
+      lastError = String(error?.message || error).slice(0, 180);
+      providerErrors.push({ provider: "GROQ", error: lastError });
+    }
+  }
+
+  // Last-resort compatibility fallback: retain the existing Gemini key rotation.
+
   for (let attempt = 0; attempt < keys.length; attempt++) {
     const index = (cursor + attempt) % keys.length;
     try {
@@ -162,24 +274,24 @@ export async function reviewLeverUpPositionWithGemini({ env, position, currentPr
       }
       const body = await response.json();
       const text = body?.candidates?.[0]?.content?.parts?.map((part) => part.text || "").join("") || "";
-      const parsed = JSON.parse(text);
-      const action = ["HOLD", "CLOSE", "REVERSE"].includes(parsed.action) ? parsed.action : "HOLD";
-      const confidence = Math.max(0, Math.min(100, Math.round(Number(parsed.confidence) || 0)));
       if (storage?.put) await storage.put(cursorKey, String((index + 1) % keys.length), { expirationTtl: 30 * 24 * 3600 }).catch(() => void 0);
-      const reviewed = {
-        status: "REVIEWED", action, confidence,
-        reversalConfirmed: parsed.reversalConfirmed === true,
-        reason: String(parsed.reason || "No reason supplied.").slice(0, 240),
-        keyIndexUsed: index + 1, configuredKeyCount: keys.length, model
-      };
-      await persistGeminiReview(storage, reviewed, { ...context, model });
-      return reviewed;
+      return await finishReview(text, "GEMINI", model, index + 1);
     } catch (error) {
       lastError = String(error?.message || error).slice(0, 180);
     }
   }
   if (storage?.put) await storage.put(cursorKey, String((cursor + 1) % keys.length), { expirationTtl: 30 * 24 * 3600 }).catch(() => void 0);
-  const failed = { status: "FAILED", action: "HOLD", confidence: 0, reason: lastError, configuredKeyCount: keys.length, model };
-  await persistGeminiReview(storage, failed, { ...context, model });
+  const failed = {
+    status: "FAILED", action: "HOLD", confidence: 0,
+    reason: lastError, configuredKeyCount: keys.length,
+    configuredProviderCount, provider: "NONE", model,
+    providerErrors: providerErrors.slice(0, 3)
+  };
+  await persistPositionAiReview(storage, failed, { ...context, model, provider: "NONE", configuredProviderCount });
   return failed;
+}
+
+export async function reviewLeverUpPositionWithGemini(args) {
+  // Backwards-compatible export for existing tests and integrations.
+  return reviewLeverUpPositionWithAI(args);
 }
