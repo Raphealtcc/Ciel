@@ -19,7 +19,7 @@ export function evaluateAdaptiveLeverUpExit({ position, currentPriceRaw, state =
     entryPrice: adaptiveLeverUpRawToPrice(position.entryPriceRaw),
     currentPrice: adaptiveLeverUpRawToPrice(currentPriceRaw),
     stopPrice: adaptiveLeverUpRawToPrice(position.stopLossRaw),
-    targetPrice: adaptiveLeverUpRawToPrice(position.takeProfitRaw),
+    targetPrice: 0,
     state, now,
     liquidityImbalance: false,
     sampleLimit: Math.max(8, Math.min(24, Number(sampleLimit) || 24)),
@@ -41,7 +41,7 @@ export function evaluateAdaptiveLeverUpExit({ position, currentPriceRaw, state =
   if (result.action === "UPDATE_LEVELS") return {
     action: "UPDATE_TP_SL", ...shared,
     stopLossRaw: adaptiveLeverUpPriceToRaw(result.stopPrice ?? adaptiveLeverUpRawToPrice(position.stopLossRaw)),
-    takeProfitRaw: adaptiveLeverUpPriceToRaw(result.targetPrice ?? adaptiveLeverUpRawToPrice(position.takeProfitRaw)),
+    takeProfitRaw: "0",
     targetExtended: result.targetExtended === true,
   };
   return { action: "HOLD", ...shared };

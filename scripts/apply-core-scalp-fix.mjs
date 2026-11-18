@@ -113,8 +113,17 @@ const analyzer = `function analyzeTrendPullbackEntry(symbol, oneMinuteRows, five
   const priorFast5=ema(closes5.slice(-31,-1),9);
   const fast1=ema(closes1.slice(-25),9);
   if (![fast5,slow5,priorFast5,fast1].every(Number.isFinite)) return null;
-  const trendUp=fast5>slow5 && fast5>priorFast5 && last5.c>fast5;
-  const trendDown=fast5<slow5 && fast5<priorFast5 && last5.c<fast5;
+  const higherTrend = (periodMs, candlesPerBar) => {
+    const buckets=new Map();
+    for(const candle of m5){const key=Math.floor((candle.t-1)/periodMs);const group=buckets.get(key)||{count:0,close:candle.c,t:candle.t};group.count++;group.close=candle.c;group.t=candle.t;buckets.set(key,group);}
+    const bars=[...buckets.values()].filter(x=>x.count===candlesPerBar).sort((a,b)=>a.t-b.t);
+    if(bars.length<21||now-bars[bars.length-1].t>periodMs*1.25)return {up:false,down:false};
+    const closes=bars.map(x=>x.close),fast=ema(closes.slice(-24),9),slow=ema(closes.slice(-24),21),last=closes[closes.length-1];
+    return {up:fast>slow&&last>fast,down:fast<slow&&last<fast};
+  };
+  const trend15=higherTrend(15*60e3,3),trend1h=higherTrend(60*60e3,12);
+  const trendUp=fast5>slow5&&fast5>priorFast5&&last5.c>fast5&&trend15.up&&trend1h.up;
+  const trendDown=fast5<slow5&&fast5<priorFast5&&last5.c<fast5&&trend15.down&&trend1h.down;
   // Counter-trend reversal scalp, independent of the 5m EMA direction.
   const reversalLatest=m1[m1.length-1],reversalPrevious=m1[m1.length-2];
   const reversalWindow=m1.slice(-18,-3), reversalContext=m1.slice(-25,-3);
@@ -141,7 +150,7 @@ const analyzer = `function analyzeTrendPullbackEntry(symbol, oneMinuteRows, five
       if(stopPct>0&&stopPct<=0.45){
         return {symbol,side,entry,stopPct,targetPct:Math.max(0.25,stopPct*1.5),confidence:Math.min(0.88,0.79+(reversalAvgVol>0&&reversalLatest.v>=reversalAvgVol?0.03:0)),
           scoreComponents:["1M_SWING_EXHAUSTION","1M_PIVOT_RECLAIM","1M_RSI_TURN","1M_VOLUME_CONFIRMATION"],scoreModel:"core-1m-swing-reversal-v1",
-          strategy:"1M_SWING_REVERSAL+RECLAIM",regime:"COUNTER_TREND_REVERSAL",mode:"TREND_HOLD",holdMinutes:180,
+          strategy:"1M_SWING_REVERSAL+RECLAIM",regime:"COUNTER_TREND_REVERSAL",mode:"SWING_REVERSAL",holdMinutes:240,
           rsi:currentRsi,bounce:null,cci:null,stochRsi:null,rangePositionPct:null,
           reason:"Closed 1m candles confirm swing exhaustion, pivot retest, directional reclaim/rejection, improving RSI and volume. Evaluated independently of 5m EMA direction."};
       }
@@ -153,7 +162,7 @@ const analyzer = `function analyzeTrendPullbackEntry(symbol, oneMinuteRows, five
   const atr=ranges.reduce((a,b)=>a+b,0)/Math.max(1,ranges.length);
   if (!(atr>0)) return null;
   const averageVolume=m1.slice(-21,-1).reduce((sum,c)=>sum+c.v,0)/20;
-  const volumeOk=averageVolume<=0 || latest.v>=averageVolume*0.65;
+  const volumeOk=averageVolume<=0 || latest.v>=averageVolume*1.0;
   if (!volumeOk) return null;
   let side=null, pivot=0;
   if (trendUp) {
@@ -183,7 +192,7 @@ const analyzer = `function analyzeTrendPullbackEntry(symbol, oneMinuteRows, five
     scoreModel:"core-pullback-scalp-v1",
     strategy:"5M_TREND+1M_PULLBACK+RECLAIM",
     regime:trendUp?"TREND_UP":"TREND_DOWN",
-    mode:"TREND_HOLD",holdMinutes:180,
+    mode:"CORE_PULLBACK_SCALP",holdMinutes:240,
     rsi:null,bounce:null,cci:null,stochRsi:null,rangePositionPct:null,
     reason:"Closed 5m candles establish directional EMA9/EMA21 trend; closed 1m candles show a pullback toward EMA9 followed by a directional reclaim and volume confirmation. Entry is the latest closed 1m candle close."
   };
@@ -206,7 +215,7 @@ once(
   const coreCandleResults = await Promise.all(coreScalpSymbols.map(async (symbol) => {
     const [one, five] = await Promise.all([
       env.DB.prepare("SELECT open_ts_ms,close_ts_ms,open_price,high_price,low_price,close_price,volume FROM market_candles WHERE symbol=? AND interval='1m' AND close_ts_ms<=? ORDER BY open_ts_ms DESC LIMIT 60").bind(symbol,now).all(),
-      env.DB.prepare("SELECT open_ts_ms,close_ts_ms,open_price,high_price,low_price,close_price,volume FROM market_candles WHERE symbol=? AND interval='5m' AND close_ts_ms<=? ORDER BY open_ts_ms DESC LIMIT 60").bind(symbol,now).all()
+      env.DB.prepare("SELECT open_ts_ms,close_ts_ms,open_price,high_price,low_price,close_price,volume FROM market_candles WHERE symbol=? AND interval='5m' AND close_ts_ms<=? ORDER BY open_ts_ms DESC LIMIT 300").bind(symbol,now).all()
     ]);
     return [symbol,(one.results||[]).reverse(),(five.results||[]).reverse()];
   }));
@@ -303,14 +312,14 @@ once(
 
 once(
   'holdMinutes:candidate.holdMinutes || (candidate.mode === "RANGE_SCALP" ? 12 : 180), mode:candidate.mode',
-  'holdMinutes:candidate.holdMinutes || 180, mode:candidate.mode',
-  "set dedicated 15-minute paper hold for core scalps",
+  'holdMinutes:candidate.holdMinutes || 240, mode:candidate.mode',
+  "set 4-hour review window for managed core positions",
 );
 
 once(
   'mode: params.mode === "RANGE_SCALP" ? "RANGE_SCALP" : "TREND_HOLD",',
-  'mode: "TREND_HOLD",',
-  "persist the new paper strategy mode distinctly",
+  'mode: params.mode || "TREND_HOLD",',
+  "persist unique paper strategy modes",
 );
 
 once(

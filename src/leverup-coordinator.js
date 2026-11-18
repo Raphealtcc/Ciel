@@ -750,32 +750,17 @@ export async function reconcileLeverUpIntent({ intentHash, pollStatus, readPosit
 
 export function evaluateLeverUpPositionAction({ position, currentPriceRaw, now = Date.now(), maxHoldMinutes = 180, partialTakeProfits = [], completedPartialLevels = [] }) {
   if (!position?.positionHash || !position?.qtyRaw) throw new Error("LEVERUP_POSITION_FIELDS_MISSING");
-  const price = BigInt(currentPriceRaw), entry = BigInt(position.entryPriceRaw || 0);
-  const stop = BigInt(position.stopLossRaw || 0), target = BigInt(position.takeProfitRaw || 0);
+  const price = BigInt(currentPriceRaw);
+  const stop = BigInt(position.stopLossRaw || 0);
   const earliest = BigInt(position.earliestCloseTime || 0);
   const nowSeconds = BigInt(Math.floor(now / 1000));
   const isLong = Boolean(position.isLong);
   const stopHit = stop > 0n && (isLong ? price <= stop : price >= stop);
-  const targetHit = target > 0n && (isLong ? price >= target : price <= target);
   const expired = Number.isFinite(Number(maxHoldMinutes)) && Number(maxHoldMinutes) > 0 &&
     now >= Number(position.timestamp || 0) * 1000 + Number(maxHoldMinutes) * 60_000;
   // Protective stop always outranks the venue's ordinary minimum-hold timer.
   if (stopHit) return { action: "MARKET_CLOSE", reason: "STOP_LOSS_TRIGGERED" };
   if (earliest > nowSeconds) return { action: "WAIT", reason: "MINIMUM_HOLD_NOT_REACHED" };
-  if (entry > 0n) {
-    for (let i = 0; i < partialTakeProfits.length; i++) {
-      if (completedPartialLevels.includes(i)) continue;
-      const level = partialTakeProfits[i] || {};
-      const targetPct = Number(level.targetPct), closePct = Number(level.closePct ?? level.percent);
-      if (!(targetPct > 0 && targetPct < 100 && closePct > 0 && closePct < 100)) continue;
-      const delta = BigInt(Math.round(targetPct * 100));
-      const partialTarget = isLong ? entry * (10_000n + delta) / 10_000n : entry * (10_000n - delta) / 10_000n;
-      if (isLong ? price >= partialTarget : price <= partialTarget) {
-        const qty = BigInt(position.qtyRaw) * BigInt(Math.round(closePct * 100)) / 10_000n;
-        if (qty > 0n && qty < BigInt(position.qtyRaw)) return { action: "PARTIAL_CLOSE", reason: "PARTIAL_TAKE_PROFIT_" + i, levelIndex: i, qtyRaw: qty.toString() };
-      }
-    }
-  }
   if (targetHit) return { action: "MARKET_CLOSE", reason: "TAKE_PROFIT_TRIGGERED" };
   if (expired) return { action: "HOLD", reason: "MAX_HOLD_TIME_REACHED_REVIEW_REQUIRED", maxHoldReached: true };
   return { action: "HOLD", reason: "NO_EXIT_TRIGGER" };
@@ -1371,7 +1356,7 @@ export async function runLeverUpPositionManager({ env, db, now = Date.now(), dep
     // Every on-chain position in the configured trading wallet is managed, even if
     // its original entry metadata is missing. Fixed on-chain SL/TP remain authoritative.
     const candidate = saved?.candidate || {};
-    const partials = Array.isArray(candidate.partialTakeProfits) ? candidate.partialTakeProfits : [];
+    const partials = []; // TP values are suggestions, not automatic partial-close instructions.
     const completed = Array.isArray(saved?.completedPartialLevels) ? saved.completedPartialLevels : [];
     const fixedAction = evaluateLeverUpPositionAction({
       position, currentPriceRaw: latestPrice, now,
@@ -1395,23 +1380,19 @@ export async function runLeverUpPositionManager({ env, db, now = Date.now(), dep
     }
     const minimumHoldActive = BigInt(position.earliestCloseTime || 0) > BigInt(Math.floor(now / 1000));
     // Reconcile exact entry SL/TP against the values stored on the live position.
-    const expectedStop = BigInt(saved?.plan?.actionValues?.[7] || 0);
-    const expectedTarget = BigInt(saved?.plan?.actionValues?.[8] || 0);
     const actualStop = BigInt(position.stopLossRaw || 0);
     const actualTarget = BigInt(position.takeProfitRaw || 0);
-    const protectionMismatch = Boolean(saved && (
-      (expectedStop > 0n && actualStop !== expectedStop) ||
-      (expectedTarget > 0n && actualTarget !== expectedTarget)
-    ));
+    const expectedStop = saved ? BigInt(saved.plan?.actionValues?.[7] || 0) : actualStop;
+    const expectedTarget = 0n;
+    const stopMismatch = Boolean(saved && expectedStop > 0n && actualStop !== expectedStop);
+    const protectionMismatch = actualTarget !== 0n || stopMismatch;
     let protectionRepair = null;
     if (protectionMismatch) {
       const stopAlreadyCrossed = expectedStop > 0n &&
         (position.isLong ? BigInt(latestPrice) <= expectedStop : BigInt(latestPrice) >= expectedStop);
-      const targetAlreadyCrossed = expectedTarget > 0n &&
-        (position.isLong ? BigInt(latestPrice) >= expectedTarget : BigInt(latestPrice) <= expectedTarget);
-      protectionRepair = stopAlreadyCrossed || targetAlreadyCrossed
-        ? { action: "MARKET_CLOSE", reason: stopAlreadyCrossed ? "EXPECTED_STOP_ALREADY_CROSSED" : "EXPECTED_TARGET_ALREADY_CROSSED" }
-        : { action: "UPDATE_TP_SL", reason: "ENTRY_PROTECTION_MISMATCH", stopLossRaw: expectedStop.toString(), takeProfitRaw: expectedTarget.toString() };
+      protectionRepair = stopAlreadyCrossed
+        ? { action: "MARKET_CLOSE", reason: "EXPECTED_EMERGENCY_STOP_ALREADY_CROSSED" }
+        : { action: "UPDATE_TP_SL", reason: actualTarget !== 0n ? "CLEAR_FIXED_TAKE_PROFIT" : "RESTORE_EMERGENCY_STOP", stopLossRaw: expectedStop.toString(), takeProfitRaw: "0" };
     }
     // Hard SL/TP and deterministic adaptive exits must not wait for a model call.
     const deterministicExitAlreadyTriggered = fixedAction.action === "MARKET_CLOSE" ||

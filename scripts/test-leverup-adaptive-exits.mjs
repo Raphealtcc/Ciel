@@ -24,4 +24,6 @@ assert.equal(reversal.reverseConfirmed, true);
 const hardStop = evaluateAdaptiveLeverUpExit({ position, currentPriceRaw: raw(97.5), state: {}, now: 700_000 });
 assert.equal(hardStop.action, "MARKET_CLOSE");
 assert.equal(hardStop.reason, "HARD_STOP_TRIGGERED");
+const noFixedTargetExit=evaluateAdaptiveLeverUpExit({position:{...position,takeProfitRaw:"0"},currentPriceRaw:raw(104),state:{history:history([100,101,102,103]),highWaterPrice:103},now:601_000});
+assert.notEqual(noFixedTargetExit.reason,"TAKE_PROFIT_TRIGGERED","dynamic manager must not close on suggested target");
 console.log("PASS: LeverUp raw-price conversion, target extension, profit reversal and hard-stop priority");

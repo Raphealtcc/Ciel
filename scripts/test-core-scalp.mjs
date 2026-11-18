@@ -22,7 +22,8 @@ assert.ok(source.includes("1M_SWING_REVERSAL+RECLAIM"), "counter-trend reversal 
 const blockedReview = source.match(/if \(reviewed\.verdict === "REJECT" \|\| reviewed\.verdict === "WAIT" && !waitFallback\) \{([\s\S]*?)\n    \}/);
 assert.ok(blockedReview && /continue;/.test(blockedReview[1]) && !/return;/.test(blockedReview[1]), "a blocked candidate must not abort the whole advisor cycle");
 assert.ok(source.includes('interval: "1m"'));
-assert.ok(source.includes('mode:"TREND_HOLD",holdMinutes:180'));
+assert.ok(source.includes('mode:"CORE_PULLBACK_SCALP",holdMinutes:240'));
+assert.ok(source.includes('mode:"SWING_REVERSAL",holdMinutes:240'));
 assert.ok(!source.includes('mode:"RANGE_SCALP"'), "range strategy cannot generate new entries");
 assert.ok(!source.includes("function analyzeMicroMomentumContinuation"), "micro-momentum breakout strategy is removed");
 assert.ok(source.includes("const baseSignals = [analyzeCandleLevelReversal"), "level-reversal and trend analyzers must run independently; a truthy first result must not hide the second");
@@ -54,7 +55,7 @@ const candles = (count, step, interval, base, closeOffset=0) => Array.from({leng
     open_price:open,high_price:Math.max(open,close)+Math.abs(step)*0.25,
     low_price:Math.min(open,close)-Math.abs(step)*0.25,close_price:close,volume:100};
 });
-const five = candles(36,0.12,300_000,100);
+const five = candles(300,0.012,300_000,100);
 const one = candles(30,0.025,60_000,103);
 assert.equal(analyze("BTC",one,five,now),null,"monotonic trend without a pullback/reclaim must not trigger");
 assert.equal(analyze("BTC",one,five,now+10*60_000),null,"stale candles must never trigger");
@@ -77,7 +78,7 @@ for (let j=0;j<pullback.length;j++) Object.assign(validLong[25+j],pullback[j]);
 const longSignal = analyze("BTC",validLong,five,now);
 assert.ok(longSignal, "valid closed-candle long pullback/reclaim should trigger");
 assert.equal(longSignal.side,"LONG");
-assert.equal(longSignal.mode,"TREND_HOLD");
+assert.equal(longSignal.mode,"CORE_PULLBACK_SCALP");
 assert.ok(longSignal.stopPct>0 && longSignal.stopPct<=0.45, "long stop must fit the risk ceiling");
 
 const mirror = (rows) => rows.map((c) => ({
@@ -90,8 +91,11 @@ const mirror = (rows) => rows.map((c) => ({
 const shortSignal = analyze("SOL", mirror(validLong), mirror(five), now);
 assert.ok(shortSignal, "valid closed-candle short pullback/reclaim should trigger");
 assert.equal(shortSignal.side, "SHORT");
-assert.equal(shortSignal.mode, "TREND_HOLD");
+assert.equal(shortSignal.mode, "CORE_PULLBACK_SCALP");
 assert.ok(shortSignal.stopPct > 0 && shortSignal.stopPct <= 0.45, "short stop must fit the risk ceiling");
+const thinVolume = validLong.map(c=>({...c}));
+thinVolume[thinVolume.length-1].volume=1;
+assert.equal(analyze("BTC",thinVolume,five,now),null,"pullback reclaim must reject below-average volume");
 
 
 // Counter-trend reversal fixtures: a declining market bottoms, retests, then reclaims.

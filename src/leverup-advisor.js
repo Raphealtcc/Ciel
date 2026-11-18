@@ -231,11 +231,11 @@ export async function prepareLeverUpAdvisorPlan({
     const stopPct = Number(candidate.stopPct), targetPct = Number(candidate.targetPct);
     if (!(stopPct > 0 && targetPct > 0 && stopPct < 100 && targetPct < 100)) throw new Error("CIEL_STOP_OR_TARGET_INVALID");
     const stopBps = BigInt(Math.max(1, Math.round(stopPct * 100)));
-    const targetBps = BigInt(Math.max(1, Math.round(targetPct * 100)));
-    if (stopBps >= 10_000n || targetBps >= 10_000n) throw new Error("CIEL_STOP_OR_TARGET_OUT_OF_RANGE");
+    if (stopBps >= 10_000n) throw new Error("CIEL_STOP_OUT_OF_RANGE");
     const oracleRaw = BigInt(snapshot.oraclePriceRaw), isLong = candidate.side === "LONG";
     const stopLossPriceRaw = isLong ? oracleRaw * (10_000n - stopBps) / 10_000n : oracleRaw * (10_000n + stopBps) / 10_000n;
-    const takeProfitPriceRaw = isLong ? oracleRaw * (10_000n + targetBps) / 10_000n : oracleRaw * (10_000n - targetBps) / 10_000n;
+    // Telegram targetPct is advisory; fixed exchange TP is deliberately unset.
+    const takeProfitPriceRaw = 0n;
 
     const buildPlan = dependencies.buildPlan || buildMarketOpenPlan;
     // CIEL2 uses LVMON exclusively for LeverUp collateral. Do not silently
@@ -349,7 +349,7 @@ export function formatLeverUpAdvisorLine(record) {
   if (record.status === "PREFLIGHT_PASS_LIVE_ENABLED" || record.status === "PREFLIGHT_PASS_LIVE_DISABLED") {
     return "LeverUp: PREFLIGHT PASS · " + record.selectedLeverage + "x · " +
       Number(record.marginMonUsed).toFixed(2) + " MON · $" + Number(record.notionalUsd).toFixed(2) +
-      " notional · " + (record.liveExecutionEnabled ? "LIVE" : "DRY RUN") + " · fill unconfirmed";
+      " notional · " + (record.liveExecutionEnabled ? "LIVE" : "DRY RUN") + " · dynamic strategy exits; Telegram TP is guidance · emergency SL retained · fill unconfirmed";
   }
   return "LeverUp: BLOCKED · " + String(record.reason || record.status || "preflight failed").slice(0, 100);
 }

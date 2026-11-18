@@ -158,7 +158,8 @@ assert.ok(Math.abs(seenPlanArgs.maxTradeMarginMon - (0.45649175 / 0.019038)) < 1
   "live margin ceiling must convert the fixed USD cap using the fresh MON/USD oracle");
 assert.ok(Math.abs(seenPlanArgs.reserveMon - (0.45649175 / 0.019038)) < 1e-6);
 assert.ok(Math.abs(ready.totalAllocationMon - (0.9129835 / 0.019038)) < 1e-6);
-assert.ok(seenPlanArgs.stopLossPriceRaw > 0n && seenPlanArgs.takeProfitPriceRaw > 0n);
+assert.ok(seenPlanArgs.stopLossPriceRaw > 0n, "emergency stop remains on live position");
+assert.equal(seenPlanArgs.takeProfitPriceRaw, 0n, "Telegram target is advisory; no fixed TP is submitted");
 assert.equal(seenPersist.options.decision, "PASS");
 assert.equal(ready.ledgerPersisted, true);
 
