@@ -63,7 +63,7 @@ if (promptContentAt < 0 || promptEnd < promptContentAt) {
   throw new Error("Could not locate the end of the Gemini review prompt for Qwen insertion");
 }
 const insertionPoint = promptEnd + '].join("\\n");'.length;
-source = source.slice(0, insertionPoint) + "\\n" + insertion + source.slice(insertionPoint);
+source = source.slice(0, insertionPoint) + "\n" + insertion + source.slice(insertionPoint);
 console.log("Applied Qwen/Groq entry-review integration: provider review inserted before Gemini key attempts.");
 
 await writeFile(file, source);
