@@ -792,12 +792,15 @@ export function selectLeverUpPositionAction({ fixedAction = { action: "HOLD" }, 
       reverseSide: adaptive.reverseConfirmed === true ? (adaptive.positionSide === "LONG" ? "SHORT" : "LONG") : null,
     };
   }
-  // A live target update can supersede the venue's static take-profit trigger.
-  if (adaptive?.action === "UPDATE_TP_SL") return adaptive;
+  // Restore mismatched entry protection even during minimum hold; this is a
+  // repair to the original on-chain SL/TP, not an adaptive strategy change.
   if (protectionRepair) return protectionRepair;
-  const confidence = Math.max(0, Math.min(100, Number(aiReview?.confidence) || 0));
-  // AI is advisory only; it cannot independently trigger a market close.
+  // Minimum hold blocks discretionary adaptive SL/TP changes. Hard stops,
+  // confirmed deterministic reversals and protection repairs were handled above.
   if (fixedAction.action === "WAIT") return fixedAction;
+  // Outside minimum hold, a live target/stop update can supersede static TP.
+  if (adaptive?.action === "UPDATE_TP_SL") return adaptive;
+  // AI is advisory only; it cannot independently trigger a market close.
   return fixedAction;
 }
 async function readEntryMetadata(db) {
