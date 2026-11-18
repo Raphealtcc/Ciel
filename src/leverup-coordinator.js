@@ -1411,6 +1411,7 @@ export async function runLeverUpPositionManager({ env, db, now = Date.now(), dep
     const aiCloseMinConfidence = Math.max(60, Math.min(100, Number(env?.GEMINI_POSITION_CLOSE_MIN_CONFIDENCE || 80)));
     // Hard SL/TP triggers outrank repair, adaptive exits and every other review.
     const action = selectLeverUpPositionAction({ fixedAction, adaptive, protectionRepair, aiReview, aiCloseMinConfidence });
+    if (action.reverseConfirmed === true && !action.reverseSide) action.reverseSide = position.isLong ? "SHORT" : "LONG";
     if (action.reason === "GEMINI_POSITION_CLOSE_CONFIRMED") aiCloseSignals++;
     if (db?.prepare) {
       const stored = await (dependencies.persistFeeSnapshot || persistPositionFeeSnapshot)(db, position, null, 300_000);

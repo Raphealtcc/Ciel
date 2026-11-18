@@ -31,9 +31,11 @@ export function reconcilePositionReversalQueue(queueValue, positions, now = Date
       }
     } else if (item.status === "ENTRY_SUBMITTED") {
       const oppositePositionFound = open.some((position) =>
-        String(position.symbol || "").toUpperCase() === String(item.symbol).toUpperCase() &&
-        String(position.side || "").toUpperCase() === String(item.side).toUpperCase() &&
-        String(position.positionHash || position.hash || "").toLowerCase() !== String(item.positionHash || "").toLowerCase()
+        item.entrySignalId
+          ? String(position.signalId || "") === String(item.entrySignalId)
+          : String(position.symbol || "").toUpperCase() === String(item.symbol).toUpperCase() &&
+            String(position.side || "").toUpperCase() === String(item.side).toUpperCase() &&
+            String(position.positionHash || position.hash || "").toLowerCase() !== String(item.positionHash || "").toLowerCase()
       );
       if (oppositePositionFound) {
         item.status = "COMPLETED";
