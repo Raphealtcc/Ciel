@@ -215,7 +215,7 @@ export async function reviewLeverUpPositionWithAI({ env, position, currentPriceR
   const cooldownKey = "ciel:leverup:gemini-review:cooldown:v1:" + hash;
   if (storage?.get) {
     const last = Number(await storage.get(cooldownKey).catch(() => "0"));
-    const cooldownMs = Math.max(60_000, Math.min(10 * 60_000, Number(env?.GEMINI_POSITION_REVIEW_COOLDOWN_MS || 15 * 60_000)));
+    const cooldownMs = Math.max(60_000, Math.min(15 * 60_000, Number(env?.GEMINI_POSITION_REVIEW_COOLDOWN_MS || 15 * 60_000)));
     if (last > 0 && now - last < cooldownMs) {
       const cooldown = { status: "COOLDOWN", action: "HOLD", confidence: 0, retryAt: last + cooldownMs, configuredKeyCount: keys.length, model: String(env?.GEMINI_MODEL || "gemini-2.5-flash").trim() };
       return cooldown;
