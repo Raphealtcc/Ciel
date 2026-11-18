@@ -334,6 +334,6 @@ await exhaustedTotalBudget.put("ciel:position-ai-budget:v1:2026-11-18", JSON.str
 }));
 assert.equal(await reservePositionAiProviderBudget(exhaustedTotalBudget, "GROQ", Date.parse("2026-11-18T12:00:00Z")), false,
   "the combined Qwen provider chain must stop at the total daily ceiling");
-assert.equal(await reservePositionAiProviderBudget(makeBudgetStorage(), "CLOUDFLARE_WORKERS_AI", Date.parse("2026-11-18T12:00:00Z")), false,
+assert.equal(await reservePositionAiProviderBudget(null, "CLOUDFLARE_WORKERS_AI", Date.parse("2026-11-18T12:00:00Z")), false,
   "fail closed when the persistent budget store is unavailable");
 console.log("PASS: shared UTC-day AI budget caps Workers AI at 8 calls and total Qwen providers at 32.");
