@@ -69,6 +69,9 @@ worker = replaceOnce(worker, "    if (action.action === \"MARKET_CLOSE\" && !aut
 worker = replaceOnce(worker, "  let submitted = 0, snapshots = 0, evaluated = 0, adaptiveUpdatesBlocked = 0, closePermissionBlocked = 0, aiReviewed = 0, aiCloseSignals = 0, positionsMissingPairView = 0, positionsMissingOraclePrice = 0, geminiConfiguredKeyCount = getGeminiApiKeys(env).length;",
   "  let submitted = 0, snapshots = 0, evaluated = 0, adaptiveUpdatesBlocked = 0, closePermissionBlocked = 0, aiReviewed = 0, aiCloseSignals = 0, positionsMissingPairView = 0, positionsMissingOraclePrice = 0, canMarketClose = null, canUpdateTpSl = null, geminiConfiguredKeyCount = getGeminiApiKeys(env).length;",
   "keep permission diagnostics outside execution-only reads");
+worker = replaceOnce(worker, "    ]);\n    if (action.action === \"MARKET_CLOSE\" && !auth.canMarketClose) { closePermissionBlocked++; continue; }",
+  "    ]);\n    canMarketClose = Boolean(auth.canMarketClose); canUpdateTpSl = Boolean(auth.canUpdateTpSl);\n    if (action.action === \"MARKET_CLOSE\" && !auth.canMarketClose) { closePermissionBlocked++; continue; }",
+  "cache execution permissions for diagnostics");
 worker = replaceOnce(worker, "canMarketClose: Boolean(auth.canMarketClose), canUpdateTpSl: Boolean(auth.canUpdateTpSl)",
   "canMarketClose, canUpdateTpSl", "return cached execution permissions without block-scope references");
 const feeAnchor = '  let submitted = 0, snapshots = 0, evaluated = 0, adaptiveUpdatesBlocked = 0, closePermissionBlocked = 0, aiReviewed = 0, aiCloseSignals = 0, positionsMissingPairView = 0, positionsMissingOraclePrice = 0, geminiConfiguredKeyCount = getGeminiApiKeys(env).length;';
