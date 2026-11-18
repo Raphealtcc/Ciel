@@ -1381,10 +1381,10 @@ export async function runLeverUpPositionManager({ env, db, now = Date.now(), dep
     // Reconcile exact entry SL/TP against the values stored on the live position.
     const actualStop = BigInt(position.stopLossRaw || 0);
     const actualTarget = BigInt(position.takeProfitRaw || 0);
-    const expectedStop = saved ? BigInt(saved.plan?.actionValues?.[7] || 0) : actualStop;
+    const expectedStop = actualStop > 0n ? actualStop : BigInt(saved?.plan?.actionValues?.[7] || 0);
     const expectedTarget = 0n;
-    const stopMismatch = Boolean(saved && expectedStop > 0n && actualStop !== expectedStop);
-    const protectionMismatch = actualTarget !== 0n || stopMismatch;
+    const missingEmergencyStop = actualStop === 0n && expectedStop > 0n;
+    const protectionMismatch = actualTarget !== 0n || missingEmergencyStop;
     let protectionRepair = null;
     if (protectionMismatch) {
       const stopAlreadyCrossed = expectedStop > 0n &&

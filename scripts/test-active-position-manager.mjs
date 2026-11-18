@@ -71,6 +71,7 @@ assert.equal(normalizePositionReversalQueue([{ ...queue[0], expiresAt: 1 }], 2).
 
 assert.equal(selectLeverUpPositionAction({ fixedAction: { action: "HOLD" }, adaptive: { action: "HOLD" }, aiReview: { status: "REVIEWED", action: "CLOSE", confidence: 99 } }).action, "HOLD", "AI must not independently force an early close");
 assert.ok(coordinator.includes('const expectedTarget = 0n;'),"live manager clears fixed take profits");
+assert.ok(coordinator.includes('const expectedStop = actualStop > 0n ? actualStop'),"live manager must preserve an already-trailed exchange stop");
 assert.ok(coordinator.includes('const partials = [];'),"live manager disables automatic partial take profits");
 
 const minorPullback = evaluateAdaptiveMarketPosition({ side: "LONG", entryPrice: 100, currentPrice: 104.2, stopPrice: 96, targetPrice: 110, state: { history: samples([100,101,102,103,104,104.4,104.1,104.3]), highWaterPrice: 104.4, peakFavourablePct: 4.4 }, now: 481_000 });

@@ -69,7 +69,7 @@ const helper = `async function handleLeverUpManualEntryCommand(env, text) {
       "Execution: " + String(execution.status || "NOT SUBMITTED"),
       "Leverage: " + String(record?.selectedLeverage ?? "—") + "x",
       "Margin: " + String(record?.marginMonUsed ?? record?.minimumMarginMon ?? "—") + " MON",
-      "Stop / target: 0.25% / 0.50%",
+      "Suggested SL / TP: 0.25% / 0.50% (guidance only; dynamic strategy exits; emergency SL retained)",
       "Intent: " + (execution.intentHash || "none"),
       "Order submitted: " + (submitted ? "YES — awaiting position confirmation" : "NO"),
       "Approval policy: exact allowance only if required; no unlimited approval"

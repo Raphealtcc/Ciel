@@ -1,6 +1,6 @@
 target: gross upper-bound estimate " + money(t.usd) + " ≈ " + mon(t.mon) + ".",
     "At stop: gross upper-bound estimate " + money(q.usd) + " ≈ " + mon(q.mon) + ".",
-    "Stop/target are alert levels, not exchange orders. Place LeverUp native TP/SL protection yourself; Ciel cannot execute trades.",
+    "CIEL manages normal exits from trend, structure and momentum; the suggested TP is not a fixed close order. An exchange emergency stop remains active as a risk backstop.",
     "Live-position tracking will NOT start until you place the trade and press START TRACKING. Paper trading opens automatically and remains separate. Skip the real setup if you do not take it.",
     "After starting, correct the tracked entry with /entered " + p.id + " YOUR_ACTUAL_ENTRY_PRICE if your LeverUp fill differs.",
     "Proposal expires in 15 minutes. One new setup is evaluated per five-minute cycle; paper entries pause when less than 22 MON margin is free.",

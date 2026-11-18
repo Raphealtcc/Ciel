@@ -83,8 +83,8 @@ assert.ok(trendWriterStart >= 0 && trendWriterEnd > trendWriterStart, "native 5m
 const trendWriter = source.slice(trendWriterStart, trendWriterEnd);
 assert.ok(trendWriter.includes("this.coreTrendCandles[symbol]"), "native 5m core candles must be merged into DO state");
 assert.ok(source.includes('const symbols = ["BTC", "ETH", "SOL", "BNB", "HYPE", "XRP", "ONDO", "KPEPE", "TRX", "AAVE", "ADA", "DOGE", "LINK", "PUMP", "SEI", "SUI", "UNI", "VIRTUAL"]'), "one-minute DO candle capture must include all 18 eligible 50x+ markets");
-assert.ok(trendWriter.includes("now - 5 * 60 * 60 * 1e3"), "cold-start cache must bootstrap only five hours of 5m candles once; the 24h buffer then grows from existing snapshots");
-assert.ok(trendWriter.includes(".slice(-288)"), "the DO must retain 24 hours of 5m candles");
+assert.ok(trendWriter.includes("now - 26 * 60 * 60 * 1e3"), "cold-start cache must bootstrap only five hours of 5m candles once; the 24h buffer then grows from existing snapshots");
+assert.ok(trendWriter.includes(".slice(-300)"), "the DO must retain 25 hours of 5m candles for 1h EMA confirmation");
 assert.ok(trendWriter.includes('["BTC","ETH","SOL","BNB","HYPE","XRP","ONDO","KPEPE","TRX","AAVE","ADA","DOGE","LINK","PUMP","SEI","SUI","UNI","VIRTUAL"].includes(symbol)'), "the 5m structure cache must include all six enabled markets");
 assert.ok(source.includes('new Set(["BTC", "ETH", "MON", "SOL", "BNB", "HYPE", "XRP", "ONDO", "KPEPE", "TRX", "AAVE", "ADA", "DOGE", "LINK", "PUMP", "SEI", "SUI", "UNI", "VIRTUAL"])'), "native 5m candle snapshots must include all six enabled markets");
 assert.ok(trendWriter.includes('this.state.storage.put("coreTrendCandles", this.coreTrendCandles)'), "native 5m cache must persist across DO restarts");
