@@ -322,7 +322,7 @@ console.log("PASS: entry signal review uses Qwen then Groq, and returns control 
 
 const fullBudgetStorage = makeBudgetStorage();
 await fullBudgetStorage.put("ciel:position-ai-budget:v1:2026-11-18", JSON.stringify({
-  date: "2026-11-18", totalProviderCalls: 60, workersAiCalls: POSITION_AI_DAILY_LIMITS.workersAiCalls, groqCalls: 0
+  date: "2026-11-18", totalProviderCalls: 20, workersAiCalls: POSITION_AI_DAILY_LIMITS.workersAiCalls, groqCalls: 0
 }));
 assert.equal(await reservePositionAiProviderBudget(fullBudgetStorage, "CLOUDFLARE_WORKERS_AI", Date.parse("2026-11-18T12:00:00Z")), false,
   "Cloudflare inference must stop at its daily model-call ceiling");
