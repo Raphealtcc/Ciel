@@ -12,6 +12,10 @@ export function evaluateAdaptiveMarketPosition({
     return { action: "HOLD", reason: "ADAPTIVE_INPUT_INCOMPLETE", state };
   }
   const entry = Number(entryPrice), price = Number(currentPrice);
+  const emergencyStop = Number(stopPrice) || 0;
+  if (emergencyStop > 0 && (direction === 1 ? price <= emergencyStop : price >= emergencyStop)) {
+    return { action: "CLOSE", reason: "HARD_STOP_TRIGGERED", reverseConfirmed: false, state };
+  }
   const history = Array.isArray(state.history)
     ? state.history.filter((x) => Number(x?.at) > 0 && finitePositive(x?.price)).slice(-Math.max(8, sampleLimit))
     : [];
