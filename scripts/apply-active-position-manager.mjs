@@ -72,10 +72,15 @@ worker = replaceOnce(worker,
   'if (priorReviewAt && now - priorReviewAt < cooldownMs) {',
   'if (priorReviewAt && now - priorReviewAt < cooldownMs && !candidate.reversalRequestId) {',
   "allow queued reversal candidate to receive a fresh review");
-const liveEntryAnchor = '    if (leverUpPlan?.coordination?.submitted === true || ["SUBMITTED", "EXECUTED", "RECONCILED", "PENDING", "UNCERTAIN"].includes(String(leverUpPlan?.coordination?.status || "").toUpperCase())) liveEntrySubmittedThisCycle = true;';
-worker = replaceOnce(worker, liveEntryAnchor, liveEntryAnchor +
-  '\n    if(candidate.reversalRequestId){const sent=leverUpPlan?.coordination?.submitted===true||["SUBMITTED","EXECUTED","RECONCILED","PENDING","UNCERTAIN"].includes(String(leverUpPlan?.coordination?.status||"").toUpperCase());if(sent)await updateCielPositionReversalQueue(env,candidate.reversalRequestId,{status:"ENTRY_SUBMITTED",entrySignalId:id,submittedAt:now,live:true},now);}',
-  "record submitted live reversal entry");
+const liveEntryMarker = "liveEntrySubmittedThisCycle = true;";
+const liveEntryAt = worker.indexOf(liveEntryMarker, advisorStart);
+if (liveEntryAt < 0 || worker.indexOf(liveEntryMarker, liveEntryAt + liveEntryMarker.length) >= 0) {
+  throw new Error("Expected exactly one live-entry submission state update in advisor cycle");
+}
+const liveEntryAfter = liveEntryAt + liveEntryMarker.length;
+worker = worker.slice(0, liveEntryAfter) +
+  '\n    if(candidate.reversalRequestId){const sent=leverUpPlan?.coordination?.submitted===true||["SUBMITTED","EXECUTED","RECONCILED","PENDING","UNCERTAIN"].includes(String(leverUpPlan?.coordination?.status||"").toUpperCase());if(sent)await updateCielPositionReversalQueue(env,candidate.reversalRequestId,{status:"ENTRY_SUBMITTED",entrySignalId:id,submittedAt:now,live:true},now);}' +
+  worker.slice(liveEntryAfter);
 worker = replaceOnce(worker, '      const leverUpLine = formatLeverUpAdvisorLine(leverUpPlan);',
   '      if(candidate.reversalRequestId && paperResult?.opened) await updateCielPositionReversalQueue(env,candidate.reversalRequestId,{status:"COMPLETED",paperOpenedAt:now,paperSignalId:id},now);\n      const leverUpLine = formatLeverUpAdvisorLine(leverUpPlan);',
   "record opened paper reversal entry");
