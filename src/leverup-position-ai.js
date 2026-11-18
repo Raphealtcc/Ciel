@@ -22,8 +22,8 @@ const POSITION_AI_QWEN_MODEL = "@cf/qwen/qwen3.8-27b";
 const POSITION_AI_GROQ_MODEL_DEFAULT = "qwen/qwen3.8-27b";
 
 export const POSITION_AI_DAILY_LIMITS = Object.freeze({
-  workersAiCalls: 60,
-  totalProviderCalls: 120,
+  workersAiCalls: 8,
+  totalProviderCalls: 32,
 });
 
 export async function reservePositionAiProviderBudget(storage, provider, now = Date.now()) {
