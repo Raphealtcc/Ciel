@@ -14,7 +14,9 @@ assert.ok(BigInt(targetExtension.takeProfitRaw) > BigInt(position.takeProfitRaw)
 const reversal = evaluateAdaptiveLeverUpExit({
   position: { ...position, entryPriceRaw: raw(100), takeProfitRaw: raw(108), stopLossRaw: raw(97) },
   currentPriceRaw: raw(104),
-  state: { history: history([110, 109, 108, 107, 106, 105, 104.8, 104.5, 104.2]), highWaterPrice: 110, peakFavourablePct: 10 }, now: 541_000,
+  // Keep the fixture aligned with the production rule: reversal closes are only confirmed
+  // after at least 12 samples and four consecutive adverse samples.
+  state: { history: history([112, 111, 110, 109, 108, 107, 106, 105, 104.8, 104.5, 104.2]), highWaterPrice: 110, peakFavourablePct: 10 }, now: 661_000,
 });
 assert.equal(reversal.action, "MARKET_CLOSE");
 assert.equal(reversal.reason, "ADAPTIVE_PROFIT_REVERSAL");
