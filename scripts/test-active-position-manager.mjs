@@ -30,8 +30,8 @@ const noSecondExtension = evaluateAdaptiveMarketPosition({
 assert.notEqual(noSecondExtension.reason, "TREND_CONTINUATION_TARGET_EXTENSION");
 
 const reversal = evaluateAdaptiveMarketPosition({
-  side: "LONG", entryPrice: 100, currentPrice: 104, stopPrice: 97, targetPrice: 108,
-  state: { history: samples([110,109,108,107,106,105,104.8,104.5,104.2,104.1,104.05]), highWaterPrice: 110, peakFavourablePct: 10 },
+  side: "LONG", entryPrice: 100, currentPrice: 103.5, stopPrice: 97, targetPrice: 108,
+  state: { history: samples([110,109.8,109.5,109,108,107,106,105,104.5,104,103.8]), highWaterPrice: 110, peakFavourablePct: 10 },
   now: 661_000,
 });
 assert.equal(reversal.action, "CLOSE");
