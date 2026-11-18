@@ -26,11 +26,11 @@ function replaceFunction(source, startNeedle, endMarker, replacement, label) {
   if (end < 0) throw new Error(label + ": end marker missing");
   return source.slice(0, start) + replacement + source.slice(end);
 }
-const stripExports = (value) => value.replace(/^export\\s+(?=(?:const|function|async function|class)\\b)/gm, "");
+const stripExports = (value) => value.replace(/^export\s+(?=(?:const|function|async function|class)\b)/gm, "");
 const helperInline = stripExports(helperSource)
-  .replace(/\\bclamp\\b/g, "adaptiveMarketClamp")
-  .replace(/\\bfinitePositive\\b/g, "adaptiveMarketFinitePositive");
-const queueInline = stripExports(queueSource).replace(/\\bactiveStates\\b/g, "positionReversalActiveStates");
+  .replace(/\bclamp\b/g, "adaptiveMarketClamp")
+  .replace(/\bfinitePositive\b/g, "adaptiveMarketFinitePositive");
+const queueInline = stripExports(queueSource).replace(/\bactiveStates\b/g, "positionReversalActiveStates");
 
 // The live manager is a source module imported by the reconstructed Worker.
 // Do not try to rewrite it as an inline function in the generated bundle.
@@ -45,7 +45,7 @@ if (coordinatorSource.slice(liveManagerStart).includes("(dependencies.fetchPrice
   throw new Error("Live manager must not poll LeverUp oracle prices.");
 }
 worker = replaceOnce(worker, "async function managePaperTrades(",
-  marker + "\\n" + helperInline + "\\n" + queueInline + "\\n" + queueFunctions + "\\nasync function managePaperTrades(",
+  marker + "\n" + helperInline + "\n" + queueInline + "\n" + queueFunctions + "\nasync function managePaperTrades(",
   "inline shared adaptive evaluator and reversal queue for paper management; live manager remains source-module-owned");
 worker = replaceFunction(worker, "async function managePaperTrades(",
   '__name(managePaperTrades, "managePaperTrades");', paperBody.replace(/\n__name\(managePaperTrades, "managePaperTrades"\);$/, ""),
