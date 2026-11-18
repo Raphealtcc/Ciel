@@ -43,10 +43,12 @@ const earlyProfitClose = selectLeverUpPositionAction({
 });
 assert.equal(earlyProfitClose.action, "MARKET_CLOSE", "confirmed near-target reversal must bypass ordinary minimum-hold review");
 const geminiClose = { status: "REVIEWED", action: "CLOSE", confidence: 88, reason: "Momentum and trend invalidated." };
-assert.equal(selectLeverUpPositionAction({
+const aiCannotOverrideMinimumHold = selectLeverUpPositionAction({
   fixedAction: { action: "WAIT", reason: "MINIMUM_HOLD_NOT_REACHED" },
   adaptive: { action: "HOLD" }, aiReview: geminiClose, aiCloseMinConfidence: 80,
-}).reason, "GEMINI_POSITION_CLOSE_CONFIRMED");
+});
+assert.equal(aiCannotOverrideMinimumHold.action, "WAIT", "AI must not independently close during minimum hold");
+assert.equal(aiCannotOverrideMinimumHold.reason, "MINIMUM_HOLD_NOT_REACHED");
 assert.equal(selectLeverUpPositionAction({
   fixedAction: { action: "WAIT" }, adaptive: { action: "HOLD" },
   aiReview: { ...geminiClose, confidence: 79 }, aiCloseMinConfidence: 80,
