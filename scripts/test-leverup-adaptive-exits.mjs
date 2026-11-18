@@ -5,12 +5,13 @@ const raw = (price) => String(BigInt(Math.round(price * 1_000_000)) * 10n ** 12n
 const history = (prices, start = 1_000) => prices.map((price, i) => ({ at: start + i * 60_000, price }));
 const position = { positionHash: "0x" + "ab".repeat(32), qtyRaw: "1000", entryPriceRaw: raw(100), stopLossRaw: raw(98), takeProfitRaw: raw(103), isLong: true };
 const targetExtension = evaluateAdaptiveLeverUpExit({
-  position, currentPriceRaw: raw(103.1),
+  position: { ...position, takeProfitRaw: "0" }, currentPriceRaw: raw(103.1),
   state: { history: history([100, 100.2, 100.4, 100.7, 101, 101.4, 101.8, 102.2, 102.7, 103]), highWaterPrice: 103 }, now: 601_000,
 });
 assert.equal(targetExtension.action, "UPDATE_TP_SL");
-assert.equal(targetExtension.reason, "TREND_CONTINUATION_TARGET_EXTENSION");
-assert.ok(BigInt(targetExtension.takeProfitRaw) > BigInt(position.takeProfitRaw));
+assert.equal(targetExtension.reason, "VOLATILITY_AWARE_TRAILING_STOP");
+assert.equal(targetExtension.takeProfitRaw, "0", "trailing strategy must never restore a fixed venue TP");
+assert.ok(BigInt(targetExtension.stopLossRaw) > BigInt(position.stopLossRaw), "favourable movement should ratchet the emergency stop forward");
 const reversal = evaluateAdaptiveLeverUpExit({
   position: { ...position, entryPriceRaw: raw(100), takeProfitRaw: raw(108), stopLossRaw: raw(97) },
   currentPriceRaw: raw(104),
@@ -26,4 +27,4 @@ assert.equal(hardStop.action, "MARKET_CLOSE");
 assert.equal(hardStop.reason, "HARD_STOP_TRIGGERED");
 const noFixedTargetExit=evaluateAdaptiveLeverUpExit({position:{...position,takeProfitRaw:"0"},currentPriceRaw:raw(104),state:{history:history([100,101,102,103]),highWaterPrice:103},now:601_000});
 assert.notEqual(noFixedTargetExit.reason,"TAKE_PROFIT_TRIGGERED","dynamic manager must not close on suggested target");
-console.log("PASS: LeverUp raw-price conversion, target extension, profit reversal and hard-stop priority");
+console.log("PASS: LeverUp raw-price conversion, no-fixed-TP trailing stop, profit reversal and hard-stop priority");
