@@ -38,17 +38,17 @@ assert.equal(reversal.reason, "ADAPTIVE_PROFIT_REVERSAL");
 assert.equal(reversal.reverseConfirmed, true);
 
 const adverse = evaluateAdaptiveMarketPosition({
-  side: "LONG", entryPrice: 100, currentPrice: 98.8, stopPrice: 97, targetPrice: 105,
-  state: { history: samples([100, 99.8, 99.6, 99.4, 99.2, 99, 98.9]), highWaterPrice: 100 },
-  now: 421_000,
+  side: "LONG", entryPrice: 100, currentPrice: 97.9, stopPrice: 97, targetPrice: 105,
+  state: { history: samples([100,99.8,99.6,99.4,99.2,99,98.8,98.6,98.4,98.2,98,97.9]), highWaterPrice: 100 },
+  now: 661_000,
 });
 assert.equal(adverse.action, "CLOSE");
 assert.equal(adverse.reason, "ADAPTIVE_ADVERSE_CUT");
 
 const recovery = evaluateAdaptiveMarketPosition({
   side: "LONG", entryPrice: 100, currentPrice: 98.7, stopPrice: 97, targetPrice: 105,
-  state: { history: samples([100, 99.5, 99, 98.5, 98.3, 98.4, 98.6]), highWaterPrice: 100 },
-  now: 421_000,
+  state: { history: samples([100,99.8,99.6,99.4,99.2,99,98.8,98.6,98.4,98.3,98.5,98.7]), highWaterPrice: 100 },
+  now: 661_000,
 });
 assert.notEqual(recovery.reason, "ADAPTIVE_ADVERSE_CUT");
 
