@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { evaluateAdaptiveMarketPosition } from "../src/adaptive-market-position.js";
-import { hyperliquidPriceRawForPosition } from "../src/leverup-coordinator.js";
+import { hyperliquidPriceRawForPosition, selectLeverUpPositionAction } from "../src/leverup-coordinator.js";
 import {
   normalizePositionReversalQueue,
   reconcilePositionReversalQueue,
@@ -31,8 +31,8 @@ assert.notEqual(noSecondExtension.reason, "TREND_CONTINUATION_TARGET_EXTENSION")
 
 const reversal = evaluateAdaptiveMarketPosition({
   side: "LONG", entryPrice: 100, currentPrice: 104, stopPrice: 97, targetPrice: 108,
-  state: { history: samples([110, 109, 108, 107, 106, 105, 104.8, 104.5, 104.2]), highWaterPrice: 110, peakFavourablePct: 10 },
-  now: 541_000,
+  state: { history: samples([110,109,108,107,106,105,104.8,104.5,104.2,104.1,104.05]), highWaterPrice: 110, peakFavourablePct: 10 },
+  now: 661_000,
 });
 assert.equal(reversal.action, "CLOSE");
 assert.equal(reversal.reason, "ADAPTIVE_PROFIT_REVERSAL");
@@ -68,6 +68,8 @@ assert.equal(wrongEntry.queue[0].status, "ENTRY_SUBMITTED");
 const correctEntry = reconcilePositionReversalQueue(submitted.queue, [{ symbol: "BTC", side: "SHORT", signalId: "new-entry" }], 50_000);
 assert.equal(correctEntry.queue[0].status, "COMPLETED");
 assert.equal(normalizePositionReversalQueue([{ ...queue[0], expiresAt: 1 }], 2).length, 0);
+
+assert.equal(selectLeverUpPositionAction({ fixedAction: { action: "HOLD" }, adaptive: { action: "HOLD" }, aiReview: { status: "REVIEWED", action: "CLOSE", confidence: 99 } }).action, "HOLD", "AI must not independently force an early close");
 
 const minorPullback = evaluateAdaptiveMarketPosition({ side: "LONG", entryPrice: 100, currentPrice: 104.2, stopPrice: 96, targetPrice: 110, state: { history: samples([100,101,102,103,104,104.4,104.1,104.3]), highWaterPrice: 104.4, peakFavourablePct: 4.4 }, now: 481_000 });
 assert.notEqual(minorPullback.action, "CLOSE", "ordinary pullback must not trigger an early close");
