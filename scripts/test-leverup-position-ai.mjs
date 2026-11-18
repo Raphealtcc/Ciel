@@ -262,6 +262,7 @@ console.log("PASS: Qwen Workers AI is primary, Groq is secondary, and existing G
 const entryPrompt = "Only inspect this supplied BTC trend, funding, order-book and forecast snapshot. Return APPROVE, REJECT or WAIT.";
 const qwenEntry = await reviewEntrySignalWithAI({
   env: {
+    CIEL_STATE: makeBudgetStorage(),
     AI: {
       run: async (model, options) => {
         assert.equal(model, "@cf/qwen/qwen3.8-27b");
