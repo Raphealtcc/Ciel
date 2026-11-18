@@ -781,19 +781,31 @@ export function evaluateLeverUpPositionAction({ position, currentPriceRaw, now =
 }
 
 export function selectLeverUpPositionAction({ fixedAction = { action: "HOLD" }, adaptive = { action: "HOLD" }, protectionRepair = null, aiReview = null, aiCloseMinConfidence = 80 } = {}) {
-  if (fixedAction.action === "MARKET_CLOSE" || fixedAction.action === "PARTIAL_CLOSE") return fixedAction;
+  // Exchange hard stops and already-requested partial closes stay highest priority.
+  if (fixedAction.reason === "STOP_LOSS_TRIGGERED" || fixedAction.action === "PARTIAL_CLOSE") return fixedAction;
   if (protectionRepair?.action === "MARKET_CLOSE") return protectionRepair;
-  if (adaptive?.action === "MARKET_CLOSE") return adaptive;
+  if (adaptive?.action === "MARKET_CLOSE") {
+    return {
+      ...adaptive,
+      reverseConfirmed: adaptive.reverseConfirmed === true,
+      reverseSide: adaptive.reverseConfirmed === true ? (adaptive.positionSide === "LONG" ? "SHORT" : "LONG") : null,
+    };
+  }
+  // A live target update can supersede the venue's static take-profit trigger.
+  if (adaptive?.action === "UPDATE_TP_SL") return adaptive;
   if (protectionRepair) return protectionRepair;
   const confidence = Math.max(0, Math.min(100, Number(aiReview?.confidence) || 0));
+  if (aiReview?.status === "REVIEWED" && aiReview?.action === "REVERSE" &&
+      aiReview?.reversalConfirmed === true && confidence >= aiCloseMinConfidence) {
+    return { action: "MARKET_CLOSE", reason: "AI_POSITION_REVERSAL_CONFIRMED", aiReview,
+      reverseConfirmed: true, reverseSide: null };
+  }
   if (aiReview?.status === "REVIEWED" && aiReview?.action === "CLOSE" && confidence >= aiCloseMinConfidence) {
-    return { action: "MARKET_CLOSE", reason: "GEMINI_POSITION_CLOSE_CONFIRMED", aiReview };
+    return { action: "MARKET_CLOSE", reason: "GEMINI_POSITION_CLOSE_CONFIRMED", aiReview, reverseConfirmed: false };
   }
   if (fixedAction.action === "WAIT") return fixedAction;
-  if (adaptive?.action === "UPDATE_TP_SL") return adaptive;
   return fixedAction;
 }
-
 async function readEntryMetadata(db) {
   if (!db?.prepare) return [];
   const result = await db.prepare("SELECT i.signal_id,i.pair_base,i.payload_json,i.status,i.created_at_ms FROM leverup_execution_intents i WHERE i.action = 0 AND i.status IN ('EXECUTED','RECONCILED','CLOSED','SUBMITTED','PENDING','UNCERTAIN') AND NOT (json_extract(i.payload_json, '$.settlement.status') = 'CLOSED' AND EXISTS (SELECT 1 FROM leverup_trade_settlements s WHERE s.trade_id = i.signal_id))").all();
@@ -1339,8 +1351,8 @@ export async function runLeverUpPositionManager({ env, db, now = Date.now(), dep
     // adaptive history, state storage, Gemini, or any nonessential exit analysis.
     let adaptive = { action: "HOLD", reason: "SKIPPED_HARD_STOP_PRIORITY" };
     let adaptiveState = null;
-    if (fixedAction.action !== "MARKET_CLOSE" && fixedAction.action !== "PARTIAL_CLOSE") {
-      const adaptiveKey = "ciel:leverup:adaptive-exit:v2:" + tradeId;
+    if (fixedAction.action !== "PARTIAL_CLOSE" && fixedAction.reason !== "STOP_LOSS_TRIGGERED") {
+      const adaptiveKey = "ciel:leverup:adaptive-exit:v3:" + tradeId;
       try { adaptiveState = await env?.CIEL_STATE?.get(adaptiveKey, "json"); } catch {}
       adaptive = evaluateAdaptiveLeverUpExit({ position, currentPriceRaw: latestPrice, state: adaptiveState || {}, pairView, now });
       if (adaptive?.state && env?.CIEL_STATE?.put) {
