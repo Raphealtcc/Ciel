@@ -101,7 +101,7 @@ const oldCandleReads = [
   "  const coreCandleResults = await Promise.all(coreScalpSymbols.map(async (symbol) => {",
   "    const [one, five] = await Promise.all([",
   '      env.DB.prepare("SELECT open_ts_ms,close_ts_ms,open_price,high_price,low_price,close_price,volume FROM market_candles WHERE symbol=? AND interval=\'1m\' AND close_ts_ms<=? ORDER BY open_ts_ms DESC LIMIT 60").bind(symbol,now).all(),',
-  '      env.DB.prepare("SELECT open_ts_ms,close_ts_ms,open_price,high_price,low_price,close_price,volume FROM market_candles WHERE symbol=? AND interval=\'5m\' AND close_ts_ms<=? ORDER BY open_ts_ms DESC LIMIT 60").bind(symbol,now).all()',
+  '      env.DB.prepare("SELECT open_ts_ms,close_ts_ms,open_price,high_price,low_price,close_price,volume FROM market_candles WHERE symbol=? AND interval=\'5m\' AND close_ts_ms<=? ORDER BY open_ts_ms DESC LIMIT 300").bind(symbol,now).all()',
   "    ]);",
   "    return [symbol,(one.results||[]).reverse(),(five.results||[]).reverse()];",
   "  }));"
@@ -110,7 +110,7 @@ const newCandleReads = [
   "  const trendEntrySymbols = [...trendEntryMarketSet];",
   "  const coreCandleResults = trendEntrySymbols.map((symbol) => {",
   "    const one = Array.isArray(coreScalpCandles?.[symbol]) ? coreScalpCandles[symbol].slice(-90) : [];",
-  "    const five = Array.isArray(coreTrendCandles?.[symbol]) ? coreTrendCandles[symbol].filter((row) => Number(row.close_ts_ms) <= now).slice(-60) : [];",
+  "    const five = Array.isArray(coreTrendCandles?.[symbol]) ? coreTrendCandles[symbol].filter((row) => Number(row.close_ts_ms) <= now).slice(-300) : [];",
   "    return [symbol,one,five];",
   "  });"
 ].join("\n");
@@ -152,8 +152,8 @@ function onceInMethod(from, to, description) {
 onceInMethod('    const statements = [];', '    const statements = [];\n    let coreTrendUpdated = false;', "track 5m cache updates");
 onceInMethod('    const refreshRangeSummaries = now - this.lastHourlySummaryAt >= 15 * 60 * 1e3;', '    const refreshRangeSummaries = now - this.lastHourlySummaryAt >= 60 * 60 * 1e3;\n    if (refreshRangeSummaries) { this.lastHourlySummaryAt = now; await this.state.storage.put("lastHourlySummaryAt", now).catch(() => void 0); }', "refresh hourly candle summaries once per hour");
 onceInMethod('req: { coin: symbol, interval: "5m", startTime, endTime }',
-  'req: { coin: symbol, interval: "5m", startTime: (["BTC","ETH","SOL","BNB","HYPE","XRP","ONDO","KPEPE","TRX","AAVE","ADA","DOGE","LINK","PUMP","SEI","SUI","UNI","VIRTUAL"].includes(symbol) && (this.coreTrendCandles[symbol] || []).length < 40) ? now - 5 * 60 * 60 * 1e3 : startTime, endTime }',
-  "bootstrap 5h of 5m candles only when the core cache is cold");
+  'req: { coin: symbol, interval: "5m", startTime: (["BTC","ETH","SOL","BNB","HYPE","XRP","ONDO","KPEPE","TRX","AAVE","ADA","DOGE","LINK","PUMP","SEI","SUI","UNI","VIRTUAL"].includes(symbol) && (this.coreTrendCandles[symbol] || []).length < 252) ? now - 26 * 60 * 60 * 1e3 : startTime, endTime }',
+  "bootstrap 26h of 5m candles for the higher-timeframe entry filter");
 onceInMethod('          if (!latestClosed) return;',
   '          if (!latestClosed) return;\n          if (["BTC","ETH","SOL","BNB","HYPE","XRP","ONDO","KPEPE","TRX","AAVE","ADA","DOGE","LINK","PUMP","SEI","SUI","UNI","VIRTUAL"].includes(symbol)) {\n            const merged = new Map((Array.isArray(this.coreTrendCandles[symbol]) ? this.coreTrendCandles[symbol] : []).map((row) => [Number(row.open_ts_ms), row]));\n            for (const candle of valid) {\n              if (candle.closeAt > now) continue;\n              merged.set(candle.openAt, { open_ts_ms: candle.openAt, close_ts_ms: candle.closeAt, open_price: candle.open, high_price: candle.high, low_price: candle.low, close_price: candle.close, volume: candle.volume });\n            }\n            this.coreTrendCandles[symbol] = [...merged.values()].sort((left, right) => left.open_ts_ms - right.open_ts_ms).slice(-60);\n            coreTrendUpdated = true;\n          }',
   "merge fresh closed 5m candles into the persistent DO cache");
@@ -222,8 +222,8 @@ replaceOnceInSource(
 
 replaceOnceInSource(
   'this.coreTrendCandles[symbol] = [...merged.values()].sort((left, right) => left.open_ts_ms - right.open_ts_ms).slice(-60);',
-  'this.coreTrendCandles[symbol] = [...merged.values()].sort((left, right) => left.open_ts_ms - right.open_ts_ms).slice(-288);',
-  "retain 24 hours of native 5m candles in the DO cache"
+  'this.coreTrendCandles[symbol] = [...merged.values()].sort((left, right) => left.open_ts_ms - right.open_ts_ms).slice(-300);',
+  "retain 25 hours of native 5m candles in the DO cache"
 );
 
 source = source.replaceAll('["BTC","ETH","SOL"].includes(symbol)', '["BTC","ETH","SOL","BNB","HYPE","XRP","ONDO","KPEPE","TRX","AAVE","ADA","DOGE","LINK","PUMP","SEI","SUI","UNI","VIRTUAL"].includes(symbol)');
