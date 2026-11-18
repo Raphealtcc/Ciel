@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { getGeminiApiKeys, getPositionAiProviderCount, parseGeminiApiKeys, reviewEntrySignalWithAI, reviewLeverUpPositionWithAI, reviewLeverUpPositionWithGemini } from "../src/leverup-position-ai.js";
+import { getGeminiApiKeys, getPositionAiProviderCount, parseGeminiApiKeys, reservePositionAiProviderBudget, POSITION_AI_DAILY_LIMITS, reviewEntrySignalWithAI, reviewLeverUpPositionWithAI, reviewLeverUpPositionWithGemini } from "../src/leverup-position-ai.js";
 
 assert.deepEqual(parseGeminiApiKeys(" alpha , beta\n gamma;alpha "), ["alpha", "beta", "gamma"]);
 assert.deepEqual(parseGeminiApiKeys('["json-a","json-b"]'), ["json-a", "json-b"]);
@@ -64,6 +64,7 @@ const cooldownResult = await reviewLeverUpPositionWithGemini({
   dependencies: { fetchImpl: async () => { calls++; throw new Error("should not call during cooldown"); } }
 });
 assert.equal(cooldownResult.status, "COOLDOWN");
+assert.equal(cooldownResult.retryAt, 10_000 + 15 * 60_000);
 assert.equal(calls, 2);
 assert.equal(JSON.parse(writes.get("ciel:leverup:gemini-review:history:v1")).length, 1, "cooldown responses must not be stored as actual Gemini decisions");
 assert.ok(writes.has("ciel:leverup:gemini-review:cooldown:v1:" + "0x" + "ab".repeat(32)));
@@ -133,6 +134,15 @@ assert.equal(actualFeeSnapshot.actualFeeSnapshot.marginToken, "LVMON");
 assert.equal(actualFeeSnapshot.actualFeeSnapshot.openFeeRaw, "1200");
 
 
+const makeBudgetStorage = () => {
+  const values = new Map();
+  return {
+    values,
+    get: async (key) => values.get(key) ?? null,
+    put: async (key, value) => { values.set(key, value); }
+  };
+};
+
 // Workers AI is the primary position-review provider.
 let qwenCalls = 0;
 const qwenStorageWrites = new Map();
@@ -170,11 +180,15 @@ assert.equal(qwenReview.model, "@cf/qwen/qwen3.8-27b");
 assert.equal(qwenReview.action, "HOLD");
 assert.equal(qwenReview.configuredProviderCount, 1);
 assert.equal(JSON.parse(qwenStorageWrites.get("ciel:leverup:gemini-review:last")).provider, "CLOUDFLARE_WORKERS_AI");
+const qwenBudget = JSON.parse(qwenStorageWrites.get("ciel:position-ai-budget:v1:1970-01-01"));
+assert.equal(qwenBudget.workersAiCalls, 1);
+assert.equal(qwenBudget.totalProviderCalls, 1);
 
 // Groq is attempted only after Workers AI fails, then uses a strict JSON response.
 let groqCalls = 0, groqUrl = "";
 const groqReview = await reviewLeverUpPositionWithAI({
   env: {
+    CIEL_STATE: makeBudgetStorage(),
     GROQ_API_KEY: "test-groq-key",
     GROQ_POSITION_AI_MODEL: "qwen/qwen3.8-27b",
     AI: { run: async () => { throw new Error("QWEN_TEST_OUTAGE"); } }
@@ -210,6 +224,7 @@ assert.equal(groqReview.configuredProviderCount, 2);
 let fallbackFetchCalls = 0;
 const tripleFallback = await reviewLeverUpPositionWithAI({
   env: {
+    CIEL_STATE: makeBudgetStorage(),
     AI: { run: async () => { throw new Error("QWEN_UNAVAILABLE"); } },
     GROQ_API_KEY: "test-groq-key",
     GEMINI_API_KEYS: "gemini-test-key",
@@ -270,6 +285,7 @@ assert.equal(qwenEntry.model, "@cf/qwen/qwen3.8-27b");
 let entryGroqCalls = 0;
 const groqEntry = await reviewEntrySignalWithAI({
   env: {
+    CIEL_STATE: makeBudgetStorage(),
     AI: { run: async () => { throw new Error("QWEN_OFFLINE"); } },
     GROQ_API_KEY: "entry-groq-test"
   },
@@ -294,10 +310,29 @@ assert.equal(groqEntry.provider, "GROQ");
 assert.equal(groqEntry.flags[0], "FORECAST_CONFLICT");
 
 const entryFallbackUnavailable = await reviewEntrySignalWithAI({
-  env: { AI: { run: async () => { throw new Error("QWEN_OFFLINE"); } }, GROQ_API_KEY: "bad-key" },
+  env: { CIEL_STATE: makeBudgetStorage(), AI: { run: async () => { throw new Error("QWEN_OFFLINE"); } }, GROQ_API_KEY: "bad-key" },
   prompt: entryPrompt,
   dependencies: { fetchImpl: async () => ({ ok: false, status: 429 }) }
 });
 assert.equal(entryFallbackUnavailable, null, "caller must continue into existing Gemini rotation after Qwen/Groq failures");
 
 console.log("PASS: entry signal review uses Qwen then Groq, and returns control for the existing Gemini fallback.");
+
+
+const fullBudgetStorage = makeBudgetStorage();
+await fullBudgetStorage.put("ciel:position-ai-budget:v1:2026-11-18", JSON.stringify({
+  date: "2026-11-18", totalProviderCalls: 60, workersAiCalls: POSITION_AI_DAILY_LIMITS.workersAiCalls, groqCalls: 0
+}));
+assert.equal(await reservePositionAiProviderBudget(fullBudgetStorage, "CLOUDFLARE_WORKERS_AI", Date.parse("2026-11-18T12:00:00Z")), false,
+  "Cloudflare inference must stop at its daily model-call ceiling");
+assert.equal(await reservePositionAiProviderBudget(fullBudgetStorage, "GROQ", Date.parse("2026-11-18T12:00:00Z")), true,
+  "Groq may continue as fallback while total provider calls remain");
+const exhaustedTotalBudget = makeBudgetStorage();
+await exhaustedTotalBudget.put("ciel:position-ai-budget:v1:2026-11-18", JSON.stringify({
+  date: "2026-11-18", totalProviderCalls: POSITION_AI_DAILY_LIMITS.totalProviderCalls, workersAiCalls: 60, groqCalls: 60
+}));
+assert.equal(await reservePositionAiProviderBudget(exhaustedTotalBudget, "GROQ", Date.parse("2026-11-18T12:00:00Z")), false,
+  "the combined Qwen provider chain must stop at the total daily ceiling");
+assert.equal(await reservePositionAiProviderBudget(makeBudgetStorage(), "CLOUDFLARE_WORKERS_AI", Date.parse("2026-11-18T12:00:00Z")), false,
+  "fail closed when the persistent budget store is unavailable");
+console.log("PASS: shared UTC-day AI budget caps Workers AI at 60 calls and total Qwen providers at 120.");

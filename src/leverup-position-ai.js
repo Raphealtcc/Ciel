@@ -21,6 +21,40 @@ export function getGeminiApiKeys(env = {}) {
 const POSITION_AI_QWEN_MODEL = "@cf/qwen/qwen3.8-27b";
 const POSITION_AI_GROQ_MODEL_DEFAULT = "qwen/qwen3.8-27b";
 
+export const POSITION_AI_DAILY_LIMITS = Object.freeze({
+  workersAiCalls: 60,
+  totalProviderCalls: 120,
+});
+
+export async function reservePositionAiProviderBudget(storage, provider, now = Date.now()) {
+  if (!storage?.get || !storage?.put) return false;
+  const date = new Date(Number(now)).toISOString().slice(0, 10);
+  const key = "ciel:position-ai-budget:v1:" + date;
+  try {
+    let state = await storage.get(key, "json");
+    if (typeof state === "string") {
+      try { state = JSON.parse(state); } catch { state = null; }
+    }
+    if (!state || typeof state !== "object") state = {};
+    const totalProviderCalls = Math.max(0, Number(state.totalProviderCalls) || 0);
+    const workersAiCalls = Math.max(0, Number(state.workersAiCalls) || 0);
+    if (totalProviderCalls >= POSITION_AI_DAILY_LIMITS.totalProviderCalls) return false;
+    if (provider === "CLOUDFLARE_WORKERS_AI" && workersAiCalls >= POSITION_AI_DAILY_LIMITS.workersAiCalls) return false;
+    const next = {
+      date,
+      totalProviderCalls: totalProviderCalls + 1,
+      workersAiCalls: workersAiCalls + (provider === "CLOUDFLARE_WORKERS_AI" ? 1 : 0),
+      groqCalls: Math.max(0, Number(state.groqCalls) || 0) + (provider === "GROQ" ? 1 : 0),
+      updatedAt: Number(now),
+    };
+    await storage.put(key, JSON.stringify(next), { expirationTtl: 2 * 86400 });
+    return true;
+  } catch {
+    // Fail closed: do not consume model quota when the daily budget cannot be tracked.
+    return false;
+  }
+}
+
 export function getPositionAiProviderCount(env = {}, dependencies = {}) {
   const cloudflareReady = Boolean(dependencies.aiRun || env?.AI?.run);
   const groqReady = Boolean(String(env?.GROQ_API_KEY || "").trim());
@@ -62,7 +96,7 @@ export async function reviewEntrySignalWithAI({ env = {}, prompt, dependencies =
     provider,
     model
   });
-  if (aiRun) {
+  if (aiRun && await reservePositionAiProviderBudget(env?.CIEL_STATE, "CLOUDFLARE_WORKERS_AI", Date.now())) {
     try {
       const result = await aiRun(POSITION_AI_QWEN_MODEL, {
         messages,
@@ -80,7 +114,7 @@ export async function reviewEntrySignalWithAI({ env = {}, prompt, dependencies =
       // Continue to Groq. Gemini remains the caller's final fallback.
     }
   }
-  if (groqKey) {
+  if (groqKey && await reservePositionAiProviderBudget(env?.CIEL_STATE, "GROQ", Date.now())) {
     try {
       const model = String(env?.GROQ_POSITION_AI_MODEL || POSITION_AI_GROQ_MODEL_DEFAULT).trim();
       const fetchImpl = dependencies.fetchImpl || fetch;
@@ -181,7 +215,7 @@ export async function reviewLeverUpPositionWithAI({ env, position, currentPriceR
   const cooldownKey = "ciel:leverup:gemini-review:cooldown:v1:" + hash;
   if (storage?.get) {
     const last = Number(await storage.get(cooldownKey).catch(() => "0"));
-    const cooldownMs = Math.max(60_000, Math.min(10 * 60_000, Number(env?.GEMINI_POSITION_REVIEW_COOLDOWN_MS || 120_000)));
+    const cooldownMs = Math.max(60_000, Math.min(10 * 60_000, Number(env?.GEMINI_POSITION_REVIEW_COOLDOWN_MS || 15 * 60_000)));
     if (last > 0 && now - last < cooldownMs) {
       const cooldown = { status: "COOLDOWN", action: "HOLD", confidence: 0, retryAt: last + cooldownMs, configuredKeyCount: keys.length, model: String(env?.GEMINI_MODEL || "gemini-2.5-flash").trim() };
       return cooldown;
@@ -275,7 +309,7 @@ export async function reviewLeverUpPositionWithAI({ env, position, currentPriceR
   let lastError = "POSITION_AI_REVIEW_FAILED";
 
   // Primary: Cloudflare Workers AI. No external API key is required.
-  if (cloudflareAiRun) {
+  if (cloudflareAiRun && await reservePositionAiProviderBudget(storage, "CLOUDFLARE_WORKERS_AI", now)) {
     try {
       const response = await cloudflareAiRun(POSITION_AI_QWEN_MODEL, {
         messages,
@@ -296,7 +330,7 @@ export async function reviewLeverUpPositionWithAI({ env, position, currentPriceR
   }
 
   // Secondary: Groq-hosted Qwen. This activates only after GROQ_API_KEY is set.
-  if (groqKey) {
+  if (groqKey && await reservePositionAiProviderBudget(storage, "GROQ", now)) {
     try {
       const groqModel = String(env?.GROQ_POSITION_AI_MODEL || POSITION_AI_GROQ_MODEL_DEFAULT).trim();
       const response = await fetchImpl("https://api.groq.com/openai/v1/chat/completions", {
