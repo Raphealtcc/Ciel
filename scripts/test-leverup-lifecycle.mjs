@@ -188,6 +188,13 @@ assert.equal(finalTarget.action, "HOLD", "crossing a suggested target must not c
 const stopped = evaluateLeverUpPositionAction({ position, currentPriceRaw: "98000000000000000000", now: Date.now() });
 assert.equal(stopped.action, "MARKET_CLOSE");
 assert.equal(stopped.reason, "STOP_LOSS_TRIGGERED");
+const profitLockedStop = evaluateLeverUpPositionAction({
+  position: { ...position, stopLossRaw: "100500000000000000000" },
+  currentPriceRaw: "100400000000000000000", now: Date.now(),
+});
+assert.equal(profitLockedStop.action, "MARKET_CLOSE");
+assert.equal(profitLockedStop.reason, "PROFIT_LOCKED_TRAILING_STOP",
+  "a ratcheted stop beyond entry must be reported as a profitable trailing exit");
 const stopDuringMinimumHold = evaluateLeverUpPositionAction({
   position: { ...position, earliestCloseTime: String(Math.floor(Date.now()/1000)+300) },
   currentPriceRaw: "98000000000000000000", now: Date.now(),

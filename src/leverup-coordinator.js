@@ -756,10 +756,12 @@ export function evaluateLeverUpPositionAction({ position, currentPriceRaw, now =
   const nowSeconds = BigInt(Math.floor(now / 1000));
   const isLong = Boolean(position.isLong);
   const stopHit = stop > 0n && (isLong ? price <= stop : price >= stop);
+  const entry = BigInt(position.entryPriceRaw || 0);
+  const profitLockedStop = entry > 0n && (isLong ? stop >= entry : stop <= entry);
   const expired = Number.isFinite(Number(maxHoldMinutes)) && Number(maxHoldMinutes) > 0 &&
     now >= Number(position.timestamp || 0) * 1000 + Number(maxHoldMinutes) * 60_000;
-  // Protective stop always outranks the venue's ordinary minimum-hold timer.
-  if (stopHit) return { action: "MARKET_CLOSE", reason: "STOP_LOSS_TRIGGERED" };
+  // Protective stops always outrank the venue minimum-hold timer. A stop beyond entry is a profitable trail, not a loss.
+  if (stopHit) return { action: "MARKET_CLOSE", reason: profitLockedStop ? "PROFIT_LOCKED_TRAILING_STOP" : "STOP_LOSS_TRIGGERED" };
   if (earliest > nowSeconds) return { action: "WAIT", reason: "MINIMUM_HOLD_NOT_REACHED" };
   if (expired) return { action: "HOLD", reason: "MAX_HOLD_TIME_REACHED_REVIEW_REQUIRED", maxHoldReached: true };
   return { action: "HOLD", reason: "NO_EXIT_TRIGGER" };
@@ -767,7 +769,7 @@ export function evaluateLeverUpPositionAction({ position, currentPriceRaw, now =
 
 export function selectLeverUpPositionAction({ fixedAction = { action: "HOLD" }, adaptive = { action: "HOLD" }, protectionRepair = null, aiReview = null, aiCloseMinConfidence = 80 } = {}) {
   // Exchange hard stops and already-requested partial closes stay highest priority.
-  if (fixedAction.reason === "STOP_LOSS_TRIGGERED" || fixedAction.action === "PARTIAL_CLOSE") return fixedAction;
+  if (fixedAction.reason === "STOP_LOSS_TRIGGERED" || fixedAction.reason === "PROFIT_LOCKED_TRAILING_STOP" || fixedAction.action === "PARTIAL_CLOSE") return fixedAction;
   if (protectionRepair?.action === "MARKET_CLOSE") return protectionRepair;
   if (adaptive?.action === "MARKET_CLOSE") {
     return {
