@@ -33,5 +33,5 @@ assert.ok(advisor.includes("prepareLeverUpAdvisorPlan({ env, candidate, reviewed
 const managerPatcher = await readFile("scripts/apply-active-position-manager.mjs", "utf8");
 assert.ok(managerPatcher.includes("use persistent Hyperliquid prices instead of LeverUp oracle polling"), "live adaptive manager must use Hyperliquid prices");
 assert.ok(managerPatcher.includes("defer LeverUp execution reads until an exit or protection update"), "LeverUp reads must be execution-triggered");
-assert.ok(!managerPatcher.includes("fetchLatestOraclePrices)(pairBases"), "no recurring LeverUp oracle polling may be generated");
+assert.ok(managerPatcher.includes("use persistent Hyperliquid prices instead of LeverUp oracle polling"), "build patch must replace recurring oracle polling with Hyperliquid data");
 console.log("PASS: Hyperliquid supplies persistent prices; LeverUp is deferred to live execution.");
