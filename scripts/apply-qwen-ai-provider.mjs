@@ -56,11 +56,15 @@ const insertion = [
 '  if (!keys.length) return wait("Qwen and Groq were unavailable and no Gemini fallback key is configured.", "AI_PROVIDERS_FAILED");',
 '  let transientAttempts = 0;'
 ].join("\n");
-once(
-  "  let transientAttempts = 0;",
-  insertion,
-  "attempt Qwen then Groq before Gemini entry review and Gemini cooldown fallback"
-);
+const promptSentinel = "You are Ciel's conservative crypto-perpetual setup reviewer.";
+const promptContentAt = source.indexOf(promptSentinel);
+const promptEnd = source.indexOf('].join("\\n");', promptContentAt);
+if (promptContentAt < 0 || promptEnd < promptContentAt) {
+  throw new Error("Could not locate the end of the Gemini review prompt for Qwen insertion");
+}
+const insertionPoint = promptEnd + '].join("\\n");'.length;
+source = source.slice(0, insertionPoint) + "\\n" + insertion + source.slice(insertionPoint);
+console.log("Applied Qwen/Groq entry-review integration: provider review inserted before Gemini key attempts.");
 
 await writeFile(file, source);
 console.log("Qwen/Groq entry-review provider chain applied to the reconstructed Worker.");
