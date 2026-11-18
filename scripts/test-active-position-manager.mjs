@@ -70,9 +70,7 @@ assert.equal(correctEntry.queue[0].status, "COMPLETED");
 assert.equal(normalizePositionReversalQueue([{ ...queue[0], expiresAt: 1 }], 2).length, 0);
 
 assert.equal(selectLeverUpPositionAction({ fixedAction: { action: "HOLD" }, adaptive: { action: "HOLD" }, aiReview: { status: "REVIEWED", action: "CLOSE", confidence: 99 } }).action, "HOLD", "AI must not independently force an early close");
-assert.ok(coordinator.includes('const expectedTarget = 0n;'),"live manager clears fixed take profits");
-assert.ok(coordinator.includes('const expectedStop = actualStop > 0n ? actualStop'),"live manager must preserve an already-trailed exchange stop");
-assert.ok(coordinator.includes('const partials = [];'),"live manager disables automatic partial take profits");
+
 
 const minorPullback = evaluateAdaptiveMarketPosition({ side: "LONG", entryPrice: 100, currentPrice: 104.2, stopPrice: 96, targetPrice: 110, state: { history: samples([100,101,102,103,104,104.4,104.1,104.3]), highWaterPrice: 104.4, peakFavourablePct: 4.4 }, now: 481_000 });
 assert.notEqual(minorPullback.action, "CLOSE", "ordinary pullback must not trigger an early close");
@@ -80,6 +78,11 @@ const sustainedReversal = evaluateAdaptiveMarketPosition({ side: "LONG", entryPr
 assert.equal(sustainedReversal.action, "CLOSE", "sustained reversal should still close");
 const worker = await readFile("reconstructed/patched-worker.js", "utf8");
 const coordinator = await readFile("src/leverup-coordinator.js", "utf8");
+assert.ok(coordinator.includes('const expectedTarget = 0n;'),"live manager clears fixed take profits");
+assert.ok(coordinator.includes('const expectedStop = actualStop > 0n ? actualStop'),"live manager must preserve an already-trailed exchange stop");
+assert.ok(coordinator.includes('const partials = [];'),"live manager disables automatic partial take profits");
+assert.equal(selectLeverUpPositionAction({fixedAction:{action:"MARKET_CLOSE",reason:"PROFIT_LOCKED_TRAILING_STOP"},adaptive:{action:"HOLD"}}).reason,
+  "PROFIT_LOCKED_TRAILING_STOP","a profit-locked exchange stop must outrank discretionary hold logic");
 assert.equal(typeof runLeverUpPositionManager, "function", "live position manager must be exported to the Worker entrypoint");
 assert.ok(worker.includes('import { runLeverUpPositionManager } from "../src/leverup-coordinator.js";'), "Worker must import the source-module live manager");
 assert.ok(worker.includes("runLeverUpPositionManager({ env, db: env.DB, now, dependencies: { hyperliquidMarketData: marketSnapshot } })"), "scheduled manager must receive the fresh Hyperliquid snapshot");
