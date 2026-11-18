@@ -796,14 +796,7 @@ export function selectLeverUpPositionAction({ fixedAction = { action: "HOLD" }, 
   if (adaptive?.action === "UPDATE_TP_SL") return adaptive;
   if (protectionRepair) return protectionRepair;
   const confidence = Math.max(0, Math.min(100, Number(aiReview?.confidence) || 0));
-  if (aiReview?.status === "REVIEWED" && aiReview?.action === "REVERSE" &&
-      aiReview?.reversalConfirmed === true && confidence >= aiCloseMinConfidence) {
-    return { action: "MARKET_CLOSE", reason: "AI_POSITION_REVERSAL_CONFIRMED", aiReview,
-      reverseConfirmed: true, reverseSide: null };
-  }
-  if (aiReview?.status === "REVIEWED" && aiReview?.action === "CLOSE" && confidence >= aiCloseMinConfidence) {
-    return { action: "MARKET_CLOSE", reason: "GEMINI_POSITION_CLOSE_CONFIRMED", aiReview, reverseConfirmed: false };
-  }
+  // AI is advisory only; it cannot independently trigger a market close.
   if (fixedAction.action === "WAIT") return fixedAction;
   return fixedAction;
 }
@@ -1268,6 +1261,20 @@ async function notifyLeverUpReversal(env, message) {
   });
   if (!response.ok) throw new Error("TELEGRAM_REVERSAL_NOTICE_HTTP_" + response.status);
 }
+export function hyperliquidPriceRawForPosition(position, markets) {
+  const normalize = (value) => String(value || "").toUpperCase().replace(/[^A-Z0-9]/g, "").replace(/(USDT|USDC|USD|PERP)$/g, "");
+  const candidates = [position?.symbol, position?.pairSymbol, position?.purgeSymbol].map(normalize).filter(Boolean);
+  for (const candidate of candidates) {
+    const row = (Array.isArray(markets) ? markets : []).find((market) => normalize(market?.symbol || market?.coin || market?.name) === candidate);
+    const price = Number(row?.price ?? row?.mid ?? row?.markPrice);
+    if (!(Number.isFinite(price) && price > 0 && price < 1e21)) continue;
+    const fixed = price.toFixed(18);
+    const [whole, fraction = ""] = fixed.split(".");
+    const raw = BigInt(whole) * 10n ** 18n + BigInt(fraction.padEnd(18, "0").slice(0, 18));
+    if (raw > 0n) return raw.toString();
+  }
+  return null;
+}
 async function runLeverUpPositionManager({ env, db, now = Date.now(), dependencies = {} }) {
   const liveOverride = env?.CIEL_STATE && typeof env.CIEL_STATE.get === "function"
     ? await env.CIEL_STATE.get("ciel:control:live-enabled")
@@ -1295,20 +1302,17 @@ async function runLeverUpPositionManager({ env, db, now = Date.now(), dependenci
       .catch((error) => ({ error: String(error?.message || error).slice(0, 200) }));
     return { status: liveEnabled(env) ? "LIVE_MONITORING" : "READ_ONLY_MONITORING", checked: 0, submitted: 0, reconciliation, settlements, discovery: "NO_KNOWN_PAIR_BASES" };
   }
-  const [prices, antiDdos, auth] = await Promise.all([
-    (dependencies.fetchPrices || fetchLatestOraclePrices)(pairBases, { fetchImpl }),
-    (dependencies.fetchAntiDdos || fetchAntiDdosConfig)({ fetchImpl }),
-    (dependencies.readAuthorization || readAgentAuthorization)(traderAddress, agentAddress, { publicClient: client }),
-  ]);
-  const [positionsByPair, pairViews] = await Promise.all([
-    Promise.all(pairBases.map(async (base) => [base, await (dependencies.readPositions || readPositionsV4)(traderAddress, base, { publicClient: client })])),
-    Promise.all(pairBases.map(async (base) => [base, await (dependencies.readPair || readPairByBaseV4)(base, { publicClient: client })])),
-  ]);
-  const pairMap = new Map(pairViews);
+  const marketData = dependencies.hyperliquidMarketData || {};
+  const marketAgeMs = now - Number(marketData.lastTickAt || 0);
+  if (!Array.isArray(marketData.markets) || !Number.isFinite(marketAgeMs) || marketAgeMs < 0 || marketAgeMs > 180_000) {
+    return { status: "BLOCKED_HYPERLIQUID_MARKET_DATA_STALE", checked: 0, submitted: 0, reconciliation, marketAgeMs };
+  }
+  const positionsByPair = await Promise.all(pairBases.map(async (base) =>
+    [base, await (dependencies.readPositions || readPositionsV4)(traderAddress, base, { publicClient: client })]));
   const positionMap = new Map();
   for (const [base, rows] of positionsByPair) for (const row of rows || []) {
     const position = normalizePositionAccrual(row);
-    const symbol = resolveLeverUpPositionSymbol({ position: { ...position, pairBase: base }, apiPositions, entries, pairView: pairMap.get(base) });
+    const symbol = resolveLeverUpPositionSymbol({ position: { ...position, pairBase: base }, apiPositions, entries });
     positionMap.set(position.positionHash.toLowerCase(), { ...position, pairBase: base, ...(symbol ? { symbol, pairSymbol: symbol, purgeSymbol: symbol } : {}) });
   }
   // If the indexer has not published the opened position yet, associate only a unique
@@ -1351,16 +1355,12 @@ async function runLeverUpPositionManager({ env, db, now = Date.now(), dependenci
       await env.CIEL_STATE.put(CIEL_POSITION_REVERSAL_QUEUE_KEY, JSON.stringify(advanced.queue), { expirationTtl: 6 * 3600 }).catch(() => void 0);
     }
   }
-  const feeTokens = (antiDdos.config || []).filter((x) => x.enabled && x.feeToken).map((x) => x.feeToken);
-  const balances = await (dependencies.readBalances || readTokenBalancesAndAllowances)(traderAddress, feeTokens, { publicClient: client });
-  let submitted = 0, snapshots = 0, evaluated = 0, adaptiveUpdatesBlocked = 0, closePermissionBlocked = 0, aiReviewed = 0, aiCloseSignals = 0, positionsMissingPairView = 0, positionsMissingOraclePrice = 0, geminiConfiguredKeyCount = getGeminiApiKeys(env).length;
+  let submitted = 0, snapshots = 0, evaluated = 0, adaptiveUpdatesBlocked = 0, closePermissionBlocked = 0, aiReviewed = 0, aiCloseSignals = 0, positionsMissingPairView = 0, positionsMissingOraclePrice = 0, canMarketClose = null, canUpdateTpSl = null, geminiConfiguredKeyCount = getGeminiApiKeys(env).length;
   const aiReviewStatusCounts = {};
   const aiReviewFailures = [];
   for (const [hash, position] of positionMap) {
     evaluated++;
-    const pairView = pairMap.get(position.pairBase);
-    if (!pairView) { positionsMissingPairView++; continue; }
-    const latestPrice = prices[position.pairBase];
+    const latestPrice = hyperliquidPriceRawForPosition(position, marketData.markets);
     if (!latestPrice) { positionsMissingOraclePrice++; continue; }
     const saved = entries.filter((x) => String(x.positionHash || "").toLowerCase() === hash)
       .sort((a,b) => Number(b.executedAt || b.createdAt || 0) - Number(a.executedAt || a.createdAt || 0))[0] || null;
@@ -1385,7 +1385,7 @@ async function runLeverUpPositionManager({ env, db, now = Date.now(), dependenci
     if (fixedAction.action !== "PARTIAL_CLOSE" && fixedAction.reason !== "STOP_LOSS_TRIGGERED") {
       const adaptiveKey = "ciel:leverup:adaptive-exit:v3:" + tradeId;
       try { adaptiveState = await env?.CIEL_STATE?.get(adaptiveKey, "json"); } catch {}
-      adaptive = evaluateAdaptiveLeverUpExit({ position, currentPriceRaw: latestPrice, state: adaptiveState || {}, pairView, now });
+      adaptive = evaluateAdaptiveLeverUpExit({ position, currentPriceRaw: latestPrice, state: adaptiveState || {}, now });
       if (adaptive?.state && env?.CIEL_STATE?.put) {
         await env.CIEL_STATE.put(adaptiveKey, JSON.stringify(adaptive.state), { expirationTtl: 7 * 24 * 3600 }).catch(() => void 0);
       }
@@ -1449,9 +1449,18 @@ async function runLeverUpPositionManager({ env, db, now = Date.now(), dependenci
       if (stored?.stored) snapshots++;
     }
     if (!liveEnabled(env) || action.action === "HOLD" || action.action === "WAIT") continue;
+    const [auth, antiDdos, pairView] = await Promise.all([
+      (dependencies.readAuthorization || readAgentAuthorization)(traderAddress, agentAddress, { publicClient: client }),
+      (dependencies.fetchAntiDdos || fetchAntiDdosConfig)({ fetchImpl }),
+      (dependencies.readPair || readPairByBaseV4)(position.pairBase, { publicClient: client }),
+    ]);
+    canMarketClose = Boolean(auth.canMarketClose); canUpdateTpSl = Boolean(auth.canUpdateTpSl);
     if (action.action === "MARKET_CLOSE" && !auth.canMarketClose) { closePermissionBlocked++; continue; }
     if (action.action === "PARTIAL_CLOSE" && !auth.canPartialClose) { closePermissionBlocked++; continue; }
     if (action.action === "UPDATE_TP_SL" && !auth.canUpdateTpSl) { adaptiveUpdatesBlocked++; continue; }
+    if (!pairView?.slippageConfig) { positionsMissingPairView++; continue; }
+    const feeTokens = (antiDdos.config || []).filter((x) => x.enabled && x.feeToken).map((x) => x.feeToken);
+    const balances = await (dependencies.readBalances || readTokenBalancesAndAllowances)(traderAddress, feeTokens, { publicClient: client });
     const oneClickAction = action.action === "PARTIAL_CLOSE" ? OneClickAction.PARTIAL_CLOSE
       : action.action === "UPDATE_TP_SL" ? OneClickAction.UPDATE_TP_SL : OneClickAction.MARKET_CLOSE;
     const slippage = BigInt(position.isLong ? pairView.slippageConfig.slippageLongP : pairView.slippageConfig.slippageShortP);
@@ -1497,5 +1506,5 @@ async function runLeverUpPositionManager({ env, db, now = Date.now(), dependenci
   }
   const settlements = await reconcileClosedSettlements({ env, db, now, dependencies })
     .catch((error) => ({ error: String(error?.message || error).slice(0, 200) }));
-  return { status: liveEnabled(env) ? "LIVE_MONITORING" : "READ_ONLY_MONITORING", checked: evaluated, submitted, snapshots, adaptiveUpdatesBlocked, closePermissionBlocked, aiReviewed, aiCloseSignals, aiReviewStatusCounts, aiReviewFailures, geminiConfiguredKeyCount, positionsMissingPairView, positionsMissingOraclePrice, canMarketClose: Boolean(auth.canMarketClose), canUpdateTpSl: Boolean(auth.canUpdateTpSl), openPositionCount: positionMap.size, positions: [...positionMap.values()].map((position) => ({ symbol: position.symbol || position.pairSymbol || position.purgeSymbol || null, side: position.isLong ? "LONG" : "SHORT", positionHash: position.positionHash, pairBase: position.pairBase })), pairBasesChecked: pairBases.length, reconciliation, settlements };
+  return { status: liveEnabled(env) ? "LIVE_MONITORING" : "READ_ONLY_MONITORING", checked: evaluated, submitted, snapshots, adaptiveUpdatesBlocked, closePermissionBlocked, aiReviewed, aiCloseSignals, aiReviewStatusCounts, aiReviewFailures, geminiConfiguredKeyCount, positionsMissingPairView, positionsMissingOraclePrice, canMarketClose, canUpdateTpSl, openPositionCount: positionMap.size, positions: [...positionMap.values()].map((position) => ({ symbol: position.symbol || position.pairSymbol || position.purgeSymbol || null, side: position.isLong ? "LONG" : "SHORT", positionHash: position.positionHash, pairBase: position.pairBase })), pairBasesChecked: pairBases.length, reconciliation, settlements };
 }

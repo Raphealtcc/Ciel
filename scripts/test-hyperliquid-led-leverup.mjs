@@ -16,6 +16,7 @@ assert.ok(!scheduled.includes("runLeverUpDiagnostics("), "periodic LeverUp diagn
 assert.ok(!scheduled.includes("fetchLeverUpPairs("), "scheduled path must not fetch LeverUp pair catalogue");
 assert.ok(!scheduled.includes("const active = await env.DB.prepare"), "position manager must not be gated by CIEL entry-ledger records");
 assert.ok(scheduled.includes("runLeverUpPositionManager("), "position manager must run for real open positions");
+assert.ok(scheduled.includes("hyperliquidMarketData: marketSnapshot"), "live manager must consume persistent Hyperliquid snapshot");
 assert.ok(scheduled.includes("Run the live position manager every scheduled minute"), "position manager must be scheduled every minute even without an entry ledger row");
 assert.ok(scheduled.includes("status: \"STARTED\""), "position manager must persist a start marker before live monitoring");
 assert.ok(scheduled.includes("position-manager:last-error"), "position manager failures must be persisted for diagnosis");
@@ -29,4 +30,8 @@ const leverUpAdvisor = await readFile("src/leverup-advisor.js", "utf8");
 assert.ok(leverUpAdvisor.includes('reviewed?.verdict !== "APPROVE" || technicalOnly'), "LeverUp preflight helper must require a fully approved non-technical-only candidate");
 assert.ok(advisor.includes("prepareLeverUpAdvisorPlan({ env, candidate, reviewed"), "candidate preflight call must remain in advisor pipeline");
 
-console.log("PASS: Hyperliquid leads signal discovery; LeverUp is not polled for candidates, while the live position manager runs every minute independently of the entry ledger.");
+const managerPatcher = await readFile("scripts/apply-active-position-manager.mjs", "utf8");
+assert.ok(managerPatcher.includes("use persistent Hyperliquid prices instead of LeverUp oracle polling"), "live adaptive manager must use Hyperliquid prices");
+assert.ok(managerPatcher.includes("defer LeverUp execution reads until an exit or protection update"), "LeverUp reads must be execution-triggered");
+assert.ok(!managerPatcher.includes("fetchLatestOraclePrices)(pairBases"), "no recurring LeverUp oracle polling may be generated");
+console.log("PASS: Hyperliquid supplies persistent prices; LeverUp is deferred to live execution.");

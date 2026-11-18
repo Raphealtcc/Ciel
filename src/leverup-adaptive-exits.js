@@ -10,14 +10,10 @@ const adaptiveLeverUpPriceToRaw = (value) => {
   return BigInt(Math.max(1, Math.round(price * 1e18))).toString();
 };
 
-export function evaluateAdaptiveLeverUpExit({ position, currentPriceRaw, state = {}, pairView = {}, now = Date.now(), sampleLimit = 24 }) {
+export function evaluateAdaptiveLeverUpExit({ position, currentPriceRaw, state = {}, now = Date.now(), sampleLimit = 24 }) {
   if (!position?.positionHash || !position?.entryPriceRaw || !currentPriceRaw) {
     return { action: "HOLD", reason: "ADAPTIVE_INPUT_INCOMPLETE", state };
   }
-  const depthAbove = Number(pairView?.slippageConfig?.onePercentDepthAboveUsdRaw || 0);
-  const depthBelow = Number(pairView?.slippageConfig?.onePercentDepthBelowUsdRaw || 0);
-  const shallowSide = position.isLong ? depthBelow : depthAbove;
-  const deepSide = position.isLong ? depthAbove : depthBelow;
   const result = evaluateAdaptiveMarketPosition({
     side: position.isLong ? "LONG" : "SHORT",
     entryPrice: adaptiveLeverUpRawToPrice(position.entryPriceRaw),
@@ -25,7 +21,7 @@ export function evaluateAdaptiveLeverUpExit({ position, currentPriceRaw, state =
     stopPrice: adaptiveLeverUpRawToPrice(position.stopLossRaw),
     targetPrice: adaptiveLeverUpRawToPrice(position.takeProfitRaw),
     state, now,
-    liquidityImbalance: shallowSide > 0 && deepSide > 0 && shallowSide / deepSide < 0.35,
+    liquidityImbalance: false,
     sampleLimit: Math.max(8, Math.min(24, Number(sampleLimit) || 24)),
   });
   const shared = {

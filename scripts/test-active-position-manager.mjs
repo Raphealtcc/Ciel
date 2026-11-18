@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { evaluateAdaptiveMarketPosition } from "../src/adaptive-market-position.js";
+import { hyperliquidPriceRawForPosition } from "../src/leverup-coordinator.js";
 import {
   normalizePositionReversalQueue,
   reconcilePositionReversalQueue,
@@ -8,6 +9,9 @@ import {
 } from "../src/position-reversal-queue.js";
 
 const samples = (prices, start = 1_000) => prices.map((price, i) => ({ at: start + i * 60_000, price }));
+assert.equal(hyperliquidPriceRawForPosition({ symbol: "BTC" }, [{ symbol: "BTC", price: 65000 }]), "65000000000000000000000");
+assert.equal(hyperliquidPriceRawForPosition({ symbol: "ETH-USD" }, [{ coin: "ETH", mid: "3000.5" }]), "3000500000000000000000");
+assert.equal(hyperliquidPriceRawForPosition({ symbol: "UNKNOWN" }, [{ symbol: "BTC", price: 65000 }]), null);
 const extension = evaluateAdaptiveMarketPosition({
   side: "LONG", entryPrice: 100, currentPrice: 103.1, stopPrice: 98.8, targetPrice: 103,
   state: { history: samples([100, 100.2, 100.4, 100.7, 101, 101.4, 101.8, 102.2, 102.7, 103]), highWaterPrice: 103 },
@@ -64,4 +68,8 @@ const correctEntry = reconcilePositionReversalQueue(submitted.queue, [{ symbol: 
 assert.equal(correctEntry.queue[0].status, "COMPLETED");
 assert.equal(normalizePositionReversalQueue([{ ...queue[0], expiresAt: 1 }], 2).length, 0);
 
-console.log("PASS: trend extension, hard stops, adaptive reversal, early adverse cuts and verified reversal queue");
+const minorPullback = evaluateAdaptiveMarketPosition({ side: "LONG", entryPrice: 100, currentPrice: 104.2, stopPrice: 96, targetPrice: 110, state: { history: samples([100,101,102,103,104,104.4,104.1,104.3]), highWaterPrice: 104.4, peakFavourablePct: 4.4 }, now: 481_000 });
+assert.notEqual(minorPullback.action, "CLOSE", "ordinary pullback must not trigger an early close");
+const sustainedReversal = evaluateAdaptiveMarketPosition({ side: "LONG", entryPrice: 100, currentPrice: 103, stopPrice: 96, targetPrice: 110, state: { history: samples([110,109,108,107,106,105,104.5,104,103.8,103.5,103.2]), highWaterPrice: 110, peakFavourablePct: 10 }, now: 661_000 });
+assert.equal(sustainedReversal.action, "CLOSE", "sustained reversal should still close");
+console.log("PASS: patient exits, sustained reversals, hard stops and reversal queue");

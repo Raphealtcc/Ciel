@@ -74,19 +74,32 @@ export function evaluateAdaptiveMarketPosition({
     }
   }
 
-  const profitArmPct = targetDistancePct > 0 ? Math.max(targetDistancePct * 0.30, atrProxyPct * 1.8) : Math.max(0.12, atrProxyPct * 2.5);
-  const profitReversal = history.length >= 7 && peakFavourablePct >= profitArmPct &&
-    givebackPct >= Math.max(0.04, peakFavourablePct * 0.32) && adverseTrend &&
-    (adverseMomentum || structureAgainst) && closeScore >= 2;
+  const adverseStreak = (() => {
+    let count = 0;
+    for (let i = recent.length - 1; i > 0; i--) {
+      if (direction * (recent[i] - recent[i - 1]) < 0) count++;
+      else break;
+    }
+    return count;
+  })();
+  nextState.adverseStreak = adverseStreak;
+  nextState.metrics.adverseStreak = adverseStreak;
+  const profitArmPct = targetDistancePct > 0
+    ? Math.max(targetDistancePct * 0.45, atrProxyPct * 3.5, 0.20)
+    : Math.max(0.30, atrProxyPct * 4.0);
+  const profitReversal = history.length >= 10 && peakFavourablePct >= profitArmPct &&
+    givebackPct >= Math.max(0.20, peakFavourablePct * 0.45, atrProxyPct * 2.5) &&
+    adverseTrend && adverseMomentum && priceAgainstMean && structureAgainst &&
+    closeScore >= 4 && adverseStreak >= 3;
   if (profitReversal) {
-    const reverseConfirmed = adverseTrend && adverseMomentum && priceAgainstMean && structureAgainst && history.length >= 8;
+    const reverseConfirmed = adverseTrend && adverseMomentum && priceAgainstMean && structureAgainst && history.length >= 12 && adverseStreak >= 4;
     return { action: "CLOSE", reason: "ADAPTIVE_PROFIT_REVERSAL", reverseConfirmed, ...nextState.metrics, state: nextState };
   }
-
-  const lossCut = stopDistancePct > 0 && history.length >= 6 && closeScore >= 3 &&
-    adverseMovePct >= stopDistancePct * 0.40 && adverseTrend && adverseMomentum;
+  const lossCut = stopDistancePct > 0 && history.length >= 12 && closeScore >= 4 &&
+    adverseMovePct >= Math.max(stopDistancePct * 0.65, atrProxyPct * 4.0, 0.25) &&
+    adverseTrend && adverseMomentum && priceAgainstMean && structureAgainst && adverseStreak >= 4;
   if (lossCut) {
-    const reverseConfirmed = priceAgainstMean && structureAgainst && history.length >= 8;
+    const reverseConfirmed = priceAgainstMean && structureAgainst && history.length >= 14 && adverseStreak >= 5;
     return { action: "CLOSE", reason: "ADAPTIVE_ADVERSE_CUT", reverseConfirmed, ...nextState.metrics, stopDistancePct, state: nextState };
   }
 
@@ -94,9 +107,9 @@ export function evaluateAdaptiveMarketPosition({
   if (targetHit) return { action: "CLOSE", reason: "TAKE_PROFIT_TRIGGERED", reverseConfirmed: false, ...nextState.metrics, state: nextState };
 
   let proposedStop = stop;
-  const trailingArmed = peakFavourablePct >= Math.max(stopDistancePct * 0.35, atrProxyPct * 2);
+  const trailingArmed = peakFavourablePct >= Math.max(stopDistancePct * 0.50, atrProxyPct * 3.5);
   if (trailingArmed && atrProxyPct > 0) {
-    const trailDistancePct = clamp(atrProxyPct * 2.4, 0.035, Math.max(0.08, stopDistancePct * 0.85));
+    const trailDistancePct = clamp(atrProxyPct * 3.2, 0.12, Math.max(0.18, stopDistancePct * 0.90));
     const candidateStop = direction === 1 ? highWaterPrice * (1 - trailDistancePct / 100) : lowWaterPrice * (1 + trailDistancePct / 100);
     const tightens = stop <= 0 || (direction === 1 ? candidateStop > stop && candidateStop < price : candidateStop < stop && candidateStop > price);
     if (tightens) proposedStop = candidateStop;
