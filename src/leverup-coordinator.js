@@ -7,6 +7,7 @@ import {
 } from "./leverup-1ct.js";
 import { ensureLeverUpTokenAllowance } from "./leverup-approval.js";
 import { evaluateAdaptiveLeverUpExit } from "./leverup-adaptive-exits.js";
+import { CIEL_POSITION_REVERSAL_QUEUE_KEY, normalizePositionReversalQueue, reconcilePositionReversalQueue } from "./position-reversal-queue.js";
 import { getGeminiApiKeys, reviewLeverUpPositionWithAI } from "./leverup-position-ai.js";
 import {
   LEVERUP_TOKENS, createLeverUpPublicClient, fetchOpenPositions, fetchAllPositions, fetchLeverUpPairs,
@@ -1255,7 +1256,19 @@ export async function purgeLeverUpPositions({ env, db, symbol = null, now = Date
   };
 }
 
-export async function runLeverUpPositionManager({ env, db, now = Date.now(), dependencies = {} }) {
+export 
+async function notifyLeverUpReversal(env, message) {
+  const token = String(env?.TELEGRAM_BOT_TOKEN || "").trim();
+  const chatId = String(env?.TELEGRAM_CHAT_ID || "").trim();
+  if (!token || !chatId) return;
+  const response = await (env?.FETCH || fetch)("https://api.telegram.org/bot" + token + "/sendMessage", {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ chat_id: chatId, text: String(message).slice(0, 3500), disable_web_page_preview: true }),
+    signal: AbortSignal.timeout(8000),
+  });
+  if (!response.ok) throw new Error("TELEGRAM_REVERSAL_NOTICE_HTTP_" + response.status);
+}
+async function runLeverUpPositionManager({ env, db, now = Date.now(), dependencies = {} }) {
   const liveOverride = env?.CIEL_STATE && typeof env.CIEL_STATE.get === "function"
     ? await env.CIEL_STATE.get("ciel:control:live-enabled")
     : null;
@@ -1319,6 +1332,24 @@ export async function runLeverUpPositionManager({ env, db, now = Date.now(), dep
     await updateIntent(db, entry.signalId, "RECONCILED", {
       payload: { ...entry, closedAt: now, closeReconciledByOnchainPositionRead: true },
     });
+  }
+  if (env?.CIEL_STATE?.get && env?.CIEL_STATE?.put) {
+    let reversalQueue = await env.CIEL_STATE.get(CIEL_POSITION_REVERSAL_QUEUE_KEY, "json").catch(() => []);
+    if (typeof reversalQueue === "string") { try { reversalQueue = JSON.parse(reversalQueue); } catch { reversalQueue = []; } }
+    const positionsForQueue = [...positionMap.values()].map((position) => {
+      const entry = entries.find((item) => String(item.positionHash || "").toLowerCase() === String(position.positionHash || "").toLowerCase());
+      return { positionHash: position.positionHash, symbol: position.symbol || position.pairSymbol || position.purgeSymbol || "", side: position.isLong ? "LONG" : "SHORT", signalId: entry?.signalId || "" };
+    });
+    const advanced = reconcilePositionReversalQueue(reversalQueue, positionsForQueue, now);
+    if (advanced.changed) {
+      for (const item of advanced.queue) {
+        if (item.status === "CLOSE_CONFIRMED" && !item.closeNoticeSentAt) {
+          item.closeNoticeSentAt = now;
+          await notifyLeverUpReversal(env, "♻️ CIEL REVERSAL CLOSE CONFIRMED\\n" + item.symbol + " old position is no longer present on-chain. Watching for a fresh " + item.side + " setup; normal CIEL and portfolio checks still apply.").catch(() => void 0);
+        }
+      }
+      await env.CIEL_STATE.put(CIEL_POSITION_REVERSAL_QUEUE_KEY, JSON.stringify(advanced.queue), { expirationTtl: 6 * 3600 }).catch(() => void 0);
+    }
   }
   const feeTokens = (antiDdos.config || []).filter((x) => x.enabled && x.feeToken).map((x) => x.feeToken);
   const balances = await (dependencies.readBalances || readTokenBalancesAndAllowances)(traderAddress, feeTokens, { publicClient: client });
@@ -1446,7 +1477,23 @@ export async function runLeverUpPositionManager({ env, db, now = Date.now(), dep
         adaptiveMetrics: { action: adaptive.action, reason: adaptive.reason, samples: adaptive.samples ?? adaptive.state?.history?.length ?? null, atrProxyPct: adaptive.atrProxyPct ?? null, trendPct: adaptive.trendPct ?? null, momentumPct: adaptive.momentumPct ?? null, closeScore: adaptive.closeScore ?? null, favourablePct: adaptive.favourablePct ?? null, peakFavourablePct: adaptive.peakFavourablePct ?? null, givebackPct: adaptive.givebackPct ?? null, profitProtection: adaptive.state?.profitProtection || null } },
       now, dependencies,
     });
-    if (result.submitted) submitted++;
+    if (result.submitted) {
+      submitted++;
+      if (action.reverseConfirmed === true && action.reverseSide && (position.symbol || position.pairSymbol || position.purgeSymbol) && env?.CIEL_STATE?.get && env?.CIEL_STATE?.put) {
+        let reversalQueue = await env.CIEL_STATE.get(CIEL_POSITION_REVERSAL_QUEUE_KEY, "json").catch(() => []);
+        if (typeof reversalQueue === "string") { try { reversalQueue = JSON.parse(reversalQueue); } catch { reversalQueue = []; } }
+        reversalQueue = normalizePositionReversalQueue(reversalQueue, now);
+        const requestId = "live:" + String(position.positionHash).toLowerCase();
+        if (!reversalQueue.some((item) => item.id === requestId)) {
+          reversalQueue.push({ id: requestId, source: "LIVE", positionHash: String(position.positionHash).toLowerCase(), tradeId,
+            symbol: String(position.symbol || position.pairSymbol || position.purgeSymbol).toUpperCase(),
+            previousSide: position.isLong ? "LONG" : "SHORT", side: action.reverseSide,
+            reason: action.reason, status: "WAITING_CLOSE_CONFIRMATION", requestedAt: now, expiresAt: now + 2 * 3600_000, nextAttemptAt: now });
+          await env.CIEL_STATE.put(CIEL_POSITION_REVERSAL_QUEUE_KEY, JSON.stringify(reversalQueue), { expirationTtl: 6 * 3600 }).catch(() => void 0);
+          await notifyLeverUpReversal(env, "♻️ CIEL REVERSAL WATCH QUEUED\\n" + String(position.symbol || position.pairSymbol || position.purgeSymbol).toUpperCase() + " " + (position.isLong ? "LONG" : "SHORT") + " → " + action.reverseSide + "\\nThe close has been submitted. No opposite trade opens until closure is confirmed and a fresh CIEL setup passes normal checks.").catch(() => void 0);
+        }
+      }
+    }
   }
   const settlements = await reconcileClosedSettlements({ env, db, now, dependencies })
     .catch((error) => ({ error: String(error?.message || error).slice(0, 200) }));
