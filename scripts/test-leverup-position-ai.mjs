@@ -96,7 +96,7 @@ const numbered = await reviewLeverUpPositionWithGemini({
     fetchImpl: async (_url, options) => {
       numberedCalls++;
       assert.ok(["numbered-key-1", "numbered-key-2"].includes(options.headers["x-goog-api-key"]));
-      return { ok: true, json: async () => ({ candidates: [{ content: { parts: [{ text: JSON.stringify({ action: "HOLD", confidence: 70, reason: "Evidence mixed." }) }] } }] }) };
+      return { ok: true, json: async () => ({ candidates: [{ content: { parts: [{ text: JSON.stringify({ action: "HOLD", confidence: 70, reversalConfirmed: false, reason: "Evidence mixed." }) }] } }] }) };
     }
   }
 });
