@@ -50,9 +50,9 @@ once(
 
 
 once(
-  'const five = Array.isArray(coreTrendCandles?.[symbol]) ? coreTrendCandles[symbol].filter((row) => Number(row.close_ts_ms) <= now).slice(-60) : [];',
-  'const five = Array.isArray(coreTrendCandles?.[symbol]) ? coreTrendCandles[symbol].filter((row) => Number(row.close_ts_ms) <= now).slice(-288) : [];',
-  "pass the existing 24h cached 5m window to strategy candidates"
+  'const five = Array.isArray(coreTrendCandles?.[symbol]) ? coreTrendCandles[symbol].filter((row) => Number(row.close_ts_ms) <= now).slice(-300) : [];',
+  'const five = Array.isArray(coreTrendCandles?.[symbol]) ? coreTrendCandles[symbol].filter((row) => Number(row.close_ts_ms) <= now).slice(-300) : [];',
+  "pass the full 25h cached 5m window to strategy candidates"
 );
 
 once(
