@@ -1,6 +1,9 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
   // Production replacement Worker. The attached D1/KV resources remain isolated paper/staging datasets.
+  // Keep these trading-mode flags explicit: the deployed account is currently in safe mode.
+  // Durable Object classes are declared with `exports` (SQLite); do not add a parallel migrations array.
+  // Qwen/Groq usage budgeting reuses the existing AI binding and CIEL_STATE KV; no extra namespace or cron is needed.
   "name": "ciel2",
   "main": "reconstructed/patched-worker.js",
   "compatibility_date": "2026-09-08",
@@ -29,6 +32,9 @@
     "LEVERUP_TRADER_ADDRESS": "0xd422fc040ad9294d553150Cf5646Ab0B1729E443",
     "LEVERUP_AGENT_ADDRESS": "0x77DF3ae15b994131797905e59675da3544C90DFF",
     "LEVERUP_PREFLIGHT_ENABLED": "true",
+    "LEVERUP_LIVE_TRADING": "false",
+    "LEVERUP_KILL_SWITCH": "true",
+    "PAPER_TRADING_ENABLED": "false",
     "LEVERUP_PURGE_LIVE_ENABLED": "true",
     "LEVERUP_MIN_LEVERAGE": "50",
     "LEVERUP_TOTAL_ALLOCATION_MON": "200",
