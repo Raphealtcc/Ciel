@@ -348,8 +348,7 @@ export function formatLeverUpAdvisorLine(record) {
   }
   if (record.status === "PREFLIGHT_PASS_LIVE_ENABLED" || record.status === "PREFLIGHT_PASS_LIVE_DISABLED") {
     return "LeverUp: PREFLIGHT PASS · " + record.selectedLeverage + "x · " +
-      Number(record.marginMonUsed).toFixed(2) + " MON · $" + Number(record.notionalUsd).toFixed(2) +
-      " notional · " + (record.liveExecutionEnabled ? "LIVE" : "DRY RUN") + " · dynamic strategy exits; Telegram TP is guidance · emergency SL retained · fill unconfirmed";
+      (record.liveExecutionEnabled ? "LIVE" : "DRY RUN") + " · managed exits · TP guide · SL guard";
   }
   return "LeverUp: BLOCKED · " + String(record.reason || record.status || "preflight failed").slice(0, 100);
 }
