@@ -761,7 +761,6 @@ export function evaluateLeverUpPositionAction({ position, currentPriceRaw, now =
   // Protective stop always outranks the venue's ordinary minimum-hold timer.
   if (stopHit) return { action: "MARKET_CLOSE", reason: "STOP_LOSS_TRIGGERED" };
   if (earliest > nowSeconds) return { action: "WAIT", reason: "MINIMUM_HOLD_NOT_REACHED" };
-  if (targetHit) return { action: "MARKET_CLOSE", reason: "TAKE_PROFIT_TRIGGERED" };
   if (expired) return { action: "HOLD", reason: "MAX_HOLD_TIME_REACHED_REVIEW_REQUIRED", maxHoldReached: true };
   return { action: "HOLD", reason: "NO_EXIT_TRIGGER" };
 }

@@ -179,14 +179,12 @@ const partial = evaluateLeverUpPositionAction({
   position, currentPriceRaw: "100400000000000000000", now: Date.now(),
   partialTakeProfits: [{ targetPct: 0.3, closePct: 40 }],
 });
-assert.equal(partial.action, "PARTIAL_CLOSE");
-assert.equal(partial.qtyRaw, "400");
+assert.equal(partial.action, "HOLD", "partial take-profit suggestions must not close a position automatically");
 const finalTarget = evaluateLeverUpPositionAction({
   position, currentPriceRaw: "101000000000000000000", now: Date.now(),
   partialTakeProfits: [{ targetPct: 0.3, closePct: 40 }], completedPartialLevels: [0],
 });
-assert.equal(finalTarget.action, "MARKET_CLOSE");
-assert.equal(finalTarget.reason, "TAKE_PROFIT_TRIGGERED");
+assert.equal(finalTarget.action, "HOLD", "crossing a suggested target must not close a live position");
 const stopped = evaluateLeverUpPositionAction({ position, currentPriceRaw: "98000000000000000000", now: Date.now() });
 assert.equal(stopped.action, "MARKET_CLOSE");
 assert.equal(stopped.reason, "STOP_LOSS_TRIGGERED");
