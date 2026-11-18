@@ -48,7 +48,7 @@ worker = replaceOnce(worker, "async function managePaperTrades(",
   marker + "\n" + helperInline + "\n" + queueInline + "\n" + queueFunctions + "\nasync function managePaperTrades(",
   "inline shared adaptive evaluator and reversal queue for paper management; live manager remains source-module-owned");
 worker = replaceFunction(worker, "async function managePaperTrades(",
-  '__name(managePaperTrades, "managePaperTrades");', paperBody.replace(/\n__name\(managePaperTrades, "managePaperTrades"\);$/, ""),
+  "async function getPaperSummary(", paperBody.replace(/\n__name\(managePaperTrades, "managePaperTrades"\);$/, ""),
   "replace paper trade manager with adaptive position lifecycle");
 worker = replaceOnce(worker,
   'await managePaperTrades(this.state.storage, this.latest, now, this.lastTickAt, this.env);',
