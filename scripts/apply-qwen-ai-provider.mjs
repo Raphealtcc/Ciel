@@ -18,13 +18,21 @@ once(
   "allow Workers AI and Groq when Gemini keys are absent"
 );
 
-const cooldownBlockPattern = /  if \(Number\(cooldown\.untilMs\) > Date\.now\(\)\) \{\s*const seconds = Math\.max\(1, Math\.ceil\(\(Number\(cooldown\.untilMs\) - Date\.now\(\)\) \/ 1000\)\);\s*return \{[^\n]*\};\s*\}\s*/;
-const cooldownBlocks = [...source.matchAll(new RegExp(cooldownBlockPattern.source, "g"))];
-if (cooldownBlocks.length !== 1) throw new Error("Gemini cooldown block expected exactly once; found " + cooldownBlocks.length);
-source = source.replace(cooldownBlockPattern,
-  '  const geminiCooldownActive = Number(cooldown.untilMs) > Date.now();\n');
+const cooldownMessageAt = source.indexOf("Gemini cooldown after HTTP");
+if (cooldownMessageAt < 0) throw new Error("Gemini cooldown return message not found");
+const cooldownIfAt = Math.max(source.lastIndexOf("if (", cooldownMessageAt), source.lastIndexOf("if(", cooldownMessageAt));
+const cooldownBraceAt = source.indexOf("{", cooldownIfAt);
+if (cooldownIfAt < 0 || cooldownBraceAt < cooldownIfAt || cooldownBraceAt > cooldownMessageAt) {
+  throw new Error("Gemini cooldown condition boundary not found");
+}
+const cooldownLineStart = source.lastIndexOf("\n", cooldownIfAt) + 1;
+const cooldownIndent = source.slice(cooldownLineStart, cooldownIfAt);
+source = source.slice(0, cooldownLineStart) + cooldownIndent +
+  'if (Number(cooldown.untilMs) > Date.now() && !env?.AI?.run && !String(env?.GROQ_API_KEY || "").trim()) {' +
+  source.slice(cooldownBraceAt + 1);
 
 const insertion = [
+'  const geminiCooldownActive = Number(cooldown.untilMs) > Date.now();',
 '  const entryModelReview = await reviewEntrySignalWithAI({ env, prompt }).catch(() => null);',
 '  if (entryModelReview) {',
 '    return {',
