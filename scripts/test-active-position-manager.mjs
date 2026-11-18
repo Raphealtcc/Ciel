@@ -75,8 +75,8 @@ const sustainedReversal = evaluateAdaptiveMarketPosition({ side: "LONG", entryPr
 assert.equal(sustainedReversal.action, "CLOSE", "sustained reversal should still close");
 const worker = await readFile("reconstructed/patched-worker.js", "utf8");
 const managerStart = worker.indexOf("async function runLeverUpPositionManager(");
-const managerEnd = worker.indexOf("\\n}", managerStart);
-assert.ok(managerStart >= 0, "built Worker must contain the live position manager");
+const managerEnd = worker.indexOf('__name(runLeverUpPositionManager', managerStart);
+assert.ok(managerStart >= 0 && managerEnd > managerStart, "built Worker must contain the live position manager and its end marker");
 const managerSource = worker.slice(managerStart, managerEnd > managerStart ? managerEnd : undefined);
 assert.ok(managerSource.includes("hyperliquidPriceRawForPosition(position, marketData.markets)"), "live decisions must use Hyperliquid market prices");
 assert.ok(!managerSource.includes("fetchLatestOraclePrices"), "live manager must not poll LeverUp oracle prices");
