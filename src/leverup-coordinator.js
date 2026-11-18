@@ -1278,7 +1278,7 @@ export function hyperliquidPriceRawForPosition(position, markets) {
   }
   return null;
 }
-async function runLeverUpPositionManager({ env, db, now = Date.now(), dependencies = {} }) {
+export async function runLeverUpPositionManager({ env, db, now = Date.now(), dependencies = {} }) {
   const liveOverride = env?.CIEL_STATE && typeof env.CIEL_STATE.get === "function"
     ? await env.CIEL_STATE.get("ciel:control:live-enabled")
     : null;
