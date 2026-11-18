@@ -56,10 +56,9 @@ worker = replaceOnce(worker,
   "reuse current Hyperliquid order-book snapshots");
 
 const advisorStart = worker.indexOf("async function runAdvisorCycle(");
-const proposalAt = worker.indexOf("  const maxProposalsPerCycle = 3;", advisorStart);
 const loopAnchor = "  for (const candidate of candidates) {";
-const firstLoop = worker.indexOf(loopAnchor, proposalAt);
-if (advisorStart < 0 || proposalAt < 0 || firstLoop < 0) throw new Error("Advisor candidate-loop anchors missing");
+const firstLoop = worker.indexOf(loopAnchor, advisorStart);
+if (advisorStart < 0 || firstLoop < 0) throw new Error("Advisor candidate-loop anchor missing");
 const matchBlock = '  const activeReversalQueue = await readCielPositionReversalQueue(env, now);\n' +
   '  let reversalQueueChanged = false;\n' +
   '  for (const candidate of candidates) { const request = matchPositionReversalRequest(activeReversalQueue, candidate, now); if (request) { candidate.reversalRequestId = request.id; request.lastCandidateAt = now; request.nextAttemptAt = now + 300000; reversalQueueChanged = true; } }\n' +
