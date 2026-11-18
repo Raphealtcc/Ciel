@@ -18,12 +18,11 @@ once(
   "allow Workers AI and Groq when Gemini keys are absent"
 );
 
-const cooldownStart = source.indexOf('  if (Number(cooldown.untilMs) > Date.now()) {');
-const promptStart = source.indexOf('  const cursor = Number(await env.CIEL_STATE.get("ciel:gemini:key-cursor") || "0"), prompt = [', cooldownStart);
-if (cooldownStart < 0 || promptStart < cooldownStart) throw new Error("Gemini cooldown block boundaries missing");
-source = source.slice(0, cooldownStart) +
-  '  const geminiCooldownActive = Number(cooldown.untilMs) > Date.now();\n' +
-  source.slice(promptStart);
+const cooldownBlockPattern = /  if \(Number\(cooldown\.untilMs\) > Date\.now\(\)\) \{\s*const seconds = Math\.max\(1, Math\.ceil\(\(Number\(cooldown\.untilMs\) - Date\.now\(\)\) \/ 1000\)\);\s*return \{[^\n]*\};\s*\}\s*/;
+const cooldownBlocks = [...source.matchAll(new RegExp(cooldownBlockPattern.source, "g"))];
+if (cooldownBlocks.length !== 1) throw new Error("Gemini cooldown block expected exactly once; found " + cooldownBlocks.length);
+source = source.replace(cooldownBlockPattern,
+  '  const geminiCooldownActive = Number(cooldown.untilMs) > Date.now();\n');
 
 const insertion = [
 '  const entryModelReview = await reviewEntrySignalWithAI({ env, prompt }).catch(() => null);',
