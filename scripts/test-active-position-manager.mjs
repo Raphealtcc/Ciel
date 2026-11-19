@@ -93,4 +93,39 @@ const managerSource = coordinator.slice(managerStart);
 assert.ok(managerSource.includes("hyperliquidPriceRawForPosition(position, marketData.markets)"), "live decisions must use Hyperliquid market prices");
 assert.ok(!managerSource.includes("(dependencies.fetchPrices || fetchLatestOraclePrices)"), "live manager must not poll LeverUp oracle prices");
 assert.ok(managerSource.includes("(dependencies.readPair || readPairByBaseV4)(position.pairBase"), "LeverUp pair metadata may only be read at execution time");
+
+const trendRide = evaluateAdaptiveMarketPosition({
+  side: "LONG", entryPrice: 100, currentPrice: 101.4, stopPrice: 99.5, targetPrice: 110,
+  state: { history: samples([100,100.2,100.4,100.6,100.8,101,101.2,101.4]), highWaterPrice: 101.4 },
+  now: 481_000,
+});
+assert.equal(trendRide.action, "UPDATE_LEVELS");
+assert.ok((101.4 - trendRide.stopPrice) / 101.4 * 100 >= 0.27,
+  "healthy trends should receive a wider volatility-aware trail rather than the old tight 0.18% cap");
+
+const targetReachedAfterReversal = evaluateAdaptiveMarketPosition({
+  side: "LONG", entryPrice: 100, currentPrice: 103.1, stopPrice: 98, targetPrice: 103,
+  state: { history: samples([104,103.9,103.7,103.5,103.3,103.2,103.1,103.05,103.0,102.95]), highWaterPrice: 104, lowWaterPrice: 100 },
+  now: 601_000,
+});
+assert.equal(targetReachedAfterReversal.action, "CLOSE");
+assert.equal(targetReachedAfterReversal.reason, "TAKE_PROFIT_TRIGGERED",
+  "the range target should close when price reaches it after momentum has rolled over");
+
+const excursion = evaluateAdaptiveMarketPosition({
+  side: "LONG", entryPrice: 100, currentPrice: 102, stopPrice: 97, targetPrice: 110,
+  state: { history: samples([100,101,102]), highWaterPrice: 104, lowWaterPrice: 98.5 },
+  now: 181_000,
+});
+assert.equal(excursion.peakFavourablePct, 4);
+assert.equal(excursion.maxAdversePct, 1.5, "manager should retain maximum adverse excursion for future exit analysis");
+
+const paperPatch = await readFile("scripts/apply-active-position-manager.mjs", "utf8");
+assert.ok(paperPatch.includes("targetPrice:Number(t.targetPrice)||0"),
+  "paper manager must pass the actual range/strategy target into the adaptive evaluator");
+assert.ok(paperPatch.includes("t.bestFavorableMovePct=Math.max"),
+  "paper manager must persist best favourable excursion");
+assert.ok(paperPatch.includes("t.worstAdverseMovePct=Math.max"),
+  "paper manager must persist worst adverse excursion");
+
 console.log("PASS: patient exits, sustained reversals, hard stops, Hyperliquid-only live module and paper reversal queue");

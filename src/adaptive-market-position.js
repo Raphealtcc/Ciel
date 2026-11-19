@@ -56,8 +56,12 @@ export function evaluateAdaptiveMarketPosition({
   const targetDistancePct = target > 0 ? Math.abs(pctChange(target, entry)) : 0;
   const stopDistancePct = stop > 0 ? Math.abs(pctChange(stop, entry)) : 0;
   const adverseMovePct = Math.max(0, -favourablePct);
+  const adverseExtremePrice = direction === 1 ? lowWaterPrice : highWaterPrice;
+  const maxAdversePct = Math.max(Number(state.maxAdversePct) || 0,
+    Math.max(0, -direction * pctChange(adverseExtremePrice, entry)));
   nextState.peakFavourablePct = peakFavourablePct;
-  nextState.metrics = { trendPct, momentumPct, atrProxyPct, favourablePct, peakFavourablePct, givebackPct,
+  nextState.maxAdversePct = maxAdversePct;
+  nextState.metrics = { trendPct, momentumPct, atrProxyPct, favourablePct, peakFavourablePct, givebackPct, maxAdversePct,
     closeScore, adverseTrend, adverseMomentum, priceAgainstMean, structureAgainst };
 
   const stopHit = stop > 0 && (direction === 1 ? price <= stop : price >= stop);
@@ -109,7 +113,14 @@ export function evaluateAdaptiveMarketPosition({
   let proposedStop = stop;
   const trailingArmed = peakFavourablePct >= Math.max(stopDistancePct * 0.50, atrProxyPct * 3.5);
   if (trailingArmed && atrProxyPct > 0) {
-    const trailDistancePct = clamp(atrProxyPct * 3.2, 0.12, Math.max(0.18, stopDistancePct * 0.90));
+    // Give a healthy move room to breathe. Tighten only after repeated evidence
+    // that momentum/structure is deteriorating; never move an existing stop backwards.
+    const trailWeakening = closeScore >= 2 || adverseStreak >= 2;
+    const trailMultiplier = trailWeakening ? 3.0 : 4.2;
+    const trailFloorPct = trailWeakening ? 0.12 : 0.16;
+    const trailCeilingPct = Math.max(trailWeakening ? 0.20 : 0.28,
+      stopDistancePct * (trailWeakening ? 0.90 : 1.10));
+    const trailDistancePct = clamp(atrProxyPct * trailMultiplier, trailFloorPct, trailCeilingPct);
     const candidateStop = direction === 1 ? highWaterPrice * (1 - trailDistancePct / 100) : lowWaterPrice * (1 + trailDistancePct / 100);
     const tightens = stop <= 0 || (direction === 1 ? candidateStop > stop && candidateStop < price : candidateStop < stop && candidateStop > price);
     if (tightens) proposedStop = candidateStop;
