@@ -24,6 +24,8 @@ verify-ciel-recovery:
     - node --check scripts/summarize-rea.mjs
     - node --check scripts/verify-leverup-market-tiers.mjs
     - node --check scripts/smoke-live-worker.mjs
+    - node --check scripts/test-patient-adaptive-exits.mjs
+    - node scripts/test-patient-adaptive-exits.mjs
     - npm run check
     - npm run build
   rules:
@@ -74,17 +76,6 @@ analyze-ciel-with-rea:
         - wrangler.jsonc
         - .gitlab-ci.yml
 
-staging-readonly-smoke:
-  image: node:22-alpine
-  stage: verify
-  needs: []
-  script:
-    - node scripts/smoke-live-worker.mjs
-  rules:
-    - if: '$CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "audit/paper-trading-fix" || $CI_PIPELINE_SOURCE == "merge_request_event"'
-      when: manual
-      allow_failure: true
-
 verify-cloudflare-bun-bootstrap:
   image: node:22-alpine
   stage: verify
@@ -113,4 +104,3 @@ build-cloudflare-release-candidate:
   allow_failure: false
   rules:
     - if: '$CI_COMMIT_BRANCH == "feature/leverup-1ct-autotrader" || $CI_COMMIT_BRANCH == "integration/leverup-1ct-main" || $CI_COMMIT_BRANCH == "feature/qwen-groq-ai-position-review"'
-
