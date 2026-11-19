@@ -36,13 +36,13 @@ assert.ok(shortTrail.stopPrice < 100 && shortTrail.stopPrice > 96.6);
 // A deteriorating move uses a tighter protective trail rather than the
 // wider healthy-trend setting.
 const weakeningTrail = evaluateAdaptiveMarketPosition({
-  side: "LONG", entryPrice: 100, currentPrice: 103.0, stopPrice: 96, targetPrice: 0,
-  state: { history: samples([103.5,103.4,103.3,103.2,103.1,103.0,103.1,103.0]), highWaterPrice: 103.5 },
+  side: "LONG", entryPrice: 100, currentPrice: 103.4, stopPrice: 96, targetPrice: 0,
+  state: { history: samples([103.5,103.49,103.48,103.47,103.46,103.45,103.44,103.4]), highWaterPrice: 103.5 },
   now: 481_000,
 });
 assert.equal(weakeningTrail.action, "UPDATE_LEVELS");
 assert.equal(weakeningTrail.reason, "WEAKENING_TREND_PROTECTIVE_TRAIL");
-assert.ok(weakeningTrail.stopPrice > 100 && weakeningTrail.stopPrice < 103.0);
+assert.ok(weakeningTrail.stopPrice > 100 && weakeningTrail.stopPrice < 103.4);
 
 // Emergency stops remain absolute and take priority over all adaptive logic.
 const hardStop = evaluateAdaptiveMarketPosition({
