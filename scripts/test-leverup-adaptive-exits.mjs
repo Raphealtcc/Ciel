@@ -9,7 +9,7 @@ const targetExtension = evaluateAdaptiveLeverUpExit({
   state: { history: history([100, 100.2, 100.4, 100.7, 101, 101.4, 101.8, 102.2, 102.7, 103]), highWaterPrice: 103 }, now: 601_000,
 });
 assert.equal(targetExtension.action, "UPDATE_TP_SL");
-assert.equal(targetExtension.reason, "VOLATILITY_AWARE_TRAILING_STOP");
+assert.equal(targetExtension.reason, "PATIENT_TREND_TRAILING_STOP");
 assert.equal(targetExtension.takeProfitRaw, "0", "trailing strategy must never restore a fixed venue TP");
 assert.ok(BigInt(targetExtension.stopLossRaw) > BigInt(position.stopLossRaw), "favourable movement should ratchet the emergency stop forward");
 const reversal = evaluateAdaptiveLeverUpExit({
