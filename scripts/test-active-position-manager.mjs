@@ -121,7 +121,7 @@ assert.equal(excursion.peakFavourablePct, 4);
 assert.equal(excursion.maxAdversePct, 1.5, "manager should retain maximum adverse excursion for future exit analysis");
 
 const paperPatch = await readFile("scripts/apply-active-position-manager.mjs", "utf8");
-assert.ok(paperPatch.includes("targetPrice:Number(t.targetPrice)||0"),
+assert.ok(paperPatch.includes("if(Number(decision.targetPrice)>0)t.targetPrice=Number(decision.targetPrice)"),\n  "paper manager must persist a trend-confirmed target extension");\nassert.ok(paperPatch.includes("targetPrice:Number(t.targetPrice)||0"),
   "paper manager must pass the actual range/strategy target into the adaptive evaluator");
 assert.ok(paperPatch.includes("t.bestFavorableMovePct=Math.max"),
   "paper manager must persist best favourable excursion");
