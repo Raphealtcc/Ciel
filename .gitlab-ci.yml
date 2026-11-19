@@ -24,6 +24,8 @@ verify-ciel-recovery:
     - node --check scripts/summarize-rea.mjs
     - node --check scripts/verify-leverup-market-tiers.mjs
     - node --check scripts/smoke-live-worker.mjs
+    - node --check scripts/test-patient-adaptive-exits.mjs
+    - node scripts/test-patient-adaptive-exits.mjs
     - npm run check
     - npm run build
   rules:
@@ -113,4 +115,3 @@ build-cloudflare-release-candidate:
   allow_failure: false
   rules:
     - if: '$CI_COMMIT_BRANCH == "feature/leverup-1ct-autotrader" || $CI_COMMIT_BRANCH == "integration/leverup-1ct-main" || $CI_COMMIT_BRANCH == "feature/qwen-groq-ai-position-review"'
-
