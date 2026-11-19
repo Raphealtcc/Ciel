@@ -5,7 +5,7 @@ const finitePositive = (value) => Number.isFinite(Number(value)) && Number(value
 export function evaluateAdaptiveMarketPosition({
   side, entryPrice, currentPrice, stopPrice = 0, targetPrice = 0,
   state = {}, now = Date.now(), liquidityImbalance = false,
-  sampleIntervalMs = 45_000, sampleLimit = 16,
+  sampleIntervalMs = 45_000, sampleLimit = 16, trailProfile = "DEFAULT",
 } = {}) {
   const direction = String(side || "LONG").toUpperCase() === "SHORT" ? -1 : 1;
   if (!finitePositive(entryPrice) || !finitePositive(currentPrice)) {
@@ -113,14 +113,21 @@ export function evaluateAdaptiveMarketPosition({
   let proposedStop = stop;
   const trailingArmed = peakFavourablePct >= Math.max(stopDistancePct * 0.50, atrProxyPct * 3.5);
   if (trailingArmed && atrProxyPct > 0) {
-    // Give a healthy move room to breathe. Tighten only after repeated evidence
-    // that momentum/structure is deteriorating; never move an existing stop backwards.
-    const trailWeakening = closeScore >= 2 || adverseStreak >= 2;
-    const trailMultiplier = trailWeakening ? 3.0 : 4.2;
-    const trailFloorPct = trailWeakening ? 0.12 : 0.16;
-    const trailCeilingPct = Math.max(trailWeakening ? 0.20 : 0.28,
-      stopDistancePct * (trailWeakening ? 0.90 : 1.10));
-    const trailDistancePct = clamp(atrProxyPct * trailMultiplier, trailFloorPct, trailCeilingPct);
+    let trailDistancePct;
+    if (String(trailProfile).toUpperCase() === "LIMIT_REACH") {
+      // Give Limit Reach a healthy trend room to breathe. Tighten only after
+      // repeated deterioration evidence; never move an existing stop backwards.
+      const trailWeakening = closeScore >= 2 || adverseStreak >= 2;
+      const trailMultiplier = trailWeakening ? 3.0 : 4.2;
+      const trailFloorPct = trailWeakening ? 0.12 : 0.16;
+      const trailCeilingPct = Math.max(trailWeakening ? 0.20 : 0.28,
+        stopDistancePct * (trailWeakening ? 0.90 : 1.10));
+      trailDistancePct = clamp(atrProxyPct * trailMultiplier, trailFloorPct, trailCeilingPct);
+    } else {
+      // Preserve the existing trailing profile for every other strategy,
+      // including LeverUp's live position manager.
+      trailDistancePct = clamp(atrProxyPct * 3.2, 0.12, Math.max(0.18, stopDistancePct * 0.90));
+    }
     const candidateStop = direction === 1 ? highWaterPrice * (1 - trailDistancePct / 100) : lowWaterPrice * (1 + trailDistancePct / 100);
     const tightens = stop <= 0 || (direction === 1 ? candidateStop > stop && candidateStop < price : candidateStop < stop && candidateStop > price);
     if (tightens) proposedStop = candidateStop;

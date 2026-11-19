@@ -95,7 +95,7 @@ assert.ok(!managerSource.includes("(dependencies.fetchPrices || fetchLatestOracl
 assert.ok(managerSource.includes("(dependencies.readPair || readPairByBaseV4)(position.pairBase"), "LeverUp pair metadata may only be read at execution time");
 
 const trendRide = evaluateAdaptiveMarketPosition({
-  side: "LONG", entryPrice: 100, currentPrice: 101.4, stopPrice: 99.9, targetPrice: 110,
+  side: "LONG", entryPrice: 100, currentPrice: 101.4, stopPrice: 99.9, targetPrice: 110, trailProfile: "LIMIT_REACH",
   state: { history: samples([100,100.2,100.4,100.6,100.8,101,101.2,101.4]), highWaterPrice: 101.4 },
   now: 481_000,
 });
@@ -121,7 +121,9 @@ assert.equal(excursion.peakFavourablePct, 4);
 assert.equal(excursion.maxAdversePct, 1.5, "manager should retain maximum adverse excursion for future exit analysis");
 
 const paperPatch = await readFile("scripts/apply-active-position-manager.mjs", "utf8");
-assert.ok(paperPatch.includes("if(Number(decision.targetPrice)>0)t.targetPrice=Number(decision.targetPrice)"),\n  "paper manager must persist a trend-confirmed target extension");\nassert.ok(paperPatch.includes("targetPrice:Number(t.targetPrice)||0"),
+assert.ok(paperPatch.includes("if(Number(decision.targetPrice)>0)t.targetPrice=Number(decision.targetPrice)"),\n  "paper manager must persist a trend-confirmed target extension");\nassert.ok(paperPatch.includes('trailProfile:t.strategy==="LIMIT_REACH_RANGE_REVERSAL"?"LIMIT_REACH":"DEFAULT"'),
+  "the wider trailing profile must be limited to Limit Reach positions");
+assert.ok(paperPatch.includes('targetPrice:t.strategy==="LIMIT_REACH_RANGE_REVERSAL"?(Number(t.targetPrice)||0):0'),
   "paper manager must pass the actual range/strategy target into the adaptive evaluator");
 assert.ok(paperPatch.includes("t.bestFavorableMovePct=Math.max"),
   "paper manager must persist best favourable excursion");
