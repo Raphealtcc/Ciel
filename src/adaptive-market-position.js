@@ -106,17 +106,34 @@ export function evaluateAdaptiveMarketPosition({
   const targetHit = target > 0 && (direction === 1 ? price >= target : price <= target);
   if (targetHit) return { action: "CLOSE", reason: "TAKE_PROFIT_TRIGGERED", reverseConfirmed: false, ...nextState.metrics, state: nextState };
 
+  // Give healthy trends more room; tighten only after measurable deterioration.
+  // This is a protective stop adjustment, not a forced time-based exit.
   let proposedStop = stop;
-  const trailingArmed = peakFavourablePct >= Math.max(stopDistancePct * 0.50, atrProxyPct * 3.5);
+  const trailingArmPct = Math.max(stopDistancePct * 0.60, atrProxyPct * 4.0, 0.35);
+  const trailingArmed = peakFavourablePct >= trailingArmPct;
   if (trailingArmed && atrProxyPct > 0) {
-    const trailDistancePct = clamp(atrProxyPct * 3.2, 0.12, Math.max(0.18, stopDistancePct * 0.90));
-    const candidateStop = direction === 1 ? highWaterPrice * (1 - trailDistancePct / 100) : lowWaterPrice * (1 + trailDistancePct / 100);
-    const tightens = stop <= 0 || (direction === 1 ? candidateStop > stop && candidateStop < price : candidateStop < stop && candidateStop > price);
+    const weakening = closeScore >= 2 || adverseStreak >= 2;
+    const trailMultiplier = weakening ? 3.4 : 4.4;
+    const trailFloorPct = weakening ? 0.16 : 0.20;
+    const trailCapPct = Math.max(weakening ? 0.22 : 0.30, stopDistancePct * (weakening ? 0.85 : 1.0));
+    const trailDistancePct = clamp(atrProxyPct * trailMultiplier, trailFloorPct, trailCapPct);
+    const candidateStop = direction === 1
+      ? highWaterPrice * (1 - trailDistancePct / 100)
+      : lowWaterPrice * (1 + trailDistancePct / 100);
+    const tightens = stop <= 0 || (direction === 1
+      ? candidateStop > stop && candidateStop < price
+      : candidateStop < stop && candidateStop > price);
     if (tightens) proposedStop = candidateStop;
   }
   if (proposedStop > 0 && proposedStop !== stop) {
-    return { action: "UPDATE_LEVELS", reason: "VOLATILITY_AWARE_TRAILING_STOP", stopPrice: proposedStop,
+    return { action: "UPDATE_LEVELS", reason: weakeningTrailReason(closeScore, adverseStreak), stopPrice: proposedStop,
       targetPrice: target, targetExtended: nextState.targetExtended, reverseConfirmed: false, ...nextState.metrics, state: nextState };
   }
   return { action: "HOLD", reason: closeScore >= 2 ? "ADVERSE_MARKET_WATCH" : "ADAPTIVE_TREND_INTACT", reverseConfirmed: false, ...nextState.metrics, state: nextState };
+}
+
+function weakeningTrailReason(closeScore, adverseStreak) {
+  return closeScore >= 2 || adverseStreak >= 2
+    ? "WEAKENING_TREND_PROTECTIVE_TRAIL"
+    : "PATIENT_TREND_TRAILING_STOP";
 }
