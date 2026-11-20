@@ -27,4 +27,25 @@ assert.equal(hardStop.action, "MARKET_CLOSE");
 assert.equal(hardStop.reason, "HARD_STOP_TRIGGERED");
 const noFixedTargetExit=evaluateAdaptiveLeverUpExit({position:{...position,takeProfitRaw:"0"},currentPriceRaw:raw(104),state:{history:history([100,101,102,103]),highWaterPrice:103},now:601_000});
 assert.notEqual(noFixedTargetExit.reason,"TAKE_PROFIT_TRIGGERED","dynamic manager must not close on suggested target");
+
+const limitReachTargetExtension = evaluateAdaptiveLeverUpExit({
+  position: { ...position, takeProfitRaw: "0", stopLossRaw: raw(98) },
+  currentPriceRaw: raw(103.1), targetPrice: 103, trailProfile: "LIMIT_REACH",
+  state: { history: history([100,100.2,100.4,100.7,101,101.4,101.8,102.2,102.7,103]), highWaterPrice: 103 },
+  now: 601_000,
+});
+assert.equal(limitReachTargetExtension.action, "UPDATE_TP_SL");
+assert.equal(limitReachTargetExtension.reason, "TREND_CONTINUATION_TARGET_EXTENSION");
+assert.ok(limitReachTargetExtension.state.adaptiveTargetPrice > 103, "live Limit Reach must persist the one-time extended target in adaptive state");
+assert.equal(limitReachTargetExtension.takeProfitRaw, "0", "extended target remains off-chain advisory; hard stop remains on-chain");
+const liveLimitReachTargetHit = evaluateAdaptiveLeverUpExit({
+  position: { ...position, takeProfitRaw: "0", stopLossRaw: raw(98) },
+  currentPriceRaw: raw(limitReachTargetExtension.state.adaptiveTargetPrice),
+  targetPrice: 103, trailProfile: "LIMIT_REACH",
+  state: limitReachTargetExtension.state, now: 661_000,
+});
+assert.equal(liveLimitReachTargetHit.action, "MARKET_CLOSE");
+assert.equal(liveLimitReachTargetHit.reason, "TAKE_PROFIT_TRIGGERED",
+  "live Limit Reach must close at the persisted extended target just like paper");
+
 console.log("PASS: LeverUp raw-price conversion, no-fixed-TP trailing stop, profit reversal and hard-stop priority");

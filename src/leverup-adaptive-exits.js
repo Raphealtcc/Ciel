@@ -10,7 +10,7 @@ const adaptiveLeverUpPriceToRaw = (value) => {
   return BigInt(Math.max(1, Math.round(price * 1e18))).toString();
 };
 
-export function evaluateAdaptiveLeverUpExit({ position, currentPriceRaw, state = {}, now = Date.now(), sampleLimit = 24, trailProfile = "DEFAULT" }) {
+export function evaluateAdaptiveLeverUpExit({ position, currentPriceRaw, state = {}, now = Date.now(), sampleLimit = 24, trailProfile = "DEFAULT", targetPrice = 0 }) {
   if (!position?.positionHash || !position?.entryPriceRaw || !currentPriceRaw) {
     return { action: "HOLD", reason: "ADAPTIVE_INPUT_INCOMPLETE", state };
   }
@@ -19,12 +19,16 @@ export function evaluateAdaptiveLeverUpExit({ position, currentPriceRaw, state =
     entryPrice: adaptiveLeverUpRawToPrice(position.entryPriceRaw),
     currentPrice: adaptiveLeverUpRawToPrice(currentPriceRaw),
     stopPrice: adaptiveLeverUpRawToPrice(position.stopLossRaw),
-    targetPrice: 0,
+    targetPrice: Number(state?.adaptiveTargetPrice) > 0 ? Number(state.adaptiveTargetPrice) : (Number(targetPrice) || 0),
     trailProfile,
     state, now,
     liquidityImbalance: false,
     sampleLimit: Math.max(8, Math.min(24, Number(sampleLimit) || 24)),
   });
+  const nextState = { ...(result.state || state) };
+  if (result.action === "UPDATE_LEVELS" && result.targetExtended === true && Number(result.targetPrice) > 0) {
+    nextState.adaptiveTargetPrice = Number(result.targetPrice);
+  }
   const shared = {
     reason: result.reason,
     reverseConfirmed: result.reverseConfirmed === true,
@@ -36,7 +40,7 @@ export function evaluateAdaptiveLeverUpExit({ position, currentPriceRaw, state =
     peakFavourablePct: result.peakFavourablePct ?? null,
     givebackPct: result.givebackPct ?? null,
     samples: result.state?.history?.length ?? 0,
-    state: result.state || state,
+    state: nextState,
   };
   if (result.action === "CLOSE") return { action: "MARKET_CLOSE", ...shared };
   if (result.action === "UPDATE_LEVELS") return {
