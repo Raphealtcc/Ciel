@@ -5,7 +5,7 @@ const finitePositive = (value) => Number.isFinite(Number(value)) && Number(value
 export function evaluateAdaptiveMarketPosition({
   side, entryPrice, currentPrice, stopPrice = 0, targetPrice = 0,
   state = {}, now = Date.now(), liquidityImbalance = false,
-  sampleIntervalMs = 45_000, sampleLimit = 16,
+  sampleIntervalMs = 45_000, sampleLimit = 16, trailProfile = "DEFAULT",
 } = {}) {
   const direction = String(side || "LONG").toUpperCase() === "SHORT" ? -1 : 1;
   if (!finitePositive(entryPrice) || !finitePositive(currentPrice)) {
