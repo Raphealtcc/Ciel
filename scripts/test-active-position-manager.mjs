@@ -101,8 +101,8 @@ const limitReachShort = evaluateAdaptiveMarketPosition({side:"SHORT",entryPrice:
 assert.equal(limitReachShort.action,"UPDATE_LEVELS");
 assert.ok((limitReachShort.stopPrice-98.6)/98.6*100>=0.27,"Limit Reach short trail must mirror long-side distance");
 const paperPatch=await readFile("scripts/apply-active-position-manager.mjs","utf8");
-assert.ok(paperPatch.includes('trailProfile:t.strategy==="LIMIT_REACH_RANGE_REVERSAL"?"LIMIT_REACH":"DEFAULT"'));
-assert.ok(paperPatch.includes('targetPrice:t.strategy==="LIMIT_REACH_RANGE_REVERSAL"?(Number(t.targetPrice)||0):0'));
+assert.ok(paperPatch.includes("trailProfile:t.strategy===\\\"LIMIT_REACH_RANGE_REVERSAL\\\"?\\\"LIMIT_REACH\\\":\\\"DEFAULT\\\""));
+assert.ok(paperPatch.includes("targetPrice:t.strategy===\\\"LIMIT_REACH_RANGE_REVERSAL\\\"?(Number(t.targetPrice)||0):0"));
 const liveAdapter=await readFile("src/leverup-adaptive-exits.js","utf8");
 const liveCoordinator=await readFile("src/leverup-coordinator.js","utf8");
 assert.ok(liveAdapter.includes('trailProfile = "DEFAULT"'));
