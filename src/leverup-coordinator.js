@@ -1374,7 +1374,9 @@ export async function runLeverUpPositionManager({ env, db, now = Date.now(), dep
     if (fixedAction.action !== "PARTIAL_CLOSE" && fixedAction.reason !== "STOP_LOSS_TRIGGERED") {
       const adaptiveKey = "ciel:leverup:adaptive-exit:v3:" + tradeId;
       try { adaptiveState = await env?.CIEL_STATE?.get(adaptiveKey, "json"); } catch {}
-      adaptive = evaluateAdaptiveLeverUpExit({ position, currentPriceRaw: latestPrice, state: adaptiveState || {}, now });
+      const liveStrategyKeys = [saved?.strategy, saved?.strategyName, candidate?.strategy, candidate?.strategyId, candidate?.strategyName, candidate?.strategyKey];
+      const liveTrailProfile = liveStrategyKeys.some((value) => String(value || "").toUpperCase().includes("LIMIT_REACH")) ? "LIMIT_REACH" : "DEFAULT";
+      adaptive = evaluateAdaptiveLeverUpExit({ position, currentPriceRaw: latestPrice, state: adaptiveState || {}, now, trailProfile: liveTrailProfile });
       if (adaptive?.state && env?.CIEL_STATE?.put) {
         await env.CIEL_STATE.put(adaptiveKey, JSON.stringify(adaptive.state), { expirationTtl: 7 * 24 * 3600 }).catch(() => void 0);
       }

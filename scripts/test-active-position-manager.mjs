@@ -93,4 +93,19 @@ const managerSource = coordinator.slice(managerStart);
 assert.ok(managerSource.includes("hyperliquidPriceRawForPosition(position, marketData.markets)"), "live decisions must use Hyperliquid market prices");
 assert.ok(!managerSource.includes("(dependencies.fetchPrices || fetchLatestOraclePrices)"), "live manager must not poll LeverUp oracle prices");
 assert.ok(managerSource.includes("(dependencies.readPair || readPairByBaseV4)(position.pairBase"), "LeverUp pair metadata may only be read at execution time");
+
+const limitReachLong = evaluateAdaptiveMarketPosition({side:"LONG",entryPrice:100,currentPrice:101.4,stopPrice:99.9,targetPrice:110,trailProfile:"LIMIT_REACH",state:{history:samples([100,100.2,100.4,100.6,100.8,101,101.2,101.4]),highWaterPrice:101.4},now:481_000});
+assert.equal(limitReachLong.action,"UPDATE_LEVELS");
+assert.ok((101.4-limitReachLong.stopPrice)/101.4*100>=0.27,"Limit Reach long trail must retain wider distance");
+const limitReachShort = evaluateAdaptiveMarketPosition({side:"SHORT",entryPrice:100,currentPrice:98.6,stopPrice:100.1,targetPrice:90,trailProfile:"LIMIT_REACH",state:{history:samples([100,99.8,99.6,99.4,99.2,99,98.8,98.6]),lowWaterPrice:98.6},now:481_000});
+assert.equal(limitReachShort.action,"UPDATE_LEVELS");
+assert.ok((limitReachShort.stopPrice-98.6)/98.6*100>=0.27,"Limit Reach short trail must mirror long-side distance");
+const paperPatch=await readFile("scripts/apply-active-position-manager.mjs","utf8");
+assert.ok(paperPatch.includes('trailProfile:t.strategy==="LIMIT_REACH_RANGE_REVERSAL"?"LIMIT_REACH":"DEFAULT"'));
+assert.ok(paperPatch.includes('targetPrice:t.strategy==="LIMIT_REACH_RANGE_REVERSAL"?(Number(t.targetPrice)||0):0'));
+const liveAdapter=await readFile("src/leverup-adaptive-exits.js","utf8");
+const liveCoordinator=await readFile("src/leverup-coordinator.js","utf8");
+assert.ok(liveAdapter.includes('trailProfile = "DEFAULT"'));
+assert.ok(liveCoordinator.includes("trailProfile: liveTrailProfile"));
+
 console.log("PASS: patient exits, sustained reversals, hard stops, Hyperliquid-only live module and paper reversal queue");
