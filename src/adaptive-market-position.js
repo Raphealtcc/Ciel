@@ -56,8 +56,10 @@ export function evaluateAdaptiveMarketPosition({
   const targetDistancePct = target > 0 ? Math.abs(pctChange(target, entry)) : 0;
   const stopDistancePct = stop > 0 ? Math.abs(pctChange(stop, entry)) : 0;
   const adverseMovePct = Math.max(0, -favourablePct);
+  const maxAdversePct = Math.max(Number(state.maxAdversePct) || 0, Math.max(0, -direction * pctChange(direction === 1 ? lowWaterPrice : highWaterPrice, entry)));
   nextState.peakFavourablePct = peakFavourablePct;
-  nextState.metrics = { trendPct, momentumPct, atrProxyPct, favourablePct, peakFavourablePct, givebackPct,
+  nextState.maxAdversePct = maxAdversePct;
+  nextState.metrics = { trendPct, momentumPct, atrProxyPct, favourablePct, peakFavourablePct, maxAdversePct, givebackPct,
     closeScore, adverseTrend, adverseMomentum, priceAgainstMean, structureAgainst };
 
   const stopHit = stop > 0 && (direction === 1 ? price <= stop : price >= stop);
@@ -109,13 +111,14 @@ export function evaluateAdaptiveMarketPosition({
   // Give healthy trends more room; tighten only after measurable deterioration.
   // This is a protective stop adjustment, not a forced time-based exit.
   let proposedStop = stop;
-  const trailingArmPct = Math.max(stopDistancePct * 0.60, atrProxyPct * 4.0, 0.35);
+  const limitReachProfile = String(trailProfile || "DEFAULT").toUpperCase() === "LIMIT_REACH";
+  const trailingArmPct = limitReachProfile ? Math.max(stopDistancePct * 0.50, atrProxyPct * 3.5) : Math.max(stopDistancePct * 0.60, atrProxyPct * 4.0, 0.35);
   const trailingArmed = peakFavourablePct >= trailingArmPct;
   if (trailingArmed && atrProxyPct > 0) {
     const weakening = closeScore >= 2 || adverseStreak >= 2;
-    const trailMultiplier = weakening ? 3.4 : 4.4;
-    const trailFloorPct = weakening ? 0.16 : 0.20;
-    const trailCapPct = Math.max(weakening ? 0.22 : 0.30, stopDistancePct * (weakening ? 0.85 : 1.0));
+    const trailMultiplier = limitReachProfile ? (weakening ? 3.0 : 4.2) : (weakening ? 3.4 : 4.4);
+    const trailFloorPct = limitReachProfile ? (weakening ? 0.12 : 0.16) : (weakening ? 0.16 : 0.20);
+    const trailCapPct = limitReachProfile ? Math.max(weakening ? 0.20 : 0.28, stopDistancePct * (weakening ? 0.90 : 1.10)) : Math.max(weakening ? 0.22 : 0.30, stopDistancePct * (weakening ? 0.85 : 1.0));
     const trailDistancePct = clamp(atrProxyPct * trailMultiplier, trailFloorPct, trailCapPct);
     const candidateStop = direction === 1
       ? highWaterPrice * (1 - trailDistancePct / 100)

@@ -10,7 +10,7 @@ const adaptiveLeverUpPriceToRaw = (value) => {
   return BigInt(Math.max(1, Math.round(price * 1e18))).toString();
 };
 
-export function evaluateAdaptiveLeverUpExit({ position, currentPriceRaw, state = {}, now = Date.now(), sampleLimit = 24 }) {
+export function evaluateAdaptiveLeverUpExit({ position, currentPriceRaw, state = {}, now = Date.now(), sampleLimit = 24, trailProfile = "DEFAULT" }) {
   if (!position?.positionHash || !position?.entryPriceRaw || !currentPriceRaw) {
     return { action: "HOLD", reason: "ADAPTIVE_INPUT_INCOMPLETE", state };
   }
@@ -20,6 +20,7 @@ export function evaluateAdaptiveLeverUpExit({ position, currentPriceRaw, state =
     currentPrice: adaptiveLeverUpRawToPrice(currentPriceRaw),
     stopPrice: adaptiveLeverUpRawToPrice(position.stopLossRaw),
     targetPrice: 0,
+    trailProfile,
     state, now,
     liquidityImbalance: false,
     sampleLimit: Math.max(8, Math.min(24, Number(sampleLimit) || 24)),
